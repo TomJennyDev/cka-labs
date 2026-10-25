@@ -1,0 +1,347 @@
+- id: 38
+  slug: mock-exam
+  title: Đề thi thử CKA (2 giờ, 16 câu)
+  level: 9
+  minutes: 120
+  env: kind
+  competencies: ["trouble:0", "trouble:3", "trouble:4", "arch:0", "net:1", "net:2", "net:4", "work:0", "work:1", "work:2", "work:3", "work:4", "stor:0", "stor:2"]
+  goal: |
+    Làm một đề tổng hợp trong 120 phút như phòng thi thật. Mỗi câu có trọng số; câu chỉ được điểm khi đúng **toàn bộ**. Cần **66%** để đậu.
+  concepts: |
+    - Đọc lướt cả 16 câu trước, làm câu dễ và nặng điểm trước. Câu nào kẹt quá 8 phút thì bỏ qua, quay lại sau.
+    - Sinh YAML bằng `$do`, tra field bằng `kubectl explain`, chỉ mở tài liệu khi cần ví dụ dài (NetworkPolicy, PV, Ingress).
+    - Sau mỗi câu, kiểm tra nhanh bằng `kubectl get`: đề thi chấm trạng thái trong cluster, không chấm file YAML.
+    - Chỉ chạy `./lab check 38` khi đã hết giờ hoặc làm xong, để luyện cảm giác tự kiểm tra.
+  setup_note: |
+    Setup tạo sẵn các namespace `mock-a`, `mock-b`, `mock-c` cùng vài workload, gắn label và taint lên `$NODE2`, rồi in giờ bắt đầu. Bấm đồng hồ 120 phút. Trên trang hướng dẫn HTML có đồng hồ đếm ngược.
+  tasks:
+    - |
+      **(4%)** Tạo namespace `mock-x` có label `env=exam`.
+    - |
+      **(8%)** Trong `mock-a`, tạo Deployment `frontend`: 3 replica, `nginx:1.27`, request CPU `100m`, rolling update `maxSurge: 1`, `maxUnavailable: 0`. Sau đó nâng lên `nginx:1.28` với change-cause `exam upgrade`.
+    - |
+      **(5%)** Trong `mock-a`, tạo ConfigMap `exam-cfg` (`LEVEL=hard`) và Secret `exam-sec` (`token=abc123`). Tạo Pod `cfg-pod` (`busybox:1.36`, `sleep 3600`) có biến `LEVEL` từ ConfigMap và `TOKEN` từ key `token` của Secret.
+    - |
+      **(6%)** Tạo HPA cho `frontend`: 3 tới 6 replica, CPU mục tiêu 60%.
+    - |
+      **(6%)** `$NODE2` có label `exam-role=gpu` và taint `exam=true:NoSchedule`. Tạo Pod `gpu-pod` (`nginx:1.27`) trong `mock-a` chạy trên đúng node đó.
+    - |
+      **(5%)** Tạo Pod `logger` trong `mock-a`: container `app` (`busybox:1.36`) ghi `tick` vào `/var/log/app.log` mỗi 2 giây; sidecar kiểu native tên `tail` (`busybox:1.36`) chạy `tail -F /var/log/app.log`. Hai container dùng chung emptyDir.
+    - |
+      **(6%)** Tạo Service `frontend-np` kiểu NodePort cho `frontend`, cổng 80, nodePort `30090`.
+    - |
+      **(8%)** Trong `mock-b`, tạo NetworkPolicy `db-access`: Pod `app=db` chỉ nhận TCP 80 từ Pod `app=api` **trong namespace `mock-a`**.
+    - |
+      **(5%)** Tạo Ingress `frontend` trong `mock-a`: host `exam.local`, path `/` (Prefix) tới `frontend-np:80`.
+    - |
+      **(6%)** Tạo PVC `exam-data` (1Gi, RWO, StorageClass mặc định) trong `mock-a` và Pod `writer` (`busybox:1.36`) gắn nó tại `/data`, ghi file `/data/ok` rồi `sleep 3600`.
+    - |
+      **(6%)** Tạo ServiceAccount `ci` trong `mock-a`, chỉ được `create` Deployment và `get, list` Pod trong `mock-a`.
+    - |
+      **(6%)** Tạo static pod `exam-static` (`nginx:1.27`) trên `$NODE1`.
+    - |
+      **(10%)** Deployment `broken-api` trong `mock-c` không có Pod nào sẵn sàng. Sửa để 2/2 sẵn sàng, giữ readinessProbe.
+    - |
+      **(8%)** Service `backend` trong `mock-c` không có endpoint. Sửa để gọi `http://backend.mock-c` được (không sửa Deployment `backend`).
+    - |
+      **(6%)** Ghi vào `~/cka-answers/38-nodes.txt` mỗi node một dòng dạng `<tên> <phiên bản kubelet>`, sắp theo tên.
+    - |
+      **(5%)** Tạo PriorityClass `exam-high` (value `100000`) và Pod `vip` (`nginx:1.27`) trong `mock-a` dùng nó.
+  hints:
+    - |
+      Câu 8: AND giữa namespace và Pod
+      `namespaceSelector` và `podSelector` nằm **cùng một** phần tử của `from`.
+    - |
+      Câu 13 có hai lỗi
+      Một lỗi làm Pod không chạy, một lỗi làm Pod chạy mà không Ready.
+  solution: |
+    ```bash
+    eval "$(./lab env)"
+    # 1
+    kubectl create ns mock-x && kubectl label ns mock-x env=exam
+    # 2
+    kubectl create deploy frontend -n mock-a --image=nginx:1.27 --replicas=3
+    kubectl set resources deploy frontend -n mock-a --requests=cpu=100m
+    kubectl patch deploy frontend -n mock-a -p '{"spec":{"strategy":{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
+    kubectl set image deploy/frontend -n mock-a nginx=nginx:1.28
+    kubectl annotate deploy/frontend -n mock-a kubernetes.io/change-cause='exam upgrade' --overwrite
+    # 3
+    kubectl create cm exam-cfg -n mock-a --from-literal=LEVEL=hard
+    kubectl create secret generic exam-sec -n mock-a --from-literal=token=abc123
+    #   cfg-pod: env LEVEL ← configMapKeyRef exam-cfg/LEVEL, TOKEN ← secretKeyRef exam-sec/token
+    # 4
+    kubectl autoscale deploy frontend -n mock-a --min=3 --max=6 --cpu-percent=60
+    # 5  gpu-pod: tolerations exam=true:NoSchedule + nodeSelector exam-role: gpu
+    # 6  logger: initContainers[tail] restartPolicy: Always, emptyDir chung tại /var/log
+    # 7
+    kubectl expose deploy frontend -n mock-a --name=frontend-np --type=NodePort --port=80 $do > np.yaml  # thêm nodePort: 30090
+    # 8  NetworkPolicy: podSelector app=db; from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: mock-a}}, podSelector: {matchLabels: {app: api}}}]
+    # 9
+    kubectl create ingress frontend -n mock-a --rule="exam.local/*=frontend-np:80"
+    # 10 PVC exam-data + Pod writer
+    # 11
+    kubectl create sa ci -n mock-a
+    kubectl create role ci -n mock-a --verb=create --resource=deployments
+    kubectl edit role ci -n mock-a       # thêm rule get,list cho pods
+    kubectl create rolebinding ci -n mock-a --role=ci --serviceaccount=mock-a:ci
+    # 12 static pod: file YAML vào staticPodPath của $NODE1
+    # 13
+    kubectl describe pod -n mock-c -l app=broken-api    # image sai + readiness port 8080
+    kubectl set image deploy/broken-api -n mock-c nginx=nginx:1.27
+    kubectl patch deploy broken-api -n mock-c --type=json -p '[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/port","value":80}]'
+    # 14
+    kubectl patch svc backend -n mock-c -p '{"spec":{"selector":{"app":"backend"}}}'
+    # 15
+    kubectl get nodes --sort-by=.metadata.name -o jsonpath='{range .items[*]}{.metadata.name} {.status.nodeInfo.kubeletVersion}{"\n"}{end}' > ~/cka-answers/38-nodes.txt
+    # 16
+    kubectl create priorityclass exam-high --value=100000
+    #   vip: spec.priorityClassName: exam-high
+    ```
+    YAML đầy đủ của từng câu nằm trong `tests/solutions/38.sh` của repo.
+  setup: |
+    answers_dir; rm -f "$ANS/38-nodes.txt"
+    kubectl delete ns mock-x mock-a mock-b mock-c --ignore-not-found --wait=true >/dev/null 2>&1
+    kubectl delete pc exam-high --ignore-not-found >/dev/null
+    node_exec "$NODE1" "rm -f $(static_dir "$NODE1")/exam-static.yaml" >/dev/null 2>&1 || true
+    for n in mock-a mock-b mock-c; do kubectl create ns $n >/dev/null; done
+    kubectl label node "$NODE2" exam-role=gpu --overwrite >/dev/null
+    kubectl taint node "$NODE2" exam=true:NoSchedule --overwrite >/dev/null
+    kubectl create deploy db -n mock-b --image=nginx:1.27 >/dev/null
+    kubectl expose deploy db -n mock-b --port=80 >/dev/null
+    kubectl apply -n mock-c -f - >/dev/null <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: broken-api}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: broken-api}}
+      template:
+        metadata: {labels: {app: broken-api}}
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.27-slimx
+            readinessProbe:
+              httpGet: {path: /, port: 8080}
+              periodSeconds: 5
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: backend}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: backend}}
+      template:
+        metadata: {labels: {app: backend}}
+        spec:
+          containers: [{name: nginx, image: nginx:1.27}]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: backend}
+    spec:
+      selector: {app: backend-svc}
+      ports: [{port: 80, targetPort: 80}]
+    EOF
+    echo "Bắt đầu lúc $(date '+%H:%M'). Hết giờ lúc $(date -d '+120 min' '+%H:%M' 2>/dev/null || date -v+120M '+%H:%M')."
+  verify: |
+    exam_task 1 4 "Namespace mock-x"
+    expect "mock-x có env=exam" "$(jp ns mock-x '{.metadata.labels.env}')" "exam"
+    exam_task 2 8 "Deployment frontend"
+    expect "3 replica, nginx:1.28, request 100m" "$(jp deploy frontend -n mock-a '{.spec.template.spec.containers[0].image}:{.spec.template.spec.containers[0].resources.requests.cpu}')" "nginx:1.28:100m"
+    expect_ge "Ít nhất 3 Pod sẵn sàng" "$(jp deploy frontend -n mock-a '{.status.readyReplicas}')" 3
+    expect "maxSurge 1, maxUnavailable 0" "$(jp deploy frontend -n mock-a '{.spec.strategy.rollingUpdate.maxSurge}/{.spec.strategy.rollingUpdate.maxUnavailable}')" "1/0"
+    check "change-cause exam upgrade" bash -c "kubectl rollout history deploy/frontend -n mock-a | grep -q 'exam upgrade'"
+    exam_task 3 5 "ConfigMap, Secret, cfg-pod"
+    envs=$(kubectl exec cfg-pod -n mock-a -- env 2>/dev/null)
+    check "cfg-pod có LEVEL=hard" grep -qx LEVEL=hard <<<"$envs"
+    check "cfg-pod có TOKEN=abc123" grep -qx TOKEN=abc123 <<<"$envs"
+    expect "TOKEN lấy từ Secret exam-sec" "$(jp pod cfg-pod -n mock-a '{.spec.containers[0].env[?(@.name=="TOKEN")].valueFrom.secretKeyRef.name}')" "exam-sec"
+    exam_task 4 6 "HPA frontend"
+    expect "3–6 replica, CPU 60%" "$(jp hpa frontend -n mock-a '{.spec.minReplicas}-{.spec.maxReplicas}:{.spec.metrics[0].resource.target.averageUtilization}')" "3-6:60"
+    exam_task 5 6 "gpu-pod trên $NODE2"
+    expect "gpu-pod Running trên $NODE2" "$(jp pod gpu-pod -n mock-a '{.status.phase}:{.spec.nodeName}')" "Running:$NODE2"
+    exam_task 6 5 "logger với sidecar"
+    expect "Sidecar tail là native sidecar" "$(jp pod logger -n mock-a '{.spec.initContainers[?(@.name=="tail")].restartPolicy}')" "Always"
+    check "Log của sidecar có tick" bash -c "kubectl logs logger -n mock-a -c tail | grep -q tick"
+    exam_task 7 6 "Service frontend-np"
+    expect "NodePort 30090 cổng 80" "$(jp svc frontend-np -n mock-a '{.spec.type}:{.spec.ports[0].nodePort}:{.spec.ports[0].port}')" "NodePort:30090:80"
+    expect_ge "Có endpoint" "$(jp endpointslices -n mock-a -l kubernetes.io/service-name=frontend-np '{.items[*].endpoints[*].addresses[0]}' | wc -w | tr -d ' ')" 3
+    exam_task 8 8 "NetworkPolicy db-access"
+    check "api ở mock-a → db: được" can_reach mock-a http://db.mock-b app=api
+    check_not "web ở mock-a → db: bị chặn" can_reach mock-a http://db.mock-b app=web
+    check_not "api ở mock-b → db: bị chặn" can_reach mock-b http://db.mock-b app=api
+    exam_task 9 5 "Ingress frontend"
+    expect "exam.local / Prefix → frontend-np:80" "$(jp ingress frontend -n mock-a '{.spec.rules[0].host}:{.spec.rules[0].http.paths[0].path}:{.spec.rules[0].http.paths[0].pathType}:{.spec.rules[0].http.paths[0].backend.service.name}:{.spec.rules[0].http.paths[0].backend.service.port.number}')" "exam.local:/:Prefix:frontend-np:80"
+    exam_task 10 6 "PVC và writer"
+    expect "exam-data Bound 1Gi RWO" "$(jp pvc exam-data -n mock-a '{.status.phase}:{.spec.resources.requests.storage}:{.spec.accessModes[0]}')" "Bound:1Gi:ReadWriteOnce"
+    check "/data/ok tồn tại" kubectl exec writer -n mock-a -- test -f /data/ok
+    exam_task 11 6 "RBAC cho SA ci"
+    sa=system:serviceaccount:mock-a:ci
+    expect "ci: create deployments" "$(kubectl auth can-i create deployments.apps -n mock-a --as=$sa 2>/dev/null)" "yes"
+    expect "ci: list pods" "$(kubectl auth can-i list pods -n mock-a --as=$sa 2>/dev/null)" "yes"
+    expect "ci: KHÔNG delete pods" "$(kubectl auth can-i delete pods -n mock-a --as=$sa 2>/dev/null)" "no"
+    expect "ci: KHÔNG gì ở default" "$(kubectl auth can-i list pods -n default --as=$sa 2>/dev/null)" "no"
+    exam_task 12 6 "Static pod"
+    expect "exam-static-$NODE1 Running" "$(jp pod "exam-static-$NODE1" '{.status.phase}')" "Running"
+    check "Là mirror pod" test -n "$(jp pod "exam-static-$NODE1" '{.metadata.annotations.kubernetes\.io/config\.mirror}')"
+    exam_task 13 10 "Sửa broken-api"
+    expect "broken-api 2/2 sẵn sàng" "$(jp deploy broken-api -n mock-c '{.status.readyReplicas}')" "2"
+    check "Vẫn có readinessProbe" test -n "$(jp deploy broken-api -n mock-c '{.spec.template.spec.containers[0].readinessProbe.httpGet.port}')"
+    exam_task 14 8 "Service backend"
+    check "Gọi được http://backend.mock-c" can_reach mock-c http://backend.mock-c
+    expect "Deployment backend không đổi" "$(jp deploy backend -n mock-c '{.spec.template.metadata.labels.app}:{.spec.replicas}')" "backend:2"
+    exam_task 15 6 "Danh sách node"
+    want=$(kubectl get nodes --sort-by=.metadata.name -o jsonpath='{range .items[*]}{.metadata.name} {.status.nodeInfo.kubeletVersion}{"\n"}{end}' 2>/dev/null)
+    expect "38-nodes.txt đúng nội dung và thứ tự" "$(ansraw 38-nodes.txt | sed '/^$/d')" "$(echo "$want" | sed '/^$/d')"
+    exam_task 16 5 "PriorityClass và vip"
+    expect "exam-high = 100000" "$(jp pc exam-high '{.value}')" "100000"
+    expect "vip có priority 100000" "$(jp pod vip -n mock-a '{.spec.priority}')" "100000"
+    exam_end
+  cleanup: |
+    kubectl delete ns mock-x mock-a mock-b mock-c --ignore-not-found --wait=false >/dev/null
+    kubectl delete pc exam-high --ignore-not-found >/dev/null
+    for pv in $(kubectl get pv -o jsonpath='{range .items[?(@.spec.claimRef.namespace=="mock-a")]}{.metadata.name}{" "}{end}' 2>/dev/null); do kubectl delete pv "$pv" --wait=false >/dev/null 2>&1; done
+    node_exec "$NODE1" "rm -f $(static_dir "$NODE1")/exam-static.yaml" >/dev/null 2>&1 || true
+    kubectl label node "$NODE2" exam-role- >/dev/null 2>&1 || true
+    kubectl taint node "$NODE2" exam- >/dev/null 2>&1 || true
+    rm -f "$ANS/38-nodes.txt"
+  solve: |
+    kubectl create ns mock-x && kubectl label ns mock-x env=exam
+    kubectl apply -f - <<EOF
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: frontend, namespace: mock-a}
+    spec:
+      replicas: 3
+      strategy: {type: RollingUpdate, rollingUpdate: {maxSurge: 1, maxUnavailable: 0}}
+      selector: {matchLabels: {app: frontend}}
+      template:
+        metadata: {labels: {app: frontend}}
+        spec:
+          containers:
+          - {name: nginx, image: nginx:1.27, resources: {requests: {cpu: 100m}}}
+    ---
+    apiVersion: v1
+    kind: ConfigMap
+    metadata: {name: exam-cfg, namespace: mock-a}
+    data: {LEVEL: hard}
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata: {name: exam-sec, namespace: mock-a}
+    stringData: {token: abc123}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: cfg-pod, namespace: mock-a}
+    spec:
+      containers:
+      - name: c
+        image: busybox:1.36
+        command: ["sleep", "3600"]
+        env:
+        - {name: LEVEL, valueFrom: {configMapKeyRef: {name: exam-cfg, key: LEVEL}}}
+        - {name: TOKEN, valueFrom: {secretKeyRef: {name: exam-sec, key: token}}}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: gpu-pod, namespace: mock-a}
+    spec:
+      nodeSelector: {exam-role: gpu}
+      tolerations: [{key: exam, operator: Equal, value: "true", effect: NoSchedule}]
+      containers: [{name: nginx, image: nginx:1.27}]
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: logger, namespace: mock-a}
+    spec:
+      volumes: [{name: logs, emptyDir: {}}]
+      initContainers:
+      - name: tail
+        image: busybox:1.36
+        restartPolicy: Always
+        command: ["sh", "-c", "tail -F /var/log/app.log"]
+        volumeMounts: [{name: logs, mountPath: /var/log}]
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "while true; do echo tick >> /var/log/app.log; sleep 2; done"]
+        volumeMounts: [{name: logs, mountPath: /var/log}]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: frontend-np, namespace: mock-a}
+    spec:
+      type: NodePort
+      selector: {app: frontend}
+      ports: [{port: 80, targetPort: 80, nodePort: 30090}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: db-access, namespace: mock-b}
+    spec:
+      podSelector: {matchLabels: {app: db}}
+      policyTypes: [Ingress]
+      ingress:
+      - from:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: mock-a}}
+          podSelector: {matchLabels: {app: api}}
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: {name: exam-data, namespace: mock-a}
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources: {requests: {storage: 1Gi}}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: writer, namespace: mock-a}
+    spec:
+      containers:
+      - {name: c, image: busybox:1.36, command: ["sh", "-c", "touch /data/ok; sleep 3600"], volumeMounts: [{name: d, mountPath: /data}]}
+      volumes: [{name: d, persistentVolumeClaim: {claimName: exam-data}}]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata: {name: ci, namespace: mock-a}
+    rules:
+    - {apiGroups: [apps], resources: [deployments], verbs: [create]}
+    - {apiGroups: [""], resources: [pods], verbs: [get, list]}
+    ---
+    apiVersion: scheduling.k8s.io/v1
+    kind: PriorityClass
+    metadata: {name: exam-high}
+    value: 100000
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: vip, namespace: mock-a}
+    spec:
+      priorityClassName: exam-high
+      containers: [{name: nginx, image: nginx:1.27}]
+    EOF
+    kubectl rollout status deploy/frontend -n mock-a --timeout=180s
+    kubectl set image deploy/frontend -n mock-a nginx=nginx:1.28
+    kubectl annotate deploy/frontend -n mock-a kubernetes.io/change-cause='exam upgrade' --overwrite
+    kubectl autoscale deploy frontend -n mock-a --min=3 --max=6 --cpu-percent=60
+    kubectl create ingress frontend -n mock-a --rule="exam.local/*=frontend-np:80"
+    kubectl create sa ci -n mock-a
+    kubectl create rolebinding ci -n mock-a --role=ci --serviceaccount=mock-a:ci
+    kubectl run exam-static --image=nginx:1.27 --dry-run=client -o yaml > /tmp/exam-static.yaml
+    node_put "$NODE1" /tmp/exam-static.yaml "$(static_dir "$NODE1")/exam-static.yaml"
+    kubectl set image deploy/broken-api -n mock-c nginx=nginx:1.27
+    kubectl patch deploy broken-api -n mock-c --type=json -p '[{"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/port","value":80}]'
+    kubectl patch svc backend -n mock-c -p '{"spec":{"selector":{"app":"backend"}}}'
+    kubectl get nodes --sort-by=.metadata.name -o jsonpath='{range .items[*]}{.metadata.name} {.status.nodeInfo.kubeletVersion}{"\n"}{end}' > "$ANS/38-nodes.txt"
+    kubectl rollout status deploy/frontend -n mock-a --timeout=180s
+    kubectl rollout status deploy/broken-api -n mock-c --timeout=180s
+    kubectl wait --for=condition=Ready pod/cfg-pod pod/gpu-pod pod/logger pod/writer pod/vip -n mock-a --timeout=180s
+    for i in $(seq 1 30); do [ "$(kubectl get pod "exam-static-$NODE1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ] && break; sleep 3; done
+    sleep 5
+  docs:
+    - [CKA curriculum, "https://github.com/cncf/curriculum"]
+    - [Linux Foundation CKA, "https://training.linuxfoundation.org/certification/certified-kubernetes-administrator-cka/"]
+    - [kubectl quick reference, "https://kubernetes.io/docs/reference/kubectl/quick-reference/"]

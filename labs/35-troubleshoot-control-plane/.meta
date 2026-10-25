@@ -1,0 +1,4 @@
+ID=35
+LEVEL=8
+ENV=kind
+TITLE="Troubleshooting control plane: scheduler và controller-manager"

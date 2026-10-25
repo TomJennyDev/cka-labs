@@ -137,3 +137,20 @@ can_reach() { # can_reach <namespace> <url> [pod-labels]
   kubectl delete pod "$name" -n "$ns" --now >/dev/null 2>&1 || true
   [ "$phase" = Succeeded ]
 }
+
+# ---------- weighted exam scoring (mock exam) ----------
+_EX_ID=""; _EX_W=0; _EX_F0=0; _EX_SCORE=0; _EX_TOTAL=0; _EX_ROWS=""
+_exam_close() {
+  [ -z "$_EX_ID" ] && return
+  _EX_TOTAL=$((_EX_TOTAL+_EX_W))
+  if [ "$_FAIL" -eq "$_EX_F0" ]; then _EX_SCORE=$((_EX_SCORE+_EX_W)); _EX_ROWS+="$(printf '  %s✔%s Câu %-3s %3s%%  %s' "$C_OK" "$C_0" "$_EX_ID" "$_EX_W" "$_EX_T")"$'\n'
+  else _EX_ROWS+="$(printf '  %s✘%s Câu %-3s %3s%%  %s' "$C_BAD" "$C_0" "$_EX_ID" "$_EX_W" "$_EX_T")"$'\n'; fi
+}
+# exam_task <id> <weight%> <title>   — following checks belong to this task; all must pass to earn the weight
+exam_task() { _exam_close; _EX_ID="$1"; _EX_W="$2"; _EX_T="$3"; _EX_F0=$_FAIL; echo "${C_B}Câu $1 (${2}%) · $3${C_0}"; }
+exam_end() {
+  _exam_close
+  echo; echo "${C_B}Bảng điểm${C_0}"; printf '%s' "$_EX_ROWS"
+  echo; echo "${C_B}Tổng: ${_EX_SCORE}/${_EX_TOTAL}%${C_0} (cần 66% để đậu)"
+  if [ $(( _EX_SCORE * 100 / (_EX_TOTAL > 0 ? _EX_TOTAL : 1) )) -ge 66 ]; then echo "${C_OK}${C_B}ĐẬU${C_0}"; exit 0; else echo "${C_BAD}${C_B}CHƯA ĐẬU${C_0}"; exit 1; fi
+}

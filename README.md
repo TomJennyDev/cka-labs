@@ -36,17 +36,23 @@
 | 30 | [Nâng cấp cluster kubeadm 1.34 → 1.35](labs/30-kubeadm-upgrade/README.md) | 7 · Vận hành cluster | kubeadm trên máy ảo | 60′ |
 | 31 | [Chứng chỉ, cấu hình control plane và kubelet](labs/31-control-plane-config/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm (cần vào node) | 35′ |
 | 32 | [Thêm control plane cho cluster HA](labs/32-control-plane-ha/README.md) | 7 · Vận hành cluster | kubeadm trên máy ảo | 60′ |
+| 33 | [Troubleshooting ứng dụng: sáu Deployment hỏng](labs/33-troubleshoot-apps/README.md) | 8 · Troubleshooting | kind hoặc kubeadm | 40′ |
+| 34 | [Troubleshooting mạng: Service, NetworkPolicy và DNS](labs/34-troubleshoot-network/README.md) | 8 · Troubleshooting | kind hoặc kubeadm | 40′ |
+| 35 | [Troubleshooting control plane: scheduler và controller-manager](labs/35-troubleshoot-control-plane/README.md) | 8 · Troubleshooting | kind hoặc kubeadm (cần vào node) | 40′ |
+| 36 | [Troubleshooting node: worker NotReady](labs/36-troubleshoot-node/README.md) | 8 · Troubleshooting | kind hoặc kubeadm (cần vào node) | 35′ |
+| 37 | [Theo dõi tài nguyên, event và log](labs/37-monitoring-logs/README.md) | 8 · Troubleshooting | kind hoặc kubeadm | 30′ |
+| 38 | [Đề thi thử CKA (2 giờ, 16 câu)](labs/38-mock-exam/README.md) | 9 · Thi thử | kind hoặc kubeadm (cần vào node) | 120′ |
 <!-- LABS:END -->
 
 <!-- COVERAGE:START -->
 | Domain | Năng lực | Lab |
 |---|---|---|
-| Troubleshooting 30% | Troubleshoot cluster và node | 14 |
-| Troubleshooting 30% | Troubleshoot thành phần control plane | 31 |
-| Troubleshooting 30% | Theo dõi tài nguyên cluster và ứng dụng | 04, 10, 11 |
-| Troubleshooting 30% | Quản lý và đánh giá output, log của container | 03, 07, 08 |
-| Troubleshooting 30% | Troubleshoot Service và networking | 15, 16 |
-| Cluster Architecture 25% | Quản lý RBAC | 23, 24, 25 |
+| Troubleshooting 30% | Troubleshoot cluster và node | 14, 36, 38 |
+| Troubleshooting 30% | Troubleshoot thành phần control plane | 31, 35 |
+| Troubleshooting 30% | Theo dõi tài nguyên cluster và ứng dụng | 04, 10, 11, 33, 37 |
+| Troubleshooting 30% | Quản lý và đánh giá output, log của container | 03, 07, 08, 33, 37, 38 |
+| Troubleshooting 30% | Troubleshoot Service và networking | 15, 16, 34, 38 |
+| Cluster Architecture 25% | Quản lý RBAC | 23, 24, 25, 38 |
 | Cluster Architecture 25% | Chuẩn bị hạ tầng để cài cluster | 01 |
 | Cluster Architecture 25% | Tạo và quản lý cluster bằng kubeadm | 01, 29, 30, 31, 32 |
 | Cluster Architecture 25% | Quản lý vòng đời cluster (nâng cấp) | 29, 30 |
@@ -55,17 +61,17 @@
 | Cluster Architecture 25% | Interface mở rộng: CNI, CSI, CRI | 01, 28, 31 |
 | Cluster Architecture 25% | CRD, cài và cấu hình Operator | 28 |
 | Services & Networking 20% | Kết nối giữa các Pod | 15, 17 |
-| Services & Networking 20% | NetworkPolicy | 17 |
-| Services & Networking 20% | Service ClusterIP, NodePort, LoadBalancer và endpoints | 15 |
+| Services & Networking 20% | NetworkPolicy | 17, 34, 38 |
+| Services & Networking 20% | Service ClusterIP, NodePort, LoadBalancer và endpoints | 15, 38 |
 | Services & Networking 20% | Gateway API | 19 |
-| Services & Networking 20% | Ingress controller và Ingress | 18 |
-| Services & Networking 20% | CoreDNS | 16 |
-| Workloads & Scheduling 15% | Deployment, rolling update, rollback | 05 |
-| Workloads & Scheduling 15% | ConfigMap và Secret | 06 |
-| Workloads & Scheduling 15% | Autoscaling | 11 |
-| Workloads & Scheduling 15% | Primitive cho ứng dụng tự phục hồi | 07, 08, 09, 14 |
-| Workloads & Scheduling 15% | Admission và scheduling của Pod | 10, 12, 13, 14, 25 |
-| Storage 10% | StorageClass và dynamic provisioning | 22 |
+| Services & Networking 20% | Ingress controller và Ingress | 18, 38 |
+| Services & Networking 20% | CoreDNS | 16, 34 |
+| Workloads & Scheduling 15% | Deployment, rolling update, rollback | 05, 38 |
+| Workloads & Scheduling 15% | ConfigMap và Secret | 06, 38 |
+| Workloads & Scheduling 15% | Autoscaling | 11, 38 |
+| Workloads & Scheduling 15% | Primitive cho ứng dụng tự phục hồi | 07, 08, 09, 14, 33, 38 |
+| Workloads & Scheduling 15% | Admission và scheduling của Pod | 10, 12, 13, 14, 25, 38 |
+| Storage 10% | StorageClass và dynamic provisioning | 22, 38 |
 | Storage 10% | Volume type, access mode, reclaim policy | 20, 21 |
-| Storage 10% | PersistentVolume và PersistentVolumeClaim | 21, 22 |
+| Storage 10% | PersistentVolume và PersistentVolumeClaim | 21, 22, 38 |
 <!-- COVERAGE:END -->

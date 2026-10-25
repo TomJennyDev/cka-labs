@@ -1,0 +1,4 @@
+ID=36
+LEVEL=8
+ENV=kind
+TITLE="Troubleshooting node: worker NotReady"
