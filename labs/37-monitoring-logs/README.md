@@ -56,6 +56,8 @@ Mỗi câu hỏi ứng với một nguồn dữ liệu. Chọn đúng nguồn tr
 
 Mọi đáp án phải lấy bằng lệnh, đừng đếm bằng mắt. Chạy lại lệnh lần hai để chắc kết quả ổn định (số dòng log tăng theo thời gian).
 
+Nếu `kubectl logs --previous` báo lỗi hoặc trả về rỗng, Pod có thể vừa được restart đúng lúc đó. Chờ vài giây rồi chạy lại.
+
 ## Gợi ý
 
 <details><summary>Sắp xếp theo CPU</summary>
