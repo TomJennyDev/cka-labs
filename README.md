@@ -23,6 +23,12 @@
 | 17 | [NetworkPolicy theo mô hình mặc định chặn](labs/17-network-policy/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 40′ |
 | 18 | [Ingress, IngressClass và TLS](labs/18-ingress/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 30′ |
 | 19 | [Gateway API, HTTPRoute và ReferenceGrant](labs/19-gateway-api/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 40′ |
+| 20 | [Volume: emptyDir, hostPath, projected và Downward API](labs/20-volumes/README.md) | 5 · Storage | kind hoặc kubeadm (cần vào node) | 30′ |
+| 21 | [PersistentVolume, PVC và reclaim policy](labs/21-pv-pvc/README.md) | 5 · Storage | kind hoặc kubeadm | 30′ |
+| 22 | [StorageClass, dynamic provisioning và StatefulSet](labs/22-storageclass-statefulset/README.md) | 5 · Storage | kind hoặc kubeadm | 35′ |
+| 23 | [RBAC với Role, ClusterRole và ServiceAccount](labs/23-rbac/README.md) | 6 · Bảo mật | kind hoặc kubeadm | 35′ |
+| 24 | [User mới bằng chứng chỉ, CSR và kubeconfig](labs/24-users-csr-kubeconfig/README.md) | 6 · Bảo mật | kind hoặc kubeadm | 35′ |
+| 25 | [securityContext và Pod Security Admission](labs/25-security-context-psa/README.md) | 6 · Bảo mật | kind hoặc kubeadm | 30′ |
 <!-- LABS:END -->
 
 <!-- COVERAGE:START -->
@@ -33,7 +39,7 @@
 | Troubleshooting 30% | Theo dõi tài nguyên cluster và ứng dụng | 04, 10, 11 |
 | Troubleshooting 30% | Quản lý và đánh giá output, log của container | 03, 07, 08 |
 | Troubleshooting 30% | Troubleshoot Service và networking | 15, 16 |
-| Cluster Architecture 25% | Quản lý RBAC | — |
+| Cluster Architecture 25% | Quản lý RBAC | 23, 24, 25 |
 | Cluster Architecture 25% | Chuẩn bị hạ tầng để cài cluster | 01 |
 | Cluster Architecture 25% | Tạo và quản lý cluster bằng kubeadm | 01 |
 | Cluster Architecture 25% | Quản lý vòng đời cluster (nâng cấp) | — |
@@ -51,8 +57,8 @@
 | Workloads & Scheduling 15% | ConfigMap và Secret | 06 |
 | Workloads & Scheduling 15% | Autoscaling | 11 |
 | Workloads & Scheduling 15% | Primitive cho ứng dụng tự phục hồi | 07, 08, 09, 14 |
-| Workloads & Scheduling 15% | Admission và scheduling của Pod | 10, 12, 13, 14 |
-| Storage 10% | StorageClass và dynamic provisioning | — |
-| Storage 10% | Volume type, access mode, reclaim policy | — |
-| Storage 10% | PersistentVolume và PersistentVolumeClaim | — |
+| Workloads & Scheduling 15% | Admission và scheduling của Pod | 10, 12, 13, 14, 25 |
+| Storage 10% | StorageClass và dynamic provisioning | 22 |
+| Storage 10% | Volume type, access mode, reclaim policy | 20, 21 |
+| Storage 10% | PersistentVolume và PersistentVolumeClaim | 21, 22 |
 <!-- COVERAGE:END -->

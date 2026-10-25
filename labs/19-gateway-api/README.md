@@ -72,4 +72,4 @@ Lời giải: [SOLUTION.md](SOLUTION.md) (chỉ mở sau khi đã tự làm).
 
 ---
 
-← [Lab 18 · Ingress, IngressClass và TLS](../18-ingress/README.md)
+← [Lab 18 · Ingress, IngressClass và TLS](../18-ingress/README.md) · [Lab 20 · Volume: emptyDir, hostPath, projected và Downward API](../20-volumes/README.md) →

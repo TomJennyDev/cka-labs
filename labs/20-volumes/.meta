@@ -1,0 +1,4 @@
+ID=20
+LEVEL=5
+ENV=kind
+TITLE="Volume: emptyDir, hostPath, projected và Downward API"

@@ -1,0 +1,4 @@
+ID=21
+LEVEL=5
+ENV=any
+TITLE="PersistentVolume, PVC và reclaim policy"

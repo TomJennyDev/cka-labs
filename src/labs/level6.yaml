@@ -1,0 +1,366 @@
+- id: 23
+  slug: rbac
+  title: RBAC với Role, ClusterRole và ServiceAccount
+  level: 6
+  minutes: 35
+  competencies: ["arch:0"]
+  goal: |
+    Cấp đúng và đủ quyền theo nguyên tắc tối thiểu cho ServiceAccount, user và group; kiểm tra bằng `kubectl auth can-i`; tìm và gỡ một quyền thừa.
+  concepts: |
+    - **Role** (trong namespace) và **ClusterRole** (toàn cluster) chứa `rules`: `apiGroups`, `resources` (kể cả subresource như `pods/log`, `pods/exec`), `verbs`, tùy chọn `resourceNames`.
+    - **RoleBinding** gắn Role *hoặc ClusterRole* cho chủ thể **trong một namespace**. **ClusterRoleBinding** gắn ClusterRole cho toàn cluster.
+    - Chủ thể: `User`, `Group`, `ServiceAccount` (`system:serviceaccount:<ns>:<tên>`). RBAC chỉ **cho phép**, không có luật từ chối.
+    - ClusterRole có sẵn: `view`, `edit`, `admin`, `cluster-admin`.
+  tasks:
+    - |
+      Trong `lab23`, tạo ServiceAccount `deployer` và Role `deploy-manager` cho phép `get, list, watch, create, update, patch, delete` trên `deployments` và chỉ `get, list` trên `pods`. Gắn Role cho `deployer` bằng RoleBinding `deployer-binding`.
+    - |
+      Tạo ClusterRole `node-reader` (`get, list, watch` trên `nodes`) và ClusterRoleBinding `ops-node-reader` gắn cho group `ops-team`.
+    - |
+      User `jane` chỉ được đọc Pod và log của Pod trong `lab23`. Tạo Role `log-reader` và RoleBinding `jane-logs`.
+    - |
+      ServiceAccount `auditor` (tạo mới trong `lab23`) được quyền của ClusterRole có sẵn `view`, nhưng **chỉ trong** namespace `lab23`.
+    - |
+      ServiceAccount `legacy-bot` trong `lab23` đang xóa được Secret, việc này không được phép. Tìm binding cấp quyền đó, ghi tên binding vào `~/cka-answers/23-binding.txt`, rồi xóa binding.
+  hints:
+    - |
+      Kiểm tra quyền
+      `kubectl auth can-i delete deployments -n lab23 --as=system:serviceaccount:lab23:deployer` hoặc `--as=jane`, `--as=x --as-group=ops-team`
+    - |
+      Tìm binding của một ServiceAccount
+      `kubectl get rolebinding,clusterrolebinding -A -o wide | grep legacy-bot`
+  solution: |
+    ```bash
+    kubectl create sa deployer -n lab23
+    kubectl create role deploy-manager -n lab23 --verb=get,list,watch,create,update,patch,delete --resource=deployments
+    # Role tạo bằng lệnh chỉ có một bộ verb; thêm rule cho pods bằng edit:
+    kubectl edit role deploy-manager -n lab23
+    ```
+    ```yaml
+    rules:
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list"]
+    ```
+    ```bash
+    kubectl create rolebinding deployer-binding -n lab23 --role=deploy-manager --serviceaccount=lab23:deployer
+    kubectl create clusterrole node-reader --verb=get,list,watch --resource=nodes
+    kubectl create clusterrolebinding ops-node-reader --clusterrole=node-reader --group=ops-team
+    kubectl create role log-reader -n lab23 --verb=get,list --resource=pods,pods/log
+    kubectl create rolebinding jane-logs -n lab23 --role=log-reader --user=jane
+    kubectl create sa auditor -n lab23
+    kubectl create rolebinding auditor-view -n lab23 --clusterrole=view --serviceaccount=lab23:auditor
+
+    kubectl get rolebinding,clusterrolebinding -A -o wide | grep legacy-bot
+    echo ci-secrets-admin > ~/cka-answers/23-binding.txt
+    kubectl delete clusterrolebinding ci-secrets-admin
+
+    kubectl auth can-i delete secrets -n lab23 --as=system:serviceaccount:lab23:legacy-bot   # no
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/23-binding.txt"
+    ns_fresh lab23
+    kubectl delete clusterrole node-reader secret-admin-lab23 --ignore-not-found >/dev/null
+    kubectl delete clusterrolebinding ops-node-reader ci-secrets-admin --ignore-not-found >/dev/null
+    kubectl create sa legacy-bot -n lab23 >/dev/null
+    kubectl create role cm-reader -n lab23 --verb=get,list --resource=configmaps >/dev/null
+    kubectl create rolebinding legacy-cm -n lab23 --role=cm-reader --serviceaccount=lab23:legacy-bot >/dev/null
+    kubectl create clusterrole secret-admin-lab23 --verb=get,list,delete --resource=secrets >/dev/null
+    kubectl create clusterrolebinding ci-secrets-admin --clusterrole=secret-admin-lab23 --serviceaccount=lab23:legacy-bot >/dev/null
+  verify: |
+    sa=system:serviceaccount:lab23
+    can() { kubectl auth can-i "$@" 2>/dev/null; }
+    expect "deployer: delete deployments trong lab23" "$(can delete deployments.apps -n lab23 --as=$sa:deployer)" "yes"
+    expect "deployer: list pods trong lab23" "$(can list pods -n lab23 --as=$sa:deployer)" "yes"
+    expect "deployer: KHÔNG delete pods" "$(can delete pods -n lab23 --as=$sa:deployer)" "no"
+    expect "deployer: KHÔNG tạo deployment ở default" "$(can create deployments.apps -n default --as=$sa:deployer)" "no"
+    expect "Binding deployer-binding dùng Role deploy-manager" "$(jp rolebinding deployer-binding -n lab23 '{.roleRef.kind}/{.roleRef.name}')" "Role/deploy-manager"
+    expect "Group ops-team: list nodes" "$(can list nodes --as=x --as-group=ops-team)" "yes"
+    expect "Group ops-team: KHÔNG delete nodes" "$(can delete nodes --as=x --as-group=ops-team)" "no"
+    expect "jane: get pods/log trong lab23" "$(can get pods --subresource=log -n lab23 --as=jane)" "yes"
+    expect "jane: KHÔNG delete pods" "$(can delete pods -n lab23 --as=jane)" "no"
+    expect "jane: KHÔNG đọc pods ở default" "$(can get pods -n default --as=jane)" "no"
+    expect "auditor: list deployments trong lab23" "$(can list deployments.apps -n lab23 --as=$sa:auditor)" "yes"
+    expect "auditor: KHÔNG list deployments ở default" "$(can list deployments.apps -n default --as=$sa:auditor)" "no"
+    expect "auditor: KHÔNG đọc Secret (view không có)" "$(can get secrets -n lab23 --as=$sa:auditor)" "no"
+    expect "23-binding.txt" "$(ans 23-binding.txt)" "ci-secrets-admin"
+    expect "legacy-bot: KHÔNG delete secrets" "$(can delete secrets -n lab23 --as=$sa:legacy-bot)" "no"
+    expect "legacy-bot: vẫn đọc ConfigMap" "$(can get configmaps -n lab23 --as=$sa:legacy-bot)" "yes"
+  cleanup: |
+    kubectl delete ns lab23 --ignore-not-found --wait=false >/dev/null
+    kubectl delete clusterrole node-reader secret-admin-lab23 --ignore-not-found >/dev/null
+    kubectl delete clusterrolebinding ops-node-reader ci-secrets-admin --ignore-not-found >/dev/null
+    rm -f "$ANS/23-binding.txt"
+  solve: |
+    kubectl create sa deployer -n lab23
+    kubectl apply -f - <<'EOF'
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata: {name: deploy-manager, namespace: lab23}
+    rules:
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+    - apiGroups: [""]
+      resources: ["pods"]
+      verbs: ["get", "list"]
+    EOF
+    kubectl create rolebinding deployer-binding -n lab23 --role=deploy-manager --serviceaccount=lab23:deployer
+    kubectl create clusterrole node-reader --verb=get,list,watch --resource=nodes
+    kubectl create clusterrolebinding ops-node-reader --clusterrole=node-reader --group=ops-team
+    kubectl create role log-reader -n lab23 --verb=get,list --resource=pods,pods/log
+    kubectl create rolebinding jane-logs -n lab23 --role=log-reader --user=jane
+    kubectl create sa auditor -n lab23
+    kubectl create rolebinding auditor-view -n lab23 --clusterrole=view --serviceaccount=lab23:auditor
+    echo ci-secrets-admin > "$ANS/23-binding.txt"
+    kubectl delete clusterrolebinding ci-secrets-admin
+  docs:
+    - [Using RBAC Authorization, "https://kubernetes.io/docs/reference/access-authn-authz/rbac/"]
+    - [Service accounts, "https://kubernetes.io/docs/concepts/security/service-accounts/"]
+
+- id: 24
+  slug: users-csr-kubeconfig
+  title: User mới bằng chứng chỉ, CSR và kubeconfig
+  level: 6
+  minutes: 35
+  competencies: ["arch:0"]
+  goal: |
+    Cấp quyền truy cập cho một lập trình viên từ đầu: tạo khóa và CSR, để cluster ký chứng chỉ, dựng kubeconfig riêng, phân quyền theo group, và thử đăng nhập.
+  concepts: |
+    - Kubernetes không có object User. Với chứng chỉ client: **CN** là tên user, **O** là group.
+    - CertificateSigningRequest với `signerName: kubernetes.io/kube-apiserver-client` và `usages: [client auth]`; admin chạy `kubectl certificate approve`, chứng chỉ nằm ở `.status.certificate`.
+    - kubeconfig gồm `clusters` (server + CA), `users` (cert + key), `contexts` (ghép hai cái trên). `--embed-certs` nhúng nội dung vào file thay vì trỏ đường dẫn.
+    - Phân quyền cho **group** tiện hơn từng user: thêm người chỉ cần cấp cert có `O=<group>`.
+  tasks:
+    - |
+      Tạo khóa RSA 2048 và CSR cho user `dev1` thuộc group `developers`, lưu tại `~/cka-answers/dev1.key` và `~/cka-answers/dev1.csr`.
+    - |
+      Gửi CertificateSigningRequest tên `dev1` (signer client của API server, hạn 1 ngày), duyệt nó, và lưu chứng chỉ vào `~/cka-answers/dev1.crt`.
+    - |
+      Tạo file kubeconfig **riêng** `~/cka-answers/dev1.kubeconfig` (không sửa `~/.kube/config`) có cluster giống cluster hiện tại, user `dev1` với cert nhúng sẵn, context `dev1@lab` dùng namespace `lab24`, và đặt nó là context hiện tại trong file đó.
+    - |
+      Group `developers` được `get, list, watch, create, delete` Pod và Deployment trong `lab24`, không gì khác.
+    - |
+      Kiểm tra: dùng `--kubeconfig ~/cka-answers/dev1.kubeconfig`, tạo được Deployment `hello` (`nginx:1.27`) trong `lab24` nhưng **không** xem được node.
+  hints:
+    - |
+      Tạo CSR với group
+      `openssl req -new -key dev1.key -subj "/CN=dev1/O=developers" -out dev1.csr`
+    - |
+      Lấy server và CA của cluster hiện tại
+      `kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.server}'` và `…certificate-authority-data` (base64)
+  solution: |
+    ```bash
+    cd ~/cka-answers
+    openssl genrsa -out dev1.key 2048
+    openssl req -new -key dev1.key -subj "/CN=dev1/O=developers" -out dev1.csr
+    cat <<EOF | kubectl apply -f -
+    apiVersion: certificates.k8s.io/v1
+    kind: CertificateSigningRequest
+    metadata: {name: dev1}
+    spec:
+      request: $(base64 -w0 < dev1.csr)
+      signerName: kubernetes.io/kube-apiserver-client
+      expirationSeconds: 86400
+      usages: [client auth]
+    EOF
+    kubectl certificate approve dev1
+    kubectl get csr dev1 -o jsonpath='{.status.certificate}' | base64 -d > dev1.crt
+
+    SERVER=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.server}')
+    kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > ca.crt
+    K="--kubeconfig=dev1.kubeconfig"
+    kubectl config set-cluster lab $K --server="$SERVER" --certificate-authority=ca.crt --embed-certs
+    kubectl config set-credentials dev1 $K --client-certificate=dev1.crt --client-key=dev1.key --embed-certs
+    kubectl config set-context dev1@lab $K --cluster=lab --user=dev1 --namespace=lab24
+    kubectl config use-context dev1@lab $K
+
+    kubectl create role dev -n lab24 --verb=get,list,watch,create,delete --resource=pods,deployments
+    kubectl create rolebinding developers -n lab24 --role=dev --group=developers
+
+    kubectl $K create deploy hello --image=nginx:1.27
+    kubectl $K get nodes        # Forbidden
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS"/dev1.* "$ANS/ca.crt"
+    ns_fresh lab24
+    kubectl delete csr dev1 --ignore-not-found >/dev/null
+  verify: |
+    check "dev1.key là khóa RSA 2048" bash -c "openssl rsa -in '$ANS/dev1.key' -noout -text 2>/dev/null | grep -q '2048 bit'"
+    expect_match "CSR có CN=dev1 và O=developers" "$(openssl req -in "$ANS/dev1.csr" -noout -subject 2>/dev/null)" 'CN *= *dev1'
+    expect_match "CSR thuộc group developers" "$(openssl req -in "$ANS/dev1.csr" -noout -subject 2>/dev/null)" 'O *= *developers'
+    expect "CSR dev1 dùng signer client của API server" "$(jp csr dev1 '{.spec.signerName}')" "kubernetes.io/kube-apiserver-client"
+    expect "CSR dev1 hạn 1 ngày" "$(jp csr dev1 '{.spec.expirationSeconds}')" "86400"
+    expect "CSR dev1 đã được duyệt" "$(jp csr dev1 '{.status.conditions[0].type}')" "Approved"
+    check "dev1.crt là chứng chỉ của dev1" bash -c "openssl x509 -in '$ANS/dev1.crt' -noout -subject | grep -q dev1"
+    KC="$ANS/dev1.kubeconfig"
+    expect "kubeconfig: context hiện tại dev1@lab" "$(kubectl config current-context --kubeconfig "$KC" 2>/dev/null)" "dev1@lab"
+    expect "kubeconfig: namespace lab24" "$(kubectl config view --kubeconfig "$KC" -o jsonpath='{.contexts[?(@.name=="dev1@lab")].context.namespace}')" "lab24"
+    check "kubeconfig: cert được nhúng" bash -c "kubectl config view --raw --kubeconfig '$KC' -o jsonpath='{.users[0].user.client-certificate-data}' | grep -q ."
+    check "~/.kube/config không có user dev1" bash -c "! kubectl config view -o jsonpath='{.users[*].name}' | tr ' ' '\n' | grep -qx dev1"
+    expect "dev1 (qua kubeconfig) tạo được Deployment hello" "$(kubectl --kubeconfig "$KC" get deploy hello -o jsonpath='{.spec.template.spec.containers[0].image}' 2>/dev/null)" "nginx:1.27"
+    expect "dev1: KHÔNG xem được node" "$(kubectl --kubeconfig "$KC" auth can-i list nodes 2>/dev/null)" "no"
+    expect "Group developers: delete deployments trong lab24" "$(kubectl auth can-i delete deployments.apps -n lab24 --as=someone --as-group=developers 2>/dev/null)" "yes"
+    expect "Group developers: KHÔNG đọc Secret" "$(kubectl auth can-i get secrets -n lab24 --as=someone --as-group=developers 2>/dev/null)" "no"
+  cleanup: |
+    kubectl delete ns lab24 --ignore-not-found --wait=false >/dev/null
+    kubectl delete csr dev1 --ignore-not-found >/dev/null
+    rm -f "$ANS"/dev1.* "$ANS/ca.crt"
+  solve: |
+    cd "$ANS"
+    openssl genrsa -out dev1.key 2048 2>/dev/null
+    openssl req -new -key dev1.key -subj "/CN=dev1/O=developers" -out dev1.csr
+    cat <<EOF | kubectl apply -f -
+    apiVersion: certificates.k8s.io/v1
+    kind: CertificateSigningRequest
+    metadata: {name: dev1}
+    spec:
+      request: $(base64 -w0 < dev1.csr)
+      signerName: kubernetes.io/kube-apiserver-client
+      expirationSeconds: 86400
+      usages: [client auth]
+    EOF
+    kubectl certificate approve dev1
+    for i in $(seq 1 20); do [ -n "$(kubectl get csr dev1 -o jsonpath='{.status.certificate}')" ] && break; sleep 1; done
+    kubectl get csr dev1 -o jsonpath='{.status.certificate}' | base64 -d > dev1.crt
+    SERVER=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.server}')
+    kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d > ca.crt
+    K="--kubeconfig=dev1.kubeconfig"
+    kubectl config set-cluster lab $K --server="$SERVER" --certificate-authority=ca.crt --embed-certs
+    kubectl config set-credentials dev1 $K --client-certificate=dev1.crt --client-key=dev1.key --embed-certs
+    kubectl config set-context dev1@lab $K --cluster=lab --user=dev1 --namespace=lab24
+    kubectl config use-context dev1@lab $K
+    kubectl create role dev -n lab24 --verb=get,list,watch,create,delete --resource=pods,deployments
+    kubectl create rolebinding developers -n lab24 --role=dev --group=developers
+    kubectl $K create deploy hello --image=nginx:1.27
+  docs:
+    - [Certificates and certificate signing requests, "https://kubernetes.io/docs/reference/access-authn-authz/certificate-signing-requests/"]
+    - [Configure access to multiple clusters, "https://kubernetes.io/docs/tasks/access-application-cluster/configure-access-multiple-clusters/"]
+
+- id: 25
+  slug: security-context-psa
+  title: securityContext và Pod Security Admission
+  level: 6
+  minutes: 30
+  competencies: ["work:4", "arch:0"]
+  goal: |
+    Bắt một namespace tuân thủ chuẩn bảo mật `restricted`, sửa workload cũ cho đạt chuẩn, và chạy container với filesystem chỉ đọc.
+  concepts: |
+    - Pod Security Admission bật bằng **label namespace**: `pod-security.kubernetes.io/<enforce|audit|warn>=<privileged|baseline|restricted>`. `enforce` từ chối Pod mới; Pod đang chạy **không** bị đuổi.
+    - Chuẩn `restricted` đòi: `runAsNonRoot: true`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`, `seccompProfile.type: RuntimeDefault` (hoặc `Localhost`), không hostPath/hostNetwork/privileged.
+    - Với Deployment, Pod bị từ chối không xuất hiện: lỗi nằm ở event `FailedCreate` của ReplicaSet.
+    - `readOnlyRootFilesystem: true` chặn ghi vào filesystem của image; chỗ cần ghi thì gắn `emptyDir`.
+  tasks:
+    - |
+      Bật cho namespace `lab25` chế độ `enforce` và `warn` ở mức `restricted`.
+    - |
+      Deployment `api` trong `lab25` đang chạy với root. Sau khi bật enforce, nó không tạo được Pod mới. Sửa `api` đạt chuẩn `restricted`, chạy với UID `1000`, rồi rollout lại để Pod mới được tạo.
+    - |
+      Tạo Pod `secure` (`busybox:1.36`, `sleep 3600`) đạt chuẩn `restricted`, root filesystem **chỉ đọc**, và ghi được vào `/tmp` nhờ một emptyDir.
+  hints:
+    - |
+      Xem vì sao Pod bị từ chối
+      `kubectl rollout restart deploy api -n lab25` rồi `kubectl describe rs -n lab25 -l app=api | grep -A2 FailedCreate`
+    - |
+      Thử nhanh với dry-run phía server
+      `kubectl apply -f pod.yaml --dry-run=server` báo ngay vi phạm PSA mà không tạo gì.
+  solution: |
+    ```bash
+    kubectl label ns lab25 pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/warn=restricted
+    kubectl edit deploy api -n lab25
+    ```
+    ```yaml
+        spec:
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            seccompProfile: {type: RuntimeDefault}
+          containers:
+          - name: busybox
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities: {drop: ["ALL"]}
+    ```
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: secure, namespace: lab25}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: c
+        image: busybox:1.36
+        command: ["sleep", "3600"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: ["ALL"]}
+        volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+      - {name: tmp, emptyDir: {}}
+    ```
+    ```bash
+    kubectl exec secure -n lab25 -- touch /x        # Read-only file system
+    kubectl exec secure -n lab25 -- touch /tmp/x    # được
+    ```
+  setup: |
+    ns_fresh lab25
+    kubectl create deploy api -n lab25 --image=busybox:1.36 -- sleep 3600 >/dev/null
+    kubectl rollout status deploy/api -n lab25 --timeout=120s >/dev/null
+    sleep 1
+    kubectl create cm lab-state -n lab25 --from-literal=t0="$(date -u +%Y-%m-%dT%H:%M:%SZ)" >/dev/null
+  verify: |
+    expect "lab25 enforce=restricted" "$(jp ns lab25 '{.metadata.labels.pod-security\.kubernetes\.io/enforce}')" "restricted"
+    expect "lab25 warn=restricted" "$(jp ns lab25 '{.metadata.labels.pod-security\.kubernetes\.io/warn}')" "restricted"
+    expect "api 1/1 sẵn sàng" "$(jp deploy api -n lab25 '{.status.readyReplicas}/{.status.updatedReplicas}')" "1/1"
+    pod=$(jp pods -n lab25 -l app=api '{range .items[*]}{.metadata.name}|{.metadata.deletionTimestamp}{"\n"}{end}' | awk -F'|' '$2==""{print $1; exit}')
+    tpl='{.spec.template.spec.securityContext.runAsNonRoot}/{.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation}/{.spec.template.spec.containers[0].securityContext.capabilities.drop[*]}'
+    expect "api: runAsNonRoot, không leo quyền, drop ALL" "$(jp deploy api -n lab25 "$tpl")" "true/false/ALL"
+    expect "api: seccomp RuntimeDefault" "$(jp deploy api -n lab25 '{.spec.template.spec.securityContext.seccompProfile.type}{.spec.template.spec.containers[0].securityContext.seccompProfile.type}')" "RuntimeDefault"
+    check "Pod api là Pod mới, đã qua admission restricted" test "$(jp pod "$pod" -n lab25 '{.metadata.creationTimestamp}')" \> "$(jp cm lab-state -n lab25 '{.data.t0}')"
+    expect "api chạy với UID 1000" "$(kubectl exec -n lab25 "$pod" -- id -u 2>/dev/null)" "1000"
+    expect "secure Running" "$(jp pod secure -n lab25 '{.status.phase}')" "Running"
+    expect "secure: root filesystem chỉ đọc" "$(jp pod secure -n lab25 '{.spec.containers[0].securityContext.readOnlyRootFilesystem}')" "true"
+    check_not "secure: không ghi được /x" kubectl exec secure -n lab25 -- touch /x
+    check "secure: ghi được /tmp" kubectl exec secure -n lab25 -- touch /tmp/ok
+  cleanup: |
+    kubectl delete ns lab25 --ignore-not-found --wait=false >/dev/null
+  solve: |
+    kubectl label ns lab25 pod-security.kubernetes.io/enforce=restricted pod-security.kubernetes.io/warn=restricted --overwrite
+    kubectl patch deploy api -n lab25 --type=strategic -p '{"spec":{"template":{"spec":{"securityContext":{"runAsNonRoot":true,"runAsUser":1000,"seccompProfile":{"type":"RuntimeDefault"}},"containers":[{"name":"busybox","securityContext":{"allowPrivilegeEscalation":false,"capabilities":{"drop":["ALL"]}}}]}}}}'
+    kubectl rollout status deploy/api -n lab25 --timeout=180s
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: secure, namespace: lab25}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: c
+        image: busybox:1.36
+        command: ["sleep", "3600"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: ["ALL"]}
+        volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes:
+      - {name: tmp, emptyDir: {}}
+    EOF
+    kubectl wait --for=condition=Ready pod/secure -n lab25 --timeout=120s
+    sleep 3
+  docs:
+    - [Pod Security Standards, "https://kubernetes.io/docs/concepts/security/pod-security-standards/"]
+    - [Pod Security Admission, "https://kubernetes.io/docs/concepts/security/pod-security-admission/"]
+    - [Configure a Security Context, "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/"]

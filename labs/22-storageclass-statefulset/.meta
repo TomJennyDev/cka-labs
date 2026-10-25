@@ -1,0 +1,4 @@
+ID=22
+LEVEL=5
+ENV=any
+TITLE="StorageClass, dynamic provisioning và StatefulSet"
