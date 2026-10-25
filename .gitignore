@@ -3,3 +3,4 @@
 .vagrant/
 env/kubeadm/.lab-ssh-key*
 __pycache__/
+/build/

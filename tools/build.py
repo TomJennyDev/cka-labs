@@ -207,7 +207,15 @@ def main():
     with open(os.path.join(ROOT, "tools", "guide.html"), encoding="utf-8") as f:
         tpl = f.read()
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
-    write(os.path.join(ROOT, "docs", "index.html"), tpl.replace("/*__DATA__*/null", blob))
+    page = tpl.replace("/*__DATA__*/null", blob)
+    # artifact version (the host adds the document skeleton)
+    write(os.path.join(ROOT, "build", "guide.html"), page)
+    # standalone version for GitHub Pages
+    head, body = page.split("</style>", 1)
+    full = ('<!doctype html>\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n'
+            '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+            + head + "[hidden]{display:none!important}\n</style>\n</head>\n<body>\n" + body + "\n</body>\n</html>\n")
+    write(os.path.join(ROOT, "docs", "index.html"), full)
     print("built %d labs, %d in test suite" % (len(labs), len(tested)))
 
 

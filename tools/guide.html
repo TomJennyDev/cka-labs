@@ -1,1 +1,332 @@
-<html><body><script>const DATA=/*__DATA__*/null;</script></body></html>
+<title>CKA Labs</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="39 bài lab thực hành CKA từ cơ bản tới đề thi thử, có script tự chấm.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: sổ tay phòng lab — thanh lộ trình bên trái, trang bài lab ở giữa như một phiếu thực hành */
+:root{
+  --bg:#EEF1F5; --paper:#FFFFFF; --paper-2:#F5F7FA; --ink:#121C2B; --muted:#5A6779; --line:#D5DCE5;
+  --accent:#2A5FD6; --accent-soft:#E2EAFB;
+  --ok:#0F8A6A; --ok-soft:#DCF2EB; --warn:#C77A05; --warn-soft:#FCEFD9; --bad:#C63B36; --bad-soft:#FBE3E2;
+  --term-bg:#111C2D; --term-fg:#DDE6F1; --term-dim:#8193AB; --term-acc:#F2B04A; --term-key:#9DBEFF; --term-ok:#5BD3B5;
+  --d-trouble:#C63B36; --d-arch:#2A5FD6; --d-net:#C77A05; --d-work:#0F8A6A; --d-stor:#7A47C2;
+  --f-display:"Bricolage Grotesque","Be Vietnam Pro",system-ui,sans-serif;
+  --f-body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0B1320; --paper:#121D2D; --paper-2:#0E1827; --ink:#E3E9F2; --muted:#95A3B7; --line:#26354B;
+  --accent:#8AABFF; --accent-soft:#1B2C4C; --ok:#4CCBA6; --ok-soft:#10302A; --warn:#F2AE4B; --warn-soft:#3A2A11; --bad:#F27570; --bad-soft:#3D1E1E;
+  --term-bg:#070E18; --d-trouble:#F27570; --d-arch:#8AABFF; --d-net:#F2AE4B; --d-work:#4CCBA6; --d-stor:#B993F0; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0B1320; --paper:#121D2D; --paper-2:#0E1827; --ink:#E3E9F2; --muted:#95A3B7; --line:#26354B;
+  --accent:#8AABFF; --accent-soft:#1B2C4C; --ok:#4CCBA6; --ok-soft:#10302A; --warn:#F2AE4B; --warn-soft:#3A2A11; --bad:#F27570; --bad-soft:#3D1E1E;
+  --term-bg:#070E18; --d-trouble:#F27570; --d-arch:#8AABFF; --d-net:#F2AE4B; --d-work:#4CCBA6; --d-stor:#B993F0; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{margin:0;color:var(--ink);font:15px/1.62 var(--f-body);-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:40;background:var(--paper)}
+a{color:var(--accent)}
+:focus-visible{outline:2px solid var(--warn);outline-offset:2px}
+code{font-family:var(--f-mono);font-size:.87em;background:var(--paper-2);border:1px solid var(--line);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+pre{margin:0}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;height:54px;display:flex;align-items:center;gap:14px;background:var(--paper);border-bottom:1px solid var(--line);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{font:800 19px var(--f-display);letter-spacing:-.01em;text-decoration:none;color:var(--ink);display:flex;gap:9px;align-items:center;white-space:nowrap}
+.brand i{font:600 11px/1 var(--f-mono);font-style:normal;color:var(--accent);background:var(--accent-soft);padding:5px 7px;border-radius:4px}
+.top nav{display:flex;gap:4px;margin-left:8px}
+.top nav a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:6px}
+.top nav a[aria-current="page"]{color:var(--ink);background:var(--paper-2)}
+.top .meta{margin-left:auto;display:flex;gap:10px;align-items:center;font:12px var(--f-mono);color:var(--muted);white-space:nowrap}
+.meter{width:90px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
+@media (max-width:640px){.top nav{display:none}.meter{width:50px}}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr)}
+.side{background:var(--bg);border-bottom:1px solid var(--line);padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.side .search{width:100%;font:14px var(--f-body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:8px 10px}
+.side .levels{display:none}
+.side.open .levels{display:block}
+.side .toggle{margin-top:8px;font:600 13px var(--f-body);background:none;border:0;color:var(--accent);cursor:pointer;padding:0}
+@media (min-width:1024px){
+  .layout{grid-template-columns:270px minmax(0,1fr)}
+  .side{position:sticky;top:calc(env(safe-area-inset-top,0px) + 54px);height:calc(100vh - 54px);overflow-y:auto;border-bottom:0;border-right:1px solid var(--line);padding:14px 12px 40px}
+  .side .levels{display:block}
+  .side .toggle{display:none}
+}
+.lvl{margin-top:14px}
+.lvl h4{margin:0 0 4px;padding:0 8px;font:600 11px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.lvl a{display:grid;grid-template-columns:24px minmax(0,1fr) 12px;gap:6px;align-items:baseline;padding:5px 8px;border-radius:6px;color:var(--ink);text-decoration:none;font-size:13.5px;line-height:1.35}
+.lvl a .n{font:600 11px var(--f-mono);color:var(--muted)}
+.lvl a:hover{background:var(--paper)}
+.lvl a[aria-current="page"]{background:var(--paper);box-shadow:inset 0 0 0 1px var(--line)}
+.dot{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--line);align-self:center}
+.dot.done{background:var(--ok);border-color:var(--ok)}
+.dot.wip{background:var(--warn-soft);border-color:var(--warn)}
+
+main{min-width:0;padding-block:28px 90px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.page{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.page.wide{max-width:1180px}
+.eyebrow{font:600 12px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin:0}
+h1{font:800 clamp(30px,4.6vw,50px)/1.05 var(--f-display);letter-spacing:-.025em;margin:6px 0 0;text-wrap:balance}
+h2{font:700 24px/1.2 var(--f-display);letter-spacing:-.01em;margin:0 0 10px;text-wrap:balance}
+h3{font:600 18px/1.3 var(--f-display);margin:0 0 8px}
+p{margin:0 0 10px}
+.lead{font-size:16.5px;color:var(--muted);max-width:68ch;margin:10px 0 0}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+.muted{color:var(--muted)} .small{font-size:13px}
+.pill{display:inline-flex;align-items:center;gap:6px;font:600 11.5px/1 var(--f-mono);padding:5px 8px;border-radius:999px;background:var(--paper-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill .sw{width:8px;height:8px;border-radius:2px}
+.pills{display:flex;flex-wrap:wrap;gap:6px}
+.pills .pill{white-space:normal;line-height:1.35;max-width:100%}
+.btn{font:600 13.5px var(--f-body);display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:8px 14px;border-radius:7px;cursor:pointer;text-decoration:none;line-height:1.2}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:var(--paper)}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+
+.code{position:relative;min-width:0}
+.code pre,.md pre{background:var(--term-bg);color:var(--term-fg);font:12.8px/1.6 var(--f-mono);padding:13px 58px 13px 15px;border-radius:8px;overflow-x:auto}
+.md pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
+.copy{position:absolute;top:8px;right:8px;font:600 11px var(--f-mono);background:rgba(255,255,255,.08);color:var(--term-fg);border:1px solid rgba(255,255,255,.2);border-radius:5px;padding:4px 8px;cursor:pointer}
+.copy:hover{background:rgba(255,255,255,.16)}
+.cmd{display:flex;align-items:center;gap:10px;background:var(--term-bg);color:var(--term-fg);font:14px var(--f-mono);border-radius:8px;padding:11px 14px;position:relative}
+.cmd span{color:var(--term-acc)}
+.md{min-width:0}
+.md ul,.md ol{padding-left:22px;margin:0 0 10px}
+.md li{margin:3px 0}
+.md table{border-collapse:collapse;width:100%;font-size:14px;display:block;overflow-x:auto}
+.md th,.md td{border-bottom:1px solid var(--line);padding:7px 9px;text-align:left}
+.md p:last-child{margin-bottom:0}
+
+/* lab page */
+.labhead{display:flex;flex-direction:column;gap:12px}
+.labno{font:800 15px var(--f-mono);color:var(--accent)}
+.sec{display:flex;flex-direction:column;gap:10px}
+.sec>h2{display:flex;align-items:baseline;gap:10px}
+.sec>h2 small{font:600 12px var(--f-mono);color:var(--muted);letter-spacing:.04em}
+.tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;counter-reset:t}
+.task{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;align-items:start;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;counter-increment:t}
+.task label{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
+.task label::before{content:counter(t);font:700 13px var(--f-mono);color:var(--muted)}
+.task input{width:18px;height:18px;accent-color:var(--ok)}
+.task.done{border-color:var(--ok);background:linear-gradient(90deg,var(--ok-soft),var(--paper) 40%)}
+details.hint{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:0 14px}
+details.hint summary{cursor:pointer;padding:11px 0;font-weight:600;list-style:none;display:flex;gap:8px}
+details.hint summary::before{content:"?";font:700 12px/18px var(--f-mono);width:18px;height:18px;text-align:center;border-radius:50%;background:var(--warn-soft);color:var(--warn);flex:none}
+details.hint summary::-webkit-details-marker{display:none}
+details.hint>div{padding:0 0 12px}
+.solution{border:1px dashed var(--line);border-radius:10px;padding:16px}
+.solution[data-open="1"]{border-style:solid;border-color:var(--accent)}
+.navnext{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px}
+.navnext a{display:flex;flex-direction:column;gap:2px;text-decoration:none;color:var(--ink);max-width:48%}
+.navnext a small{font:600 11px var(--f-mono);color:var(--muted)}
+.navnext a.next{text-align:right;margin-left:auto}
+.timer{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.timer b{font:800 40px/1 var(--f-display);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.timer.low b{color:var(--bad)}
+
+/* home */
+.hero{display:grid;grid-template-columns:minmax(0,1fr);gap:24px;align-items:end}
+@media (min-width:900px){.hero{grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.stats div{padding:14px 12px 14px 0}
+.stats b{display:block;font:800 30px/1.1 var(--f-display);font-variant-numeric:tabular-nums}
+.stats span{font-size:13px;color:var(--muted)}
+.path{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(205px,1fr))}
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.stage .lv{font:600 11px var(--f-mono);color:var(--accent);letter-spacing:.06em}
+.stage h3{margin:0;font-size:16px}
+.stage p{margin:0;font-size:13px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
+.chip{font:600 12px var(--f-mono);text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--paper-2);border-radius:6px;padding:3px 7px}
+.chip.done{background:var(--ok-soft);border-color:var(--ok);color:var(--ok)}
+.chip.wip{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+.chip:hover{border-color:var(--accent)}
+.stagebar{height:4px;border-radius:2px;background:var(--line);overflow:hidden}
+.stagebar i{display:block;height:100%;background:var(--ok)}
+.cov{width:100%;border-collapse:collapse;font-size:14px}
+.cov td,.cov th{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+.cov th{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.cov .dm td{font-weight:700;background:var(--paper-2)}
+.covwrap{overflow-x:auto}
+.domsw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;vertical-align:0}
+.grid2{display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:860px){.grid2{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+.tbl{overflow-x:auto}
+.tbl table{border-collapse:collapse;width:100%;font-size:14px}
+.tbl td,.tbl th{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+.tbl th{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.empty{color:var(--muted);font-size:14px;padding:8px}
+@media (prefers-reduced-motion: reduce){*{transition:none !important}}
+</style>
+
+<header class="top">
+  <a class="brand" href="#home">CKA Labs <i>v1.35</i></a>
+  <nav><a href="#home" data-nav="home">Lộ trình</a><a href="#setup" data-nav="setup">Môi trường</a><a href="#lab-38" data-nav="exam">Thi thử</a><a href="https://github.com/TomJennyDev/cka-labs" target="_blank" rel="noopener">GitHub ↗</a></nav>
+  <div class="meta"><span id="progTxt">0/39</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
+</header>
+<div class="layout">
+  <aside class="side" id="side">
+    <input class="search" id="q" type="search" placeholder="Tìm bài: etcd, probe, RBAC…" aria-label="Tìm bài lab">
+    <button class="toggle" id="sideToggle" type="button">Hiện danh sách bài ▾</button>
+    <div class="levels" id="levels"></div>
+  </aside>
+  <main id="main"></main>
+</div>
+
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+const REPO = "https://github.com/TomJennyDev/cka-labs";
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const pad = n => String(n).padStart(2, "0");
+const DCOL = { trouble: "var(--d-trouble)", arch: "var(--d-arch)", net: "var(--d-net)", work: "var(--d-work)", stor: "var(--d-stor)" };
+const ENVTXT = { any: "kind hoặc kubeadm", kind: "cần vào node (kind/kubeadm)", vm: "kubeadm trên máy ảo" };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ckalabs:" + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ckalabs:" + k, JSON.stringify(v)); } catch (e) {} }
+};
+let state = store.get("state", { done: {}, tasks: {} });
+const save = () => store.set("state", state);
+const labStatus = id => state.done[id] ? "done" : Object.keys(state.tasks).some(k => k.startsWith(id + ":") && state.tasks[k]) ? "wip" : "";
+const byId = id => DATA.labs.find(l => l.id === id);
+const compName = c => { const [d, i] = c.split(":"); return DATA.domains[d][2][+i]; };
+
+function copyBtn(wrap, getText) {
+  const b = document.createElement("button"); b.className = "copy"; b.type = "button"; b.textContent = "Chép";
+  b.onclick = async () => {
+    try { await navigator.clipboard.writeText(getText()); b.textContent = "Đã chép"; }
+    catch (e) { const pre = wrap.querySelector("pre, .cmd"); const r = document.createRange(); r.selectNodeContents(pre); getSelection().removeAllRanges(); getSelection().addRange(r); b.textContent = "Đã chọn"; }
+    setTimeout(() => b.textContent = "Chép", 1300);
+  };
+  wrap.style.position = "relative"; wrap.appendChild(b);
+}
+function enhance(root) {
+  $$(".md pre", root).forEach(pre => { if (pre.parentElement.classList.contains("code")) return; const w = document.createElement("div"); w.className = "code"; pre.replaceWith(w); w.appendChild(pre); copyBtn(w, () => pre.textContent); });
+  $$(".cmd", root).forEach(c => copyBtn(c, () => c.dataset.cmd));
+  $$(".md a[href^='http']", root).forEach(a => { a.target = "_blank"; a.rel = "noopener"; });
+}
+const cmd = c => '<div class="cmd" data-cmd="' + esc(c) + '"><span>$</span>' + esc(c) + "</div>";
+
+function renderSide(filter) {
+  const q = (filter || "").trim().toLowerCase();
+  let html = "";
+  Object.keys(DATA.levels).forEach(lv => {
+    const labs = DATA.labs.filter(l => String(l.level) === lv && (!q || (pad(l.id) + " " + l.title + " " + l.slug).toLowerCase().includes(q)));
+    if (!labs.length) return;
+    html += '<div class="lvl"><h4>Cấp ' + lv + " · " + esc(DATA.levels[lv][0]) + "</h4>" + labs.map(l => '<a href="#lab-' + pad(l.id) + '" data-lab="' + l.id + '"><span class="n">' + pad(l.id) + "</span><span>" + esc(l.title) + '</span><span class="dot ' + labStatus(l.id) + '"></span></a>').join("") + "</div>";
+  });
+  $("#levels").innerHTML = html || '<p class="empty">Không có bài nào khớp.</p>';
+  markCurrent();
+}
+function markCurrent() {
+  const h = location.hash.slice(1);
+  $$("#levels a").forEach(a => a.setAttribute("aria-current", h === "lab-" + pad(+a.dataset.lab) ? "page" : "false"));
+  $$(".top nav a[data-nav]").forEach(a => a.setAttribute("aria-current", (a.dataset.nav === "home" && (h === "home" || !h)) || (a.dataset.nav === "setup" && h === "setup") || (a.dataset.nav === "exam" && h === "lab-38") ? "page" : "false"));
+}
+function progress() {
+  const n = DATA.labs.filter(l => state.done[l.id]).length;
+  $("#progTxt").textContent = n + "/" + DATA.labs.length;
+  $("#progBar").style.width = (n / DATA.labs.length * 100) + "%";
+}
+
+function home() {
+  const total = DATA.labs.length, tested = DATA.labs.filter(l => l.env !== "vm").length;
+  const nComp = Object.values(DATA.domains).reduce((a, d) => a + d[2].length, 0);
+  let h = '<div class="page wide">';
+  h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.35</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
+  h += '<div class="code"><pre>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh        # cluster 3 node v1.35\n./lab start 7           # dựng tình huống\n./lab check 7           # chấm bài\n./lab reset 7           # dọn dẹp</pre></div></section>';
+  h += '<div class="stats"><div><b>' + total + '</b><span>bài lab có script tự chấm</span></div><div><b>' + nComp + '/' + nComp + '</b><span>năng lực của đề thi được phủ</span></div><div><b>' + tested + '</b><span>bài chạy trên kind ngay trên laptop</span></div><div><b>120′</b><span>đề thi thử chấm theo trọng số</span></div></div>';
+  h += '<section><h2>Lộ trình 10 cấp</h2><p class="muted small">Màu xanh là bài đã đánh dấu xong, vàng là đang làm. Tiến độ lưu trong trình duyệt này.</p><div class="path">';
+  Object.keys(DATA.levels).forEach(lv => {
+    const labs = DATA.labs.filter(l => String(l.level) === lv), done = labs.filter(l => state.done[l.id]).length;
+    h += '<div class="stage"><span class="lv">CẤP ' + lv + "</span><h3>" + esc(DATA.levels[lv][0]) + "</h3><p>" + esc(DATA.levels[lv][1]) + '</p><div class="stagebar"><i style="width:' + (done / labs.length * 100) + '%"></i></div><div class="chips">' + labs.map(l => '<a class="chip ' + labStatus(l.id) + '" href="#lab-' + pad(l.id) + '" title="' + esc(l.title) + '">' + pad(l.id) + "</a>").join("") + "</div></div>";
+  });
+  h += "</div></section>";
+  h += '<section class="panel"><h2>Phủ năng lực của đề thi</h2><p class="muted small">Mỗi năng lực trong curriculum CKA và các bài luyện nó. Bấm mã bài để mở.</p><div class="covwrap"><table class="cov"><thead><tr><th>Năng lực</th><th>Bài lab</th></tr></thead><tbody>';
+  Object.entries(DATA.domains).forEach(([dk, d]) => {
+    h += '<tr class="dm"><td colspan="2"><span class="domsw" style="background:' + DCOL[dk] + '"></span>' + esc(d[0]) + " · " + d[1] + "%</td></tr>";
+    d[2].forEach((c, i) => {
+      const labs = DATA.labs.filter(l => l.comps.includes(dk + ":" + i));
+      h += "<tr><td>" + esc(c) + '</td><td><div class="chips">' + labs.map(l => '<a class="chip ' + labStatus(l.id) + '" href="#lab-' + pad(l.id) + '" title="' + esc(l.title) + '">' + pad(l.id) + "</a>").join("") + "</div></td></tr>";
+    });
+  });
+  h += "</tbody></table></div></section></div>";
+  return h;
+}
+
+function setup() {
+  return '<div class="page"><div><p class="eyebrow">Chuẩn bị</p><h1>Môi trường lab</h1><p class="lead">Hầu hết các bài chạy trên một cluster kind 3 node ngay trên laptop. Ba bài về cài đặt, nâng cấp và HA cần máy ảo thật với kubeadm.</p></div>' +
+    '<div class="grid2"><div class="panel"><h3>kind (khuyên dùng)</h3><p class="small">Cần Docker, kind ≥ v0.33, kubectl v1.35; thêm openssl, và Helm cho lab 26. Máy cần khoảng 4 CPU, 6 GB RAM trống, Linux dùng cgroup v2 (Docker Desktop, OrbStack đều đạt).</p><div class="md"><pre><code>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh\n./lab doctor\neval "$(./lab env)"</code></pre></div><p class="small muted" style="margin-top:10px">kind dùng chính kubeadm: control plane là static pod, kubelet chạy bằng systemd. Vào node bằng <code>./lab ssh $NODE1</code>.</p></div>' +
+    '<div class="panel"><h3>kubeadm trên máy ảo</h3><p class="small">Cho lab 01, 30, 32. Vagrant dựng <code>cp-1</code>, <code>worker-1</code>, <code>worker-2</code> (Ubuntu 24.04, Kubernetes v1.34 để có bài nâng cấp).</p><div class="md"><pre><code>cd env/kubeadm\nvagrant up\nvagrant ssh cp-1\n# lab 32 cần thêm 2 control plane:\nHA=1 vagrant up cp-2 cp-3</code></pre></div><p class="small muted" style="margin-top:10px">Không dùng Vagrant: chạy <code>env/kubeadm/prepare-node.sh</code> trên 3 máy Ubuntu.</p></div></div>' +
+    '<div class="panel"><h3>Lệnh ./lab</h3><div class="tbl"><table><tbody>' +
+    [["./lab list", "Danh sách bài theo thứ tự"], ["./lab start <id>", "Dựng tình huống của bài"], ["./lab check <id>", "Chấm bài, in ✔/✘ từng tiêu chí"], ["./lab hint <id>", "Xem gợi ý"], ["./lab solution <id>", "Xem lời giải"], ["./lab reset <id>", "Dọn mọi thứ của bài"], ["./lab env", "In CP, NODE1, NODE2 (dùng với eval)"], ["./lab ssh <node>", "Vào shell của node"], ["./lab doctor", "Kiểm tra công cụ và cluster"]].map(r => "<tr><td><code>" + esc(r[0]) + "</code></td><td>" + esc(r[1]) + "</td></tr>").join("") +
+    '</tbody></table></div><p class="small muted" style="margin-top:10px">Bài yêu cầu ghi đáp án ra file thì ghi vào <code>~/cka-answers/</code> (đổi bằng biến <code>CKA_ANSWERS</code>).</p></div>' +
+    '<div class="panel"><h3>Cấu hình terminal giống phòng thi</h3><div class="md"><pre><code>alias k=kubectl\nsource &lt;(kubectl completion bash)\ncomplete -o default -F __start_kubectl k\nexport do="--dry-run=client -o yaml"\nexport now="--force --grace-period 0"</code></pre></div></div></div>';
+}
+
+let timerInt = null;
+function lab(id) {
+  const l = byId(id); if (!l) return home();
+  const k = DATA.labs.indexOf(l), prev = DATA.labs[k - 1], next = DATA.labs[k + 1];
+  let h = '<article class="page"><header class="labhead"><div><span class="labno">LAB ' + pad(l.id) + "</span><h1>" + esc(l.title) + '</h1></div><div class="pills"><span class="pill">Cấp ' + l.level + " · " + esc(DATA.levels[l.level][0]) + '</span><span class="pill">≈ ' + l.minutes + ' phút</span><span class="pill">' + esc(ENVTXT[l.env]) + "</span>" +
+    l.comps.map(c => '<span class="pill"><i class="sw" style="background:' + DCOL[c.split(":")[0]] + '"></i>' + esc(compName(c)) + "</span>").join("") + "</div></header>";
+  if (l.id === 38) h += '<section class="panel timer" id="timer"><b id="tLeft">120:00</b><div class="row"><button class="btn primary" id="tStart" type="button">Bắt đầu tính giờ</button><button class="btn" id="tReset" type="button">Đặt lại</button></div><span class="small muted" id="tNote">Đồng hồ chạy tiếp kể cả khi bạn đóng trang.</span></section>';
+  h += '<section class="sec"><h2>Mục tiêu</h2><div class="md">' + l.goal + "</div></section>";
+  if (l.concepts) h += '<section class="sec panel"><h2>Kiến thức cần nắm</h2><div class="md">' + l.concepts + "</div></section>";
+  h += '<section class="sec"><h2>Chuẩn bị</h2>' + (l.id === 1 ? "" : cmd("./lab start " + l.id)) + (l.setup_note ? '<div class="md">' + l.setup_note + "</div>" : "") + "</section>";
+  h += '<section class="sec"><h2>Đề bài <small id="tcount"></small></h2><ol class="tasks">' + l.tasks.map((t, i) => { const key = l.id + ":" + i; return '<li class="task' + (state.tasks[key] ? " done" : "") + '"><label><input type="checkbox" data-task="' + key + '"' + (state.tasks[key] ? " checked" : "") + ' aria-label="Đánh dấu câu ' + (i + 1) + '"></label><div class="md">' + t + "</div></li>"; }).join("") + "</ol></section>";
+  if (l.hints.length) h += '<section class="sec"><h2>Gợi ý</h2>' + l.hints.map(x => '<details class="hint"><summary>' + esc(x[0]) + "</summary><div class=\"md\">" + x[1] + "</div></details>").join("") + "</section>";
+  h += '<section class="sec"><h2>Chấm bài</h2>' + cmd("./lab check " + l.id) + '<p class="small muted">Chấm theo trạng thái trong cluster và file đáp án. Mục nào ✘ thì sửa rồi chạy lại.</p></section>';
+  h += '<section class="sec solution" id="sol"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Lời giải</h2><button class="btn" id="solBtn" type="button">Tự làm xong rồi, xem lời giải</button></div><div class="md" id="solBody" hidden>' + l.solution + "</div></section>";
+  h += '<section class="sec"><h2>Dọn dẹp</h2>' + cmd("./lab reset " + l.id) + "</section>";
+  if (l.docs.length) h += '<section class="sec"><h2>Tài liệu</h2><ul class="md">' + l.docs.map(d => '<li><a href="' + esc(d[1]) + '" target="_blank" rel="noopener">' + esc(d[0]) + " ↗</a></li>").join("") + "</ul></section>";
+  h += '<div class="row"><button class="btn ' + (state.done[l.id] ? "" : "ok") + '" id="doneBtn" type="button">' + (state.done[l.id] ? "✓ Đã hoàn thành · bỏ đánh dấu" : "Đánh dấu đã hoàn thành") + '</button><a class="btn" href="' + REPO + "/tree/main/labs/" + l.dir + '" target="_blank" rel="noopener">Xem bài trên GitHub ↗</a></div>';
+  h += '<nav class="navnext">' + (prev ? '<a href="#lab-' + pad(prev.id) + '"><small>← LAB ' + pad(prev.id) + "</small>" + esc(prev.title) + "</a>" : "") + (next ? '<a class="next" href="#lab-' + pad(next.id) + '"><small>LAB ' + pad(next.id) + " →</small>" + esc(next.title) + "</a>" : "") + "</nav></article>";
+  return h;
+}
+function wireLab(id) {
+  const l = byId(id);
+  const count = () => { const n = l.tasks.filter((_, i) => state.tasks[id + ":" + i]).length; $("#tcount").textContent = n + "/" + l.tasks.length + " đã làm"; };
+  count();
+  $$("[data-task]").forEach(c => c.onchange = () => { state.tasks[c.dataset.task] = c.checked; c.closest(".task").classList.toggle("done", c.checked); save(); count(); renderSide($("#q").value); });
+  $("#solBtn").onclick = () => { const b = $("#solBody"), o = b.hidden; b.hidden = !o; $("#sol").dataset.open = o ? "1" : "0"; $("#solBtn").textContent = o ? "Ẩn lời giải" : "Tự làm xong rồi, xem lời giải"; };
+  $("#doneBtn").onclick = () => { state.done[id] = !state.done[id]; save(); progress(); render(); };
+  if (id === 38) timer();
+}
+function timer() {
+  clearInterval(timerInt);
+  const tick = () => {
+    const end = store.get("examEnd", 0), el = $("#tLeft"); if (!el) return clearInterval(timerInt);
+    let ms = end ? end - Date.now() : 120 * 60000;
+    if (ms < 0) ms = 0;
+    const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60;
+    el.textContent = pad(m) + ":" + pad(s);
+    $("#timer").classList.toggle("low", !!end && m < 15);
+    $("#tStart").hidden = !!end;
+    if (end && ms === 0) $("#tNote").textContent = "Hết giờ. Chạy ./lab check 38 để xem điểm.";
+  };
+  $("#tStart").onclick = () => { store.set("examEnd", Date.now() + 120 * 60000); tick(); };
+  $("#tReset").onclick = () => { store.set("examEnd", 0); $("#tNote").textContent = "Đồng hồ chạy tiếp kể cả khi bạn đóng trang."; tick(); };
+  tick(); timerInt = setInterval(tick, 1000);
+}
+
+function render() {
+  const h = location.hash.slice(1) || "home";
+  const m = h.match(/^lab-(\d+)$/);
+  const main = $("#main");
+  clearInterval(timerInt);
+  if (m && byId(+m[1])) { main.innerHTML = lab(+m[1]); enhance(main); wireLab(+m[1]); document.title = "Lab " + m[1] + " · CKA Labs"; }
+  else if (h === "setup") { main.innerHTML = setup(); enhance(main); document.title = "Môi trường · CKA Labs"; }
+  else { main.innerHTML = home(); enhance(main); document.title = "CKA Labs"; }
+  renderSide($("#q").value); progress();
+}
+window.addEventListener("hashchange", () => { render(); window.scrollTo(0, 0); if (innerWidth < 1024) $("#side").classList.remove("open"); });
+$("#q").addEventListener("input", e => { renderSide(e.target.value); if (e.target.value) $("#side").classList.add("open"); });
+$("#sideToggle").onclick = () => { const s = $("#side"); s.classList.toggle("open"); $("#sideToggle").textContent = s.classList.contains("open") ? "Ẩn danh sách bài ▴" : "Hiện danh sách bài ▾"; };
+render();
+</script>

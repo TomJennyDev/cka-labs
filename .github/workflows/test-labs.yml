@@ -1,0 +1,34 @@
+# Chạy bộ kiểm thử các bài lab trên cluster kind (kích hoạt thủ công trong tab Actions).
+name: test-labs
+on:
+  workflow_dispatch:
+    inputs:
+      labs:
+        description: "Mã lab, cách nhau bởi dấu cách (để trống = tất cả trong tests/labs.txt)"
+        required: false
+        default: ""
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cài kind và kubectl
+        run: |
+          curl -fsSLo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
+          curl -fsSLo kubectl https://dl.k8s.io/release/v1.35.8/bin/linux/amd64/kubectl
+          sudo install kind kubectl /usr/local/bin/
+      - name: Dựng cluster
+        run: ./env/kind/up.sh
+      - name: Chờ metrics-server
+        run: kubectl -n kube-system rollout status deploy/metrics-server --timeout=180s
+      - name: Chạy bộ kiểm thử
+        env:
+          CKA_ANSWERS: /tmp/cka-answers
+        run: tests/run.sh ${{ github.event.inputs.labs }}
+      - name: Lưu log khi lỗi
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-test-logs
+          path: /tmp/cka-lab-tests/

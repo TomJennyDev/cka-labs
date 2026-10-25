@@ -50,7 +50,7 @@ case "$cmd" in
   check|verify)
     d="$(lab_dir "${1:-}")"; bash "$d/verify.sh" ;;
   hint|hints)
-    d="$(lab_dir "${1:-}")"; awk '/^## Gợi ý/{f=1;next} /^## /{f=0} f' "$d/README.md" | sed 's#</\?details>##; s#<summary>\(.*\)</summary>#• \1#' ;;
+    d="$(lab_dir "${1:-}")"; awk '/^## Gợi ý/{f=1;next} /^## /{f=0} f' "$d/README.md" | sed 's#</\?details>##; s#<summary>\(.*\)</summary>#• \1#' | cat -s ;;
   solution|solve)
     d="$(lab_dir "${1:-}")"
     if [ -t 0 ]; then read -r -p "Đã tự làm thử chưa? Xem lời giải? [y/N] " a; [ "$a" = y ] || exit 0; fi

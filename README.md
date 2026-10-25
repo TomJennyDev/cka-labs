@@ -1,5 +1,73 @@
 # CKA Labs
 
+Bộ **39 bài lab thực hành** để thi Certified Kubernetes Administrator (CKA), đi từ cơ bản tới nâng cao, phủ đủ **27 năng lực** trong 5 domain của đề thi v1.35. Mỗi bài dựng sẵn tình huống trên cluster của bạn, có đề bài kiểu phòng thi, script **tự chấm**, gợi ý và lời giải. Bài cuối là **đề thi thử 2 giờ** chấm điểm theo trọng số.
+
+**Trang hướng dẫn:** [`docs/index.html`](docs/index.html) (bật GitHub Pages với thư mục `/docs` để xem online). Trang có lộ trình, từng bài, đồng hồ thi thử và lưu tiến độ trong trình duyệt.
+
+```text
+./lab start 7      # dựng tình huống
+… tự làm theo labs/07-probes/README.md …
+./lab check 7      # chấm bài
+./lab reset 7      # dọn dẹp
+```
+
+## Bắt đầu nhanh
+
+1. Cài [Docker](https://docs.docker.com/get-docker/), [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) ≥ v0.33 và [kubectl](https://kubernetes.io/docs/tasks/tools/) v1.35. Thêm `openssl` và (cho lab 26) [Helm](https://helm.sh/docs/intro/install/).
+2. Clone repo và dựng cluster 3 node (1 control plane, 2 worker, Kubernetes v1.35.8):
+   ```bash
+   git clone https://github.com/TomJennyDev/cka-labs && cd cka-labs
+   ./env/kind/up.sh
+   ./lab doctor
+   ```
+3. Làm lần lượt từ `./lab start 0`.
+
+Máy cần khoảng 4 CPU, 6 GB RAM trống, và Linux dùng cgroup v2 (mọi bản phân phối mới, Docker Desktop, OrbStack đều đạt).
+
+## Hai môi trường
+
+| Môi trường | Dùng cho | Cách dựng |
+|---|---|---|
+| **kind** (khuyên dùng) | 36/39 bài. kind dùng chính kubeadm: control plane là static pod, kubelet chạy bằng systemd, nên các bài vào node, static pod, etcd, sửa kubelet đều làm được. | `./env/kind/up.sh` |
+| **kubeadm trên máy ảo** | Lab 01 (cài cluster), 30 (nâng cấp 1.34 → 1.35), 32 (control plane HA). | `cd env/kubeadm && vagrant up` rồi `vagrant ssh cp-1` |
+
+Với VM, chạy `./lab` từ `cp-1`; script tự `ssh` sang các node khác (khóa SSH đã được Vagrant cài sẵn). Không dùng Vagrant thì chạy `env/kubeadm/prepare-node.sh` trên 3 máy Ubuntu bất kỳ.
+
+## Lệnh `./lab`
+
+| Lệnh | Việc |
+|---|---|
+| `./lab list` | Danh sách bài theo thứ tự |
+| `./lab start <id>` | Dựng tình huống của bài |
+| `./lab check <id>` | Chấm bài, in ✔/✘ từng tiêu chí |
+| `./lab hint <id>` | Xem gợi ý |
+| `./lab solution <id>` | Xem lời giải |
+| `./lab reset <id>` | Dọn mọi thứ của bài (namespace, label, taint, file trên node) |
+| `./lab env` | In `CP`, `NODE1`, `NODE2`; dùng `eval "$(./lab env)"` |
+| `./lab ssh <node>` | Vào shell của node (`docker exec` với kind, `ssh` với VM) |
+| `./lab doctor` | Kiểm tra công cụ và cluster |
+
+Bài nào yêu cầu ghi đáp án ra file thì ghi vào `~/cka-answers/` (đổi bằng biến `CKA_ANSWERS`).
+
+## Lộ trình
+
+| Cấp | Chủ đề | Lab |
+|---|---|---|
+| 0 | Chuẩn bị môi trường | 00–01 |
+| 1 | Nền tảng kubectl | 02–04 |
+| 2 | Workloads | 05–11 |
+| 3 | Scheduling | 12–14 |
+| 4 | Services & Networking | 15–19 |
+| 5 | Storage | 20–22 |
+| 6 | Bảo mật | 23–25 |
+| 7 | Vận hành cluster | 26–32 |
+| 8 | Troubleshooting | 33–37 |
+| 9 | Thi thử | 38 |
+
+Gợi ý nhịp học 6 tuần: tuần 1 cấp 0–1, tuần 2 cấp 2, tuần 3 cấp 3–4, tuần 4 cấp 5–6, tuần 5 cấp 7–8, tuần 6 làm lại các bài sai và thi thử 2 lần.
+
+## Danh sách bài
+
 <!-- LABS:START -->
 | Lab | Bài | Cấp độ | Môi trường | Thời gian |
 |---|---|---|---|---|
@@ -44,6 +112,10 @@
 | 38 | [Đề thi thử CKA (2 giờ, 16 câu)](labs/38-mock-exam/README.md) | 9 · Thi thử | kind hoặc kubeadm (cần vào node) | 120′ |
 <!-- LABS:END -->
 
+## Phủ năng lực của đề thi
+
+Domain và năng lực theo curriculum CKA (Kubernetes v1.35).
+
 <!-- COVERAGE:START -->
 | Domain | Năng lực | Lab |
 |---|---|---|
@@ -75,3 +147,33 @@
 | Storage 10% | Volume type, access mode, reclaim policy | 20, 21 |
 | Storage 10% | PersistentVolume và PersistentVolumeClaim | 21, 22, 38 |
 <!-- COVERAGE:END -->
+
+## Cấu trúc repo
+
+```text
+lab                     CLI
+lib/common.sh           hàm dùng chung cho setup/verify/cleanup
+env/kind/               cluster kind 3 node
+env/kubeadm/            Vagrantfile + script chuẩn bị node cho kubeadm
+src/labs/*.yaml         NGUỒN của mọi bài lab (sửa ở đây)
+labs/NN-tên/            sinh tự động: README.md, SOLUTION.md, setup.sh, verify.sh, cleanup.sh
+tests/                  bộ kiểm thử chính các bài lab
+docs/index.html         trang hướng dẫn, sinh tự động
+tools/build.py          sinh labs/, README (bảng), docs/ từ src/
+```
+
+## Đóng góp
+
+Mỗi bài là một mục trong `src/labs/*.yaml`. Sau khi sửa:
+
+```bash
+pip install pyyaml markdown
+python3 tools/build.py
+tests/run.sh 07          # setup → verify phải FAIL → lời giải mẫu → verify phải PASS → cleanup
+```
+
+`tests/run.sh` không tham số chạy mọi bài có trong `tests/labs.txt` (những bài không cần VM hay quyền sửa control plane). Workflow `.github/workflows/test-labs.yml` chạy bộ này trên kind, kích hoạt thủ công trong tab Actions.
+
+## Giấy phép
+
+MIT. Tên CKA và Kubernetes thuộc về Linux Foundation và CNCF; repo này không liên kết với họ.
