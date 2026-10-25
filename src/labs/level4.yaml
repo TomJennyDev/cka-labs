@@ -1,0 +1,686 @@
+- id: 15
+  slug: services
+  title: Service, EndpointSlice và kết nối giữa các Pod
+  level: 4
+  minutes: 35
+  competencies: ["net:2", "net:0", "trouble:4"]
+  goal: |
+    Tạo đủ loại Service, hiểu Service tìm Pod bằng selector và EndpointSlice, sửa Service không có endpoint, và trỏ Service ra ngoài cluster.
+  concepts: |
+    - Service chọn Pod bằng **label selector**; EndpointSlice controller ghi IP:port của các Pod **Ready** khớp selector. Service không có endpoint gần như luôn do selector sai hoặc Pod chưa Ready.
+    - `port` là cổng của Service, `targetPort` là cổng của container (có thể dùng tên cổng), `nodePort` là cổng mở trên mọi node (30000–32767).
+    - **Headless** (`clusterIP: None`): DNS trả thẳng IP Pod; với StatefulSet mỗi Pod có tên riêng `db-0.db.<ns>.svc.cluster.local`.
+    - Service **không selector** cộng EndpointSlice tự tạo (label `kubernetes.io/service-name`) để trỏ tới máy ngoài cluster.
+  tasks:
+    - |
+      Trong `lab15`, expose Deployment `web` thành Service ClusterIP tên `web`, cổng 80. Ghi ClusterIP của nó vào `~/cka-answers/15-web-ip.txt`.
+    - |
+      Tạo Service `web-np` kiểu NodePort cho `web`: cổng 80, nodePort `30080`.
+    - |
+      Service `api-svc` không trả lời. Sửa nó (không sửa Deployment `api`) để gọi `http://api-svc.lab15` từ Pod khác nhận được trang nginx.
+    - |
+      StatefulSet `db` đã có nhưng thiếu Service. Tạo headless Service `db` cổng 5432 để tên `db-0.db.lab15.svc.cluster.local` phân giải được.
+    - |
+      Tạo Service `legacy-db` (cổng 5432, không selector) trỏ tới máy `10.0.5.20:5432` bằng một EndpointSlice tự viết tên `legacy-db-1`.
+  hints:
+    - |
+      Vì sao Service không có endpoint?
+      So `kubectl get svc api-svc -n lab15 -o jsonpath='{.spec.selector}'` với `kubectl get pods -n lab15 --show-labels`, và `targetPort` với cổng container.
+    - |
+      Thử gọi Service
+      `kubectl run t -n lab15 --rm -it --image=busybox:1.36 --restart=Never -- wget -qO- -T3 api-svc`
+  solution: |
+    ```bash
+    kubectl expose deploy web -n lab15 --port=80
+    kubectl get svc web -n lab15 -o jsonpath='{.spec.clusterIP}' > ~/cka-answers/15-web-ip.txt
+    kubectl expose deploy web -n lab15 --name=web-np --type=NodePort --port=80 $do > np.yaml
+    # thêm nodePort: 30080 dưới ports[0], rồi
+    kubectl apply -f np.yaml
+
+    kubectl get svc api-svc -n lab15 -o yaml       # selector app=apis, targetPort 8080
+    kubectl get pods -n lab15 --show-labels        # Pod có app=api, nginx nghe cổng 80
+    kubectl patch svc api-svc -n lab15 --type=json -p '[{"op":"replace","path":"/spec/selector","value":{"app":"api"}},{"op":"replace","path":"/spec/ports/0/targetPort","value":80}]'
+    kubectl get endpointslices -n lab15 -l kubernetes.io/service-name=api-svc
+
+    kubectl create svc clusterip db -n lab15 --clusterip=None --tcp=5432
+    # selector của Service tạo bằng lệnh trên là app=db, khớp label Pod của StatefulSet
+    ```
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata: {name: legacy-db, namespace: lab15}
+    spec:
+      ports: [{port: 5432, protocol: TCP}]
+    ---
+    apiVersion: discovery.k8s.io/v1
+    kind: EndpointSlice
+    metadata:
+      name: legacy-db-1
+      namespace: lab15
+      labels: {kubernetes.io/service-name: legacy-db}
+    addressType: IPv4
+    ports: [{port: 5432, protocol: TCP}]
+    endpoints: [{addresses: ["10.0.5.20"]}]
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/15-web-ip.txt"
+    ns_fresh lab15
+    kubectl create deploy web -n lab15 --image=nginx:1.27 --replicas=2 >/dev/null
+    kubectl create deploy api -n lab15 --image=nginx:1.27 --replicas=2 >/dev/null
+    kubectl create svc clusterip api-svc -n lab15 --tcp=80:8080 >/dev/null
+    kubectl patch svc api-svc -n lab15 -p '{"spec":{"selector":{"app":"apis"}}}' >/dev/null
+    kubectl apply -n lab15 -f - >/dev/null <<'EOF'
+    apiVersion: apps/v1
+    kind: StatefulSet
+    metadata: {name: db}
+    spec:
+      serviceName: db
+      replicas: 2
+      selector: {matchLabels: {app: db}}
+      template:
+        metadata: {labels: {app: db}}
+        spec:
+          containers:
+          - {name: db, image: busybox:1.36, command: ["sleep", "3600"], ports: [{containerPort: 5432}]}
+    EOF
+    kubectl rollout status deploy/web deploy/api -n lab15 --timeout=120s >/dev/null 2>&1 || kubectl rollout status deploy/api -n lab15 --timeout=120s >/dev/null
+  verify: |
+    expect "Service web cổng 80" "$(jp svc web -n lab15 '{.spec.ports[0].port}')" "80"
+    expect "15-web-ip.txt là ClusterIP của web" "$(ans 15-web-ip.txt)" "$(jp svc web -n lab15 '{.spec.clusterIP}')"
+    check "Gọi được http://web.lab15" can_reach lab15 http://web.lab15
+    expect "web-np là NodePort 30080" "$(jp svc web-np -n lab15 '{.spec.type}:{.spec.ports[0].nodePort}')" "NodePort:30080"
+    expect "api-svc có 2 endpoint" "$(jp endpointslices -n lab15 -l kubernetes.io/service-name=api-svc '{.items[*].endpoints[*].addresses[0]}' | wc -w | tr -d ' ')" "2"
+    check "Gọi được http://api-svc.lab15" can_reach lab15 http://api-svc.lab15
+    expect "Deployment api không bị sửa (vẫn 2 replica nginx:1.27)" "$(jp deploy api -n lab15 '{.spec.replicas}:{.spec.template.spec.containers[0].image}')" "2:nginx:1.27"
+    expect "db là headless" "$(jp svc db -n lab15 '{.spec.clusterIP}')" "None"
+    check "db-0.db.lab15.svc.cluster.local phân giải được" bash -c "kubectl run dns-\$RANDOM -n lab15 --image=busybox:1.36 --rm -i --restart=Never --command -- nslookup db-0.db.lab15.svc.cluster.local 2>/dev/null | grep -q 'Address.*10\.'"
+    check "legacy-db không có selector" test -z "$(jp svc legacy-db -n lab15 '{.spec.selector}')"
+    expect "EndpointSlice legacy-db-1 trỏ 10.0.5.20:5432" "$(jp endpointslice legacy-db-1 -n lab15 '{.endpoints[0].addresses[0]}:{.ports[0].port}')" "10.0.5.20:5432"
+    expect "legacy-db-1 gắn với Service legacy-db" "$(jp endpointslice legacy-db-1 -n lab15 '{.metadata.labels.kubernetes\.io/service-name}')" "legacy-db"
+  cleanup: |
+    kubectl delete ns lab15 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS/15-web-ip.txt"
+  solve: |
+    kubectl expose deploy web -n lab15 --port=80
+    kubectl get svc web -n lab15 -o jsonpath='{.spec.clusterIP}' > "$ANS/15-web-ip.txt"
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Service
+    metadata: {name: web-np, namespace: lab15}
+    spec:
+      type: NodePort
+      selector: {app: web}
+      ports: [{port: 80, targetPort: 80, nodePort: 30080}]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: legacy-db, namespace: lab15}
+    spec:
+      ports: [{port: 5432, protocol: TCP}]
+    ---
+    apiVersion: discovery.k8s.io/v1
+    kind: EndpointSlice
+    metadata:
+      name: legacy-db-1
+      namespace: lab15
+      labels: {kubernetes.io/service-name: legacy-db}
+    addressType: IPv4
+    ports: [{port: 5432, protocol: TCP}]
+    endpoints: [{addresses: ["10.0.5.20"]}]
+    EOF
+    kubectl patch svc api-svc -n lab15 --type=json -p '[{"op":"replace","path":"/spec/selector","value":{"app":"api"}},{"op":"replace","path":"/spec/ports/0/targetPort","value":80}]'
+    kubectl create svc clusterip db -n lab15 --clusterip=None --tcp=5432
+    kubectl rollout status sts/db -n lab15 --timeout=120s
+    sleep 3
+  docs:
+    - [Service, "https://kubernetes.io/docs/concepts/services-networking/service/"]
+    - [EndpointSlices, "https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/"]
+    - [Debug Services, "https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/"]
+
+- id: 16
+  slug: dns-coredns
+  title: DNS trong cluster và CoreDNS
+  level: 4
+  minutes: 30
+  competencies: ["net:5", "trouble:4"]
+  goal: |
+    Hiểu tên DNS của Service và Pod, đọc cấu hình DNS của Pod, tùy chỉnh `dnsPolicy`, và sửa Corefile của CoreDNS để phân giải tên nội bộ của công ty.
+  concepts: |
+    - Service: `<svc>.<ns>.svc.<cluster-domain>` (mặc định `cluster.local`). Pod đọc `/etc/resolv.conf`: nameserver là ClusterIP của Service `kube-dns`, có `search <ns>.svc.cluster.local svc.cluster.local cluster.local` và `ndots:5`.
+    - `dnsPolicy`: `ClusterFirst` (mặc định, dùng CoreDNS), `Default` (dùng DNS của node, **không** phân giải được Service), `None` (tự khai báo trong `dnsConfig`).
+    - CoreDNS cấu hình bằng ConfigMap `coredns` trong `kube-system` (Corefile). Có thể thêm server block riêng cho một zone. Plugin `reload` tự nạp lại sau khoảng 30 giây; muốn nhanh thì `kubectl -n kube-system rollout restart deploy coredns`.
+  tasks:
+    - |
+      Ghi ClusterIP của Service DNS của cluster vào `~/cka-answers/16-dns-ip.txt`, và cluster domain vào `~/cka-answers/16-domain.txt`.
+    - |
+      Pod `client` trong `lab16` không phân giải được tên Service nào. Tìm nguyên nhân và sửa để từ `client` chạy `nslookup web.lab16` thành công. Giữ nguyên tên Pod và image.
+    - |
+      Tạo Pod `custom-dns` (image `busybox:1.36`, lệnh `sleep 3600`) **chỉ** dùng nameserver `1.1.1.1`, search domain `lab16.svc.cluster.local`, option `ndots: 2`.
+    - |
+      Công ty có máy `legacy.corp.internal` ở `10.10.10.10` mà DNS công cộng không biết. Sửa CoreDNS để mọi Pod phân giải được tên này, không làm hỏng DNS của cluster.
+  hints:
+    - |
+      Tìm cluster domain
+      `kubectl -n kube-system get cm coredns -o yaml` (dòng `kubernetes cluster.local …`) hoặc `clusterDomain` trong `/var/lib/kubelet/config.yaml` của node.
+    - |
+      Thêm zone vào Corefile
+      Thêm một server block mới ở cuối Corefile, dùng plugin `hosts`:
+      ```
+      corp.internal:53 {
+          errors
+          hosts {
+              10.10.10.10 legacy.corp.internal
+          }
+      }
+      ```
+  solution: |
+    ```bash
+    kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIP}' > ~/cka-answers/16-dns-ip.txt
+    echo cluster.local > ~/cka-answers/16-domain.txt
+
+    kubectl get pod client -n lab16 -o jsonpath='{.spec.dnsPolicy}'   # Default → dùng DNS của node
+    kubectl get pod client -n lab16 -o yaml > client.yaml
+    # đổi dnsPolicy: Default → ClusterFirst (hoặc xóa dòng), rồi
+    kubectl replace --force -f client.yaml
+    kubectl exec client -n lab16 -- nslookup web.lab16
+    ```
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: custom-dns, namespace: lab16}
+    spec:
+      dnsPolicy: None
+      dnsConfig:
+        nameservers: ["1.1.1.1"]
+        searches: ["lab16.svc.cluster.local"]
+        options: [{name: ndots, value: "2"}]
+      containers:
+      - {name: c, image: busybox:1.36, command: ["sleep", "3600"]}
+    ```
+    ```bash
+    kubectl -n kube-system edit cm coredns     # thêm server block corp.internal ở cuối Corefile
+    kubectl -n kube-system rollout restart deploy coredns
+    kubectl run t --rm -it --image=busybox:1.36 --restart=Never -- nslookup legacy.corp.internal
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS"/16-*
+    ns_fresh lab16
+    kubectl get cm coredns -n kube-system -o yaml > "$ANS/.16-coredns-backup.yaml" 2>/dev/null
+    kubectl create deploy web -n lab16 --image=nginx:1.27 >/dev/null
+    kubectl expose deploy web -n lab16 --port=80 >/dev/null
+    kubectl apply -n lab16 -f - >/dev/null <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: client}
+    spec:
+      dnsPolicy: Default
+      containers:
+      - {name: client, image: busybox:1.36, command: ["sleep", "3600"]}
+    EOF
+  verify: |
+    expect "16-dns-ip.txt" "$(ans 16-dns-ip.txt)" "$(jp svc kube-dns -n kube-system '{.spec.clusterIP}')"
+    expect "16-domain.txt" "$(ans 16-domain.txt)" "cluster.local"
+    expect_match "client dùng DNS của cluster" "$(jp pod client -n lab16 '{.spec.dnsPolicy}')" '^ClusterFirst$'
+    expect "client vẫn dùng busybox:1.36" "$(jp pod client -n lab16 '{.spec.containers[0].image}')" "busybox:1.36"
+    check "Từ client phân giải được web.lab16" bash -c "kubectl exec client -n lab16 -- nslookup web.lab16 | grep -q 'Address.*10\.'"
+    expect "custom-dns dnsPolicy None" "$(jp pod custom-dns -n lab16 '{.spec.dnsPolicy}')" "None"
+    expect "custom-dns nameserver 1.1.1.1" "$(jp pod custom-dns -n lab16 '{.spec.dnsConfig.nameservers[*]}')" "1.1.1.1"
+    expect "custom-dns search lab16.svc.cluster.local" "$(jp pod custom-dns -n lab16 '{.spec.dnsConfig.searches[*]}')" "lab16.svc.cluster.local"
+    expect "custom-dns ndots 2" "$(jp pod custom-dns -n lab16 '{.spec.dnsConfig.options[?(@.name=="ndots")].value}')" "2"
+    check "Pod phân giải legacy.corp.internal → 10.10.10.10" bash -c "kubectl run dns-\$RANDOM -n lab16 --image=busybox:1.36 --rm -i --restart=Never --command -- nslookup legacy.corp.internal 2>/dev/null | grep -q '10.10.10.10'"
+    check "DNS của cluster vẫn chạy (kubernetes.default)" bash -c "kubectl run dns-\$RANDOM -n lab16 --image=busybox:1.36 --rm -i --restart=Never --command -- nslookup kubernetes.default.svc.cluster.local 2>/dev/null | grep -q 'Address.*10\.'"
+  cleanup: |
+    kubectl delete ns lab16 --ignore-not-found --wait=false >/dev/null
+    if [ -s "$ANS/.16-coredns-backup.yaml" ]; then
+      kubectl replace -f "$ANS/.16-coredns-backup.yaml" >/dev/null 2>&1 && kubectl -n kube-system rollout restart deploy coredns >/dev/null 2>&1
+    fi
+    rm -f "$ANS"/16-* "$ANS/.16-coredns-backup.yaml"
+  solve: |
+    kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIP}' > "$ANS/16-dns-ip.txt"
+    echo cluster.local > "$ANS/16-domain.txt"
+    kubectl get pod client -n lab16 -o yaml | sed 's/dnsPolicy: Default/dnsPolicy: ClusterFirst/' > /tmp/client.yaml
+    kubectl replace --force -f /tmp/client.yaml
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: custom-dns, namespace: lab16}
+    spec:
+      dnsPolicy: None
+      dnsConfig:
+        nameservers: ["1.1.1.1"]
+        searches: ["lab16.svc.cluster.local"]
+        options: [{name: ndots, value: "2"}]
+      containers:
+      - {name: c, image: busybox:1.36, command: ["sleep", "3600"]}
+    EOF
+    kubectl -n kube-system get cm coredns -o jsonpath='{.data.Corefile}' > /tmp/Corefile
+    printf 'corp.internal:53 {\n    errors\n    hosts {\n        10.10.10.10 legacy.corp.internal\n    }\n}\n' >> /tmp/Corefile
+    kubectl -n kube-system create cm coredns --from-file=Corefile=/tmp/Corefile --dry-run=client -o yaml | kubectl apply -f -
+    kubectl -n kube-system rollout restart deploy coredns
+    kubectl -n kube-system rollout status deploy coredns --timeout=120s
+    kubectl wait --for=condition=Ready pod/client -n lab16 --timeout=90s
+    sleep 5
+  docs:
+    - [DNS for Services and Pods, "https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/"]
+    - [Customizing DNS Service, "https://kubernetes.io/docs/tasks/administer-cluster/dns-custom-nameservers/"]
+    - [Debugging DNS resolution, "https://kubernetes.io/docs/tasks/administer-cluster/dns-debugging-resolution/"]
+
+- id: 17
+  slug: network-policy
+  title: NetworkPolicy theo mô hình mặc định chặn
+  level: 4
+  minutes: 40
+  competencies: ["net:1", "net:0"]
+  goal: |
+    Khóa một ứng dụng ba tầng web → api → db: chặn mặc định, chỉ mở đúng các đường cần thiết, kể cả theo namespace và chiều đi ra (egress).
+  concepts: |
+    - Pod không bị policy nào chọn thì nhận mọi traffic. Một khi bị chọn cho chiều `Ingress` (hoặc `Egress`), chỉ traffic được liệt kê mới qua.
+    - Trong một phần tử `from`, `podSelector` và `namespaceSelector` đặt **cùng một gạch đầu dòng** là AND; tách thành **hai gạch đầu dòng** là OR.
+    - Namespace luôn có label `kubernetes.io/metadata.name=<tên>`, tiện để chọn một namespace cụ thể.
+    - Chặn egress thì phải mở UDP/TCP 53 tới CoreDNS, nếu không mọi lần gọi bằng tên đều lỗi.
+    - Policy chỉ có hiệu lực khi CNI hỗ trợ (kindnet, Calico, Cilium… có; Flannel thuần thì không).
+  tasks:
+    - |
+      Trong `lab17`, tạo policy `default-deny` chặn **mọi ingress** tới mọi Pod.
+    - |
+      Tạo policy `web-to-api`: Pod `app=api` chỉ nhận traffic TCP 80 từ Pod `app=web` cùng namespace.
+    - |
+      Tạo policy `api-to-db`: Pod `app=db` chỉ nhận TCP 80 từ Pod `app=api`.
+    - |
+      Tạo policy `monitoring-to-api`: Pod trong các namespace có label `purpose=monitoring` được gọi `app=api` cổng 80. Namespace `lab17-mon` đã có label đó; namespace `lab17-other` thì không và phải bị chặn.
+    - |
+      Tạo policy `api-egress`: Pod `app=api` chỉ được gọi ra Pod `app=db` cổng 80 và DNS (cổng 53 UDP và TCP).
+  hints:
+    - |
+      Kiểm tra bằng Pod có label giả lập
+      `kubectl run t -n lab17 --rm -it --image=busybox:1.36 --labels=app=web --restart=Never -- wget -qO- -T3 api`
+    - |
+      DNS cho egress
+      `to: [{namespaceSelector: {}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]` với `ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]`
+  solution: |
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: default-deny, namespace: lab17}
+    spec:
+      podSelector: {}
+      policyTypes: [Ingress]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: web-to-api, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: api}}
+      policyTypes: [Ingress]
+      ingress:
+      - from: [{podSelector: {matchLabels: {app: web}}}]
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: api-to-db, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: db}}
+      policyTypes: [Ingress]
+      ingress:
+      - from: [{podSelector: {matchLabels: {app: api}}}]
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: monitoring-to-api, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: api}}
+      policyTypes: [Ingress]
+      ingress:
+      - from: [{namespaceSelector: {matchLabels: {purpose: monitoring}}}]
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: api-egress, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: api}}
+      policyTypes: [Egress]
+      egress:
+      - to: [{podSelector: {matchLabels: {app: db}}}]
+        ports: [{protocol: TCP, port: 80}]
+      - to: [{namespaceSelector: {}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]
+        ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    ```
+    Các policy cộng dồn: `api` nhận được từ `web` (policy 2) **hoặc** từ namespace monitoring (policy 4).
+  setup: |
+    kubectl delete ns lab17 lab17-mon lab17-other --ignore-not-found --wait=true >/dev/null 2>&1
+    kubectl create ns lab17 >/dev/null
+    kubectl create ns lab17-mon >/dev/null; kubectl label ns lab17-mon purpose=monitoring >/dev/null
+    kubectl create ns lab17-other >/dev/null
+    for a in web api db; do
+      kubectl create deploy "$a" -n lab17 --image=nginx:1.27 >/dev/null
+      kubectl expose deploy "$a" -n lab17 --port=80 >/dev/null
+    done
+    kubectl rollout status deploy/web deploy/api deploy/db -n lab17 --timeout=120s >/dev/null 2>&1 || true
+  verify: |
+    expect "default-deny chọn mọi Pod, chiều Ingress" "$(jp netpol default-deny -n lab17 '{.spec.podSelector}:{.spec.policyTypes[*]}')" "{}:Ingress"
+    check "web → api: được phép" can_reach lab17 http://api.lab17 app=web
+    check_not "web → db: bị chặn" can_reach lab17 http://db.lab17 app=web
+    check_not "Pod lạ → api: bị chặn" can_reach lab17 http://api.lab17 app=random
+    check "lab17-mon → api: được phép" can_reach lab17-mon http://api.lab17 app=prometheus
+    check_not "lab17-other → api: bị chặn" can_reach lab17-other http://api.lab17 app=web
+    check "api → db: được phép (gọi bằng tên, cần DNS)" can_reach lab17 http://db.lab17 app=api
+    check_not "api → web: bị chặn bởi egress" can_reach lab17 http://web.lab17 app=api
+    check "Có policy api-egress kiểu Egress" bash -c "kubectl get netpol api-egress -n lab17 -o jsonpath='{.spec.policyTypes[*]}' | grep -q Egress"
+  cleanup: |
+    kubectl delete ns lab17 lab17-mon lab17-other --ignore-not-found --wait=false >/dev/null
+  solve: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: default-deny, namespace: lab17}
+    spec:
+      podSelector: {}
+      policyTypes: [Ingress]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: web-to-api, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: api}}
+      policyTypes: [Ingress]
+      ingress:
+      - from: [{podSelector: {matchLabels: {app: web}}}]
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: api-to-db, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: db}}
+      policyTypes: [Ingress]
+      ingress:
+      - from: [{podSelector: {matchLabels: {app: api}}}]
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: monitoring-to-api, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: api}}
+      policyTypes: [Ingress]
+      ingress:
+      - from: [{namespaceSelector: {matchLabels: {purpose: monitoring}}}]
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: api-egress, namespace: lab17}
+    spec:
+      podSelector: {matchLabels: {app: api}}
+      policyTypes: [Egress]
+      egress:
+      - to: [{podSelector: {matchLabels: {app: db}}}]
+        ports: [{protocol: TCP, port: 80}]
+      - to: [{namespaceSelector: {}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]
+        ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+    EOF
+    sleep 5
+  docs:
+    - [Network Policies, "https://kubernetes.io/docs/concepts/services-networking/network-policies/"]
+    - [Declare Network Policy, "https://kubernetes.io/docs/tasks/administer-cluster/declare-network-policy/"]
+
+- id: 18
+  slug: ingress
+  title: Ingress, IngressClass và TLS
+  level: 4
+  minutes: 30
+  competencies: ["net:4"]
+  goal: |
+    Viết Ingress định tuyến theo host và path tới nhiều Service, gắn chứng chỉ TLS, và chọn IngressClass mặc định.
+  concepts: |
+    - Ingress chỉ là bản mô tả; cần một **Ingress controller** (Traefik, HAProxy, NGINX…) để thực thi. `ingressClassName` chọn controller nào xử lý.
+    - `pathType`: `Prefix` (khớp theo từng đoạn `/`), `Exact` (khớp đúng), `ImplementationSpecific`.
+    - TLS: Secret kiểu `kubernetes.io/tls` có `tls.crt` và `tls.key`, khai báo trong `spec.tls` cùng danh sách host.
+    - Annotation `ingressclass.kubernetes.io/is-default-class: "true"` trên IngressClass làm nó mặc định cho Ingress không ghi class.
+    - Dự án ingress-nginx đã ngừng phát triển; hướng mới là Gateway API (lab 19). Đề thi vẫn hỏi cả hai.
+  setup_note: |
+    Lab chấm theo nội dung object, không cần controller. Muốn thấy traffic thật, cài một controller (ví dụ Traefik bằng Helm) và đổi `ingressClassName` cho khớp.
+  tasks:
+    - |
+      Tạo chứng chỉ tự ký cho `shop.lab.local` và Secret TLS `shop-tls` trong `lab18`.
+    - |
+      Tạo Ingress `shop` (class `lab-ingress`) cho host `shop.lab.local`: path `/api` (Prefix) tới Service `api` cổng 8080, path `/` (Prefix) tới Service `web` cổng 80, dùng TLS `shop-tls`.
+    - |
+      Tạo Ingress `docs` không ghi `ingressClassName`, host `docs.lab.local`, path `/guide` kiểu **Exact** tới `web:80`.
+    - |
+      Đặt IngressClass `lab-ingress` làm mặc định của cluster.
+  hints:
+    - |
+      Tạo cert và Secret
+      `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN=shop.lab.local"` rồi `kubectl create secret tls shop-tls --cert=tls.crt --key=tls.key -n lab18`
+    - |
+      Sinh Ingress bằng lệnh
+      `kubectl create ingress shop -n lab18 --class=lab-ingress --rule="shop.lab.local/api*=api:8080,tls=shop-tls" --rule="shop.lab.local/*=web:80,tls=shop-tls"` (dấu `*` = Prefix)
+  solution: |
+    ```bash
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN=shop.lab.local"
+    kubectl create secret tls shop-tls -n lab18 --cert=tls.crt --key=tls.key
+    kubectl create ingress shop -n lab18 --class=lab-ingress \
+      --rule="shop.lab.local/api*=api:8080,tls=shop-tls" \
+      --rule="shop.lab.local/*=web:80,tls=shop-tls"
+    kubectl create ingress docs -n lab18 --rule="docs.lab.local/guide=web:80"
+    kubectl annotate ingressclass lab-ingress ingressclass.kubernetes.io/is-default-class=true
+    kubectl describe ingress shop -n lab18
+    ```
+  setup: |
+    ns_fresh lab18
+    kubectl apply -f - >/dev/null <<'EOF'
+    apiVersion: networking.k8s.io/v1
+    kind: IngressClass
+    metadata: {name: lab-ingress}
+    spec:
+      controller: lab.example.com/ingress-controller
+    EOF
+    kubectl annotate ingressclass lab-ingress ingressclass.kubernetes.io/is-default-class- >/dev/null 2>&1 || true
+    kubectl create deploy web -n lab18 --image=nginx:1.27 >/dev/null
+    kubectl expose deploy web -n lab18 --port=80 >/dev/null
+    kubectl create deploy api -n lab18 --image=nginx:1.27 >/dev/null
+    kubectl expose deploy api -n lab18 --port=8080 --target-port=80 >/dev/null
+  verify: |
+    expect "shop-tls là Secret TLS" "$(jp secret shop-tls -n lab18 '{.type}')" "kubernetes.io/tls"
+    check "shop-tls có chứng chỉ cho shop.lab.local" bash -c "kubectl get secret shop-tls -n lab18 -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -subject | grep -q shop.lab.local"
+    expect "shop dùng class lab-ingress" "$(jp ingress shop -n lab18 '{.spec.ingressClassName}')" "lab-ingress"
+    expect "shop host shop.lab.local" "$(jp ingress shop -n lab18 '{.spec.rules[0].host}')" "shop.lab.local"
+    expect "shop /api (Prefix) → api:8080" "$(jp ingress shop -n lab18 '{.spec.rules[0].http.paths[?(@.path=="/api")].pathType}:{.spec.rules[0].http.paths[?(@.path=="/api")].backend.service.name}:{.spec.rules[0].http.paths[?(@.path=="/api")].backend.service.port.number}')" "Prefix:api:8080"
+    expect "shop / (Prefix) → web:80" "$(jp ingress shop -n lab18 '{.spec.rules[0].http.paths[?(@.path=="/")].pathType}:{.spec.rules[0].http.paths[?(@.path=="/")].backend.service.name}:{.spec.rules[0].http.paths[?(@.path=="/")].backend.service.port.number}')" "Prefix:web:80"
+    expect "shop TLS dùng shop-tls cho shop.lab.local" "$(jp ingress shop -n lab18 '{.spec.tls[0].secretName}:{.spec.tls[0].hosts[0]}')" "shop-tls:shop.lab.local"
+    expect_match "docs không ghi ingressClassName" "$(jp ingress docs -n lab18 '{.spec.ingressClassName}')" '^(lab-ingress)?$'
+    expect "docs /guide kiểu Exact → web:80" "$(jp ingress docs -n lab18 '{.spec.rules[0].host}:{.spec.rules[0].http.paths[0].path}:{.spec.rules[0].http.paths[0].pathType}:{.spec.rules[0].http.paths[0].backend.service.name}')" "docs.lab.local:/guide:Exact:web"
+    expect "lab-ingress là IngressClass mặc định" "$(jp ingressclass lab-ingress '{.metadata.annotations.ingressclass\.kubernetes\.io/is-default-class}')" "true"
+  cleanup: |
+    kubectl delete ns lab18 --ignore-not-found --wait=false >/dev/null
+    kubectl delete ingressclass lab-ingress --ignore-not-found >/dev/null
+  solve: |
+    cd /tmp
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout tls.key -out tls.crt -subj "/CN=shop.lab.local" 2>/dev/null
+    kubectl create secret tls shop-tls -n lab18 --cert=tls.crt --key=tls.key
+    kubectl create ingress shop -n lab18 --class=lab-ingress --rule="shop.lab.local/api*=api:8080,tls=shop-tls" --rule="shop.lab.local/*=web:80,tls=shop-tls"
+    kubectl create ingress docs -n lab18 --rule="docs.lab.local/guide=web:80"
+    kubectl annotate ingressclass lab-ingress ingressclass.kubernetes.io/is-default-class=true --overwrite
+  docs:
+    - [Ingress, "https://kubernetes.io/docs/concepts/services-networking/ingress/"]
+    - [Ingress controllers, "https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/"]
+
+- id: 19
+  slug: gateway-api
+  title: Gateway API, HTTPRoute và ReferenceGrant
+  level: 4
+  minutes: 40
+  competencies: ["net:3"]
+  goal: |
+    Dựng định tuyến L7 bằng Gateway API: Gateway do đội hạ tầng quản lý, HTTPRoute của đội ứng dụng, chia traffic canary theo weight và theo header, và cho phép tham chiếu chéo namespace.
+  concepts: |
+    - **GatewayClass** (loại controller) → **Gateway** (listener: cổng, giao thức, TLS, namespace nào được gắn route) → **HTTPRoute** (match theo host, path, header; gửi tới `backendRefs` có `weight`).
+    - `allowedRoutes.namespaces.from`: `Same` (mặc định), `All`, hoặc `Selector` theo label namespace.
+    - Route tham chiếu Service ở **namespace khác** chỉ hợp lệ khi namespace đích có **ReferenceGrant** cho phép.
+    - Kiểm tra trạng thái: `kubectl describe httproute`, các condition `Accepted` và `ResolvedRefs` (cần controller thật).
+  setup_note: |
+    Setup cài CRD Gateway API v1.6.3 (bản standard) từ GitHub nếu cluster chưa có, và tạo GatewayClass `lab-gc`. Lab chấm theo nội dung object. Muốn thấy traffic thật, cài một implementation như Envoy Gateway hoặc NGINX Gateway Fabric và đổi `gatewayClassName`.
+  tasks:
+    - |
+      Gắn label `gateway-access=true` cho namespace `lab19-app`.
+    - |
+      Trong `lab19-infra`, tạo Gateway `public` (class `lab-gc`) có listener tên `http`, HTTP cổng 80, chỉ nhận route từ namespace có label `gateway-access=true`.
+    - |
+      Trong `lab19-app`, tạo HTTPRoute `shop` gắn vào `public`, host `shop.lab.local`, gồm 3 rule:
+      request có header `x-canary: "true"` đi **hết** vào `api-v2:8080`;
+      path `/api` (PathPrefix) chia `api:8080` weight 90 và `api-v2:8080` weight 10;
+      còn lại (`/`) vào `web:80`.
+    - |
+      Đội hạ tầng tạo HTTPRoute `admin` trong `lab19-infra` (host `admin.lab.local`) gửi tới Service `admin` cổng 80 ở `lab19-app`. Tạo route đó và ReferenceGrant `allow-infra-routes` trong `lab19-app` cho phép HTTPRoute từ `lab19-infra` tham chiếu Service.
+  hints:
+    - |
+      Khung Gateway
+      `kubectl explain gateway.spec.listeners.allowedRoutes --recursive`
+    - |
+      Match theo header
+      `matches: [{headers: [{name: x-canary, value: "true"}]}]`
+  solution: |
+    ```bash
+    kubectl label ns lab19-app gateway-access=true
+    ```
+    ```yaml
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata: {name: public, namespace: lab19-infra}
+    spec:
+      gatewayClassName: lab-gc
+      listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+        allowedRoutes:
+          namespaces:
+            from: Selector
+            selector: {matchLabels: {gateway-access: "true"}}
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: shop, namespace: lab19-app}
+    spec:
+      parentRefs: [{name: public, namespace: lab19-infra}]
+      hostnames: ["shop.lab.local"]
+      rules:
+      - matches: [{headers: [{name: x-canary, value: "true"}]}]
+        backendRefs: [{name: api-v2, port: 8080}]
+      - matches: [{path: {type: PathPrefix, value: /api}}]
+        backendRefs:
+        - {name: api, port: 8080, weight: 90}
+        - {name: api-v2, port: 8080, weight: 10}
+      - matches: [{path: {type: PathPrefix, value: /}}]
+        backendRefs: [{name: web, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: admin, namespace: lab19-infra}
+    spec:
+      parentRefs: [{name: public}]
+      hostnames: ["admin.lab.local"]
+      rules:
+      - backendRefs: [{name: admin, namespace: lab19-app, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: ReferenceGrant
+    metadata: {name: allow-infra-routes, namespace: lab19-app}
+    spec:
+      from: [{group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: lab19-infra}]
+      to: [{group: "", kind: Service}]
+    ```
+  setup: |
+    if ! kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
+      info "Cài CRD Gateway API v1.6.3"
+      kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.3/standard-install.yaml >/dev/null || die "Không tải được CRD Gateway API (cần internet)"
+      kubectl wait --for=condition=Established crd/gateways.gateway.networking.k8s.io crd/httproutes.gateway.networking.k8s.io --timeout=60s >/dev/null
+    fi
+    kubectl delete ns lab19-infra lab19-app --ignore-not-found --wait=true >/dev/null 2>&1
+    kubectl create ns lab19-infra >/dev/null; kubectl create ns lab19-app >/dev/null
+    kubectl apply -f - >/dev/null <<'EOF'
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: GatewayClass
+    metadata: {name: lab-gc}
+    spec:
+      controllerName: lab.example.com/gateway-controller
+    EOF
+    for a in web:80 api:8080 api-v2:8080 admin:80; do
+      kubectl create deploy "${a%%:*}" -n lab19-app --image=nginx:1.27 >/dev/null
+      kubectl expose deploy "${a%%:*}" -n lab19-app --port="${a##*:}" --target-port=80 >/dev/null
+    done
+  verify: |
+    expect "lab19-app có label gateway-access=true" "$(jp ns lab19-app '{.metadata.labels.gateway-access}')" "true"
+    expect "Gateway public dùng lab-gc" "$(jp gateway public -n lab19-infra '{.spec.gatewayClassName}')" "lab-gc"
+    expect "Listener http HTTP:80" "$(jp gateway public -n lab19-infra '{.spec.listeners[?(@.name=="http")].protocol}:{.spec.listeners[?(@.name=="http")].port}')" "HTTP:80"
+    expect "Listener chỉ nhận namespace có gateway-access=true" "$(jp gateway public -n lab19-infra '{.spec.listeners[0].allowedRoutes.namespaces.from}:{.spec.listeners[0].allowedRoutes.namespaces.selector.matchLabels.gateway-access}')" "Selector:true"
+    expect "shop gắn vào public (lab19-infra)" "$(jp httproute shop -n lab19-app '{.spec.parentRefs[0].name}:{.spec.parentRefs[0].namespace}')" "public:lab19-infra"
+    expect "shop host shop.lab.local" "$(jp httproute shop -n lab19-app '{.spec.hostnames[*]}')" "shop.lab.local"
+    hdr=$(jp httproute shop -n lab19-app '{range .spec.rules[*]}{.matches[*].headers[*].name}={.matches[*].headers[*].value}>{.backendRefs[*].name}{"\n"}{end}' | grep '^x-canary=')
+    expect "Header x-canary=true → chỉ api-v2" "$hdr" "x-canary=true>api-v2"
+    w=$(jp httproute shop -n lab19-app '{range .spec.rules[*]}{.matches[*].path.value}|{range .backendRefs[*]}{.name}:{.port}:{.weight} {end}{"\n"}{end}' | grep '^/api|' | xargs)
+    expect "/api chia api 90 / api-v2 10" "$w" "/api|api:8080:90 api-v2:8080:10"
+    rules=$(jp httproute shop -n lab19-app '{range .spec.rules[*]}{.matches[*].path.value}|{.backendRefs[*].name}:{.backendRefs[*].port}{"\n"}{end}')
+    check "/ → web:80" grep -qx '/|web:80' <<<"$rules"
+    expect "admin trỏ Service admin ở lab19-app" "$(jp httproute admin -n lab19-infra '{.spec.rules[0].backendRefs[0].name}:{.spec.rules[0].backendRefs[0].namespace}:{.spec.rules[0].backendRefs[0].port}')" "admin:lab19-app:80"
+    expect "ReferenceGrant cho HTTPRoute từ lab19-infra" "$(jp referencegrant allow-infra-routes -n lab19-app '{.spec.from[0].kind}:{.spec.from[0].namespace}:{.spec.to[0].kind}')" "HTTPRoute:lab19-infra:Service"
+  cleanup: |
+    kubectl delete ns lab19-infra lab19-app --ignore-not-found --wait=false >/dev/null
+    kubectl delete gatewayclass lab-gc --ignore-not-found >/dev/null 2>&1
+  solve: |
+    kubectl label ns lab19-app gateway-access=true
+    kubectl apply -f - <<'EOF'
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata: {name: public, namespace: lab19-infra}
+    spec:
+      gatewayClassName: lab-gc
+      listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+        allowedRoutes:
+          namespaces:
+            from: Selector
+            selector: {matchLabels: {gateway-access: "true"}}
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: shop, namespace: lab19-app}
+    spec:
+      parentRefs: [{name: public, namespace: lab19-infra}]
+      hostnames: ["shop.lab.local"]
+      rules:
+      - matches: [{headers: [{name: x-canary, value: "true"}]}]
+        backendRefs: [{name: api-v2, port: 8080}]
+      - matches: [{path: {type: PathPrefix, value: /api}}]
+        backendRefs:
+        - {name: api, port: 8080, weight: 90}
+        - {name: api-v2, port: 8080, weight: 10}
+      - matches: [{path: {type: PathPrefix, value: /}}]
+        backendRefs: [{name: web, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: admin, namespace: lab19-infra}
+    spec:
+      parentRefs: [{name: public}]
+      hostnames: ["admin.lab.local"]
+      rules:
+      - backendRefs: [{name: admin, namespace: lab19-app, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: ReferenceGrant
+    metadata: {name: allow-infra-routes, namespace: lab19-app}
+    spec:
+      from: [{group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: lab19-infra}]
+      to: [{group: "", kind: Service}]
+    EOF
+  docs:
+    - [Gateway API (Kubernetes docs), "https://kubernetes.io/docs/concepts/services-networking/gateway/"]
+    - [Gateway API guides, "https://gateway-api.sigs.k8s.io/guides/"]
+    - [HTTP traffic splitting, "https://gateway-api.sigs.k8s.io/guides/traffic-splitting/"]

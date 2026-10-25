@@ -1,0 +1,5 @@
+/cka-answers/
+*.retry
+.vagrant/
+env/kubeadm/.lab-ssh-key*
+__pycache__/

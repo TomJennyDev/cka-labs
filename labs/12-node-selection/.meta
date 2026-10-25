@@ -1,0 +1,4 @@
+ID=12
+LEVEL=3
+ENV=any
+TITLE="nodeSelector, node affinity, taint và toleration"

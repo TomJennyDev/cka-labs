@@ -1,0 +1,4 @@
+ID=02
+LEVEL=1
+ENV=any
+TITLE="kubectl, namespace, context và Kubernetes API"

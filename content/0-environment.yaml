@@ -1,0 +1,297 @@
+phase: 0
+title: "Giai đoạn 0 · Môi trường và cluster đầu tiên"
+intro: |
+  Dựng ba máy ảo và tự tay cài một cluster kubeadm. Mọi lab sau đều chạy trên cluster này, và chính việc dựng cluster cũng là một phần của đề thi (domain Cluster Architecture 25%).
+labs:
+  - id: "00"
+    slug: lab-environment
+    title: Chuẩn bị máy ảo cho lab
+    level: 0
+    minutes: 30
+    no_cluster: true
+    competencies: []
+    goal:
+      - Có ba máy Ubuntu 24.04 tên `controlplane`, `node01`, `node02` thấy nhau bằng tên
+      - SSH không cần mật khẩu từ `controlplane` sang các node, giống cách đề thi yêu cầu `ssh node01`
+      - Clone repo này về `controlplane` và dùng được lệnh `cka`
+    concept: |
+      Đề CKA cho bạn một terminal trên máy làm bài, từ đó bạn `ssh` vào các node của từng cluster. Lab này dựng đúng bố cục đó: bạn làm mọi thứ từ `controlplane`, và khi cần sửa gì trên worker thì `ssh node01`.
+
+      | Máy | CPU | RAM | Vai trò |
+      |---|---|---|---|
+      | `controlplane` | 2 | 4 GB | control plane, nơi bạn gõ lệnh |
+      | `node01` | 2 | 3 GB | worker |
+      | `node02` | 2 | 3 GB | worker (tùy chọn nhưng nên có cho lab scheduling) |
+
+      Có thể dùng Multipass (macOS, Windows, Linux), VirtualBox, Proxmox hoặc ba VM trên cloud. Repo có sẵn `setup/multipass-up.sh` cho cách nhanh nhất. Ngoài ra, tên `k8s-api` trỏ tới IP của `controlplane`; lab 01 dùng tên này làm control-plane endpoint để lab 27 mở rộng thành HA mà không phải cài lại.
+    prepare: |
+      Cài [Multipass](https://multipass.run) trên máy của bạn (hoặc chuẩn bị ba VM Ubuntu 24.04 theo bảng trên).
+    tasks:
+      - title: Tạo ba máy ảo
+        body: |
+          Trên máy của bạn (không phải trong VM):
+
+          ```bash
+          git clone https://github.com/<tài-khoản>/cka-labs.git && cd cka-labs
+          ./setup/multipass-up.sh
+          ```
+
+          Script tạo ba VM, ghi `/etc/hosts` trên mọi máy (gồm cả tên `k8s-api`) và chép khóa SSH của `controlplane` sang các node. Nếu dùng VM khác, tự làm hai việc đó: thêm cùng một khối dòng `IP tên` vào `/etc/hosts` của mọi máy và cho `controlplane` SSH được sang `node01`, `node02`.
+        hints:
+          - "`multipass list` cho biết IP của từng VM."
+          - Trên cloud, mở cổng giữa các VM trong cùng subnet (6443, 2379-2380, 10250, 30000-32767, và cổng của CNI như 179/BGP hoặc 4789/VXLAN).
+        solution: |
+          ```bash
+          ./setup/multipass-up.sh
+          multipass list
+          ```
+          Với VM tự tạo, trên mỗi máy:
+          ```bash
+          sudo tee -a /etc/hosts <<EOF
+          10.0.0.10 controlplane
+          10.0.0.11 node01
+          10.0.0.12 node02
+          10.0.0.10 k8s-api
+          EOF
+          ```
+        checks:
+          - - Tên node01 phân giải được
+            - |
+              getent hosts node01
+          - - Tên k8s-api trỏ tới cùng IP với controlplane
+            - '[[ "$(getent hosts k8s-api | awk "{print \$1}")" == "$(getent hosts controlplane | awk "{print \$1}")" ]]'
+          - - controlplane có ít nhất 2 CPU
+            - '[[ $(nproc) -ge 2 ]]'
+      - title: SSH không mật khẩu sang các node
+        body: |
+          Đăng nhập vào `controlplane` (`multipass shell controlplane`) và chắc chắn `ssh node01 hostname` chạy được mà không hỏi mật khẩu. Người dùng trên node phải chạy được `sudo` không cần mật khẩu (mặc định của user `ubuntu` trên Multipass và cloud image).
+        hints:
+          - "`ssh-copy-id node01` nếu bạn có mật khẩu của user trên node."
+        solution: |
+          ```bash
+          ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519   # nếu chưa có
+          ssh-copy-id node01 && ssh-copy-id node02
+          ssh node01 sudo hostname
+          ```
+        checks:
+          - - ssh node01 chạy sudo không cần mật khẩu
+            - |
+              ssh -o BatchMode=yes -o ConnectTimeout=5 node01 sudo -n true
+          - - node01 có ít nhất 1.7 GB RAM
+            - '[[ $(ssh -o BatchMode=yes node01 "awk ''/MemTotal/{print int(\$2/1024)}'' /proc/meminfo") -ge 1700 ]]'
+      - title: Lấy repo và lệnh cka trên controlplane
+        body: |
+          Clone repo vào `controlplane` và đưa lệnh `cka` vào PATH:
+
+          ```bash
+          git clone https://github.com/<tài-khoản>/cka-labs.git ~/cka-labs
+          sudo ln -sf ~/cka-labs/bin/cka /usr/local/bin/cka
+          cka list
+          ```
+
+          Từ giờ: `cka open NN` đọc đề, `cka setup NN` tạo tình huống, `cka verify NN` chấm, `cka solution NN` xem lời giải, `cka reset NN` dọn dẹp.
+        solution: |
+          ```bash
+          sudo ln -sf ~/cka-labs/bin/cka /usr/local/bin/cka
+          cka list
+          ```
+        checks:
+          - - Lệnh cka nằm trong PATH
+            - |
+              command -v cka
+    refs:
+      - [Ports and protocols, "reference/networking/ports-and-protocols/"]
+
+  - id: "01"
+    slug: kubeadm-cluster
+    title: Chuẩn bị node và dựng cluster bằng kubeadm
+    level: 1
+    minutes: 90
+    no_cluster: true
+    competencies: [arch.1, arch.2, arch.6]
+    goal:
+      - Chuẩn bị kernel, swap, sysctl và containerd đúng yêu cầu của kubelet
+      - Cài kubeadm, kubelet, kubectl đúng phiên bản và khóa không cho tự nâng
+      - Khởi tạo control plane với control-plane endpoint, cài CNI, join worker
+      - Cấu hình kubectl cho tiện làm bài thi
+    concept: |
+      **kubeadm** không cài container runtime hay mạng Pod. Nó chỉ dựng control plane dưới dạng static Pod (`/etc/kubernetes/manifests`), tạo chứng chỉ (`/etc/kubernetes/pki`) và kubeconfig, rồi cài CoreDNS và kube-proxy. Phần còn lại là việc của bạn:
+
+      1. Kernel: module `overlay` và `br_netfilter`, `net.ipv4.ip_forward=1`, `net.bridge.bridge-nf-call-iptables=1`.
+      2. Swap tắt (kubelet mặc định từ chối chạy khi có swap).
+      3. Container runtime (containerd) dùng **systemd cgroup driver**, cùng driver với kubelet.
+      4. Gói `kubeadm`, `kubelet`, `kubectl` từ `pkgs.k8s.io`, đúng minor version, và `apt-mark hold` để không bị nâng ngoài ý muốn.
+      5. Sau `kubeadm init`: cài CNI, nếu không node sẽ `NotReady` và CoreDNS đứng `Pending`.
+
+      Lab dùng **v1.36** để lab 25 nâng lên **v1.37** (phiên bản của đề thi hiện tại), và CNI **Calico**, vì Calico thực thi NetworkPolicy.
+    prepare: |
+      Đã xong lab 00. Chạy mọi lệnh từ `controlplane`; phần chuẩn bị node làm trên **cả ba** máy.
+    setup: |
+      ensure_answers
+    tasks:
+      - title: Chuẩn bị mọi node
+        body: |
+          Trên `controlplane`, `node01` và `node02`:
+
+          - tắt swap ngay và sau khi reboot
+          - nạp `overlay`, `br_netfilter` lúc khởi động; đặt `net.ipv4.ip_forward = 1` và `net.bridge.bridge-nf-call-iptables = 1`
+          - cài `containerd`, sinh cấu hình mặc định và bật `SystemdCgroup = true`
+          - thêm repo `pkgs.k8s.io` cho **v1.36**, cài `kubelet kubeadm kubectl`, `apt-mark hold` cả ba
+          - trỏ `crictl` tới `unix:///run/containerd/containerd.sock`
+
+          Làm tay trên `controlplane` một lần để hiểu từng bước, rồi có thể chạy `setup/node-prep.sh` trên hai worker.
+        hints:
+          - Tài liệu "Installing kubeadm" và "Container Runtimes" trên kubernetes.io có đủ lệnh để chép.
+          - "`containerd config default | sudo tee /etc/containerd/config.toml` rồi `sed` dòng `SystemdCgroup`."
+          - "Chạy script trên worker: `scp -r ~/cka-labs/setup node01:` rồi `ssh node01 sudo ./setup/node-prep.sh`."
+        solution: |
+          ```bash
+          sudo swapoff -a && sudo sed -i '/\sswap\s/ s/^/#/' /etc/fstab
+          printf 'overlay\nbr_netfilter\n' | sudo tee /etc/modules-load.d/k8s.conf
+          sudo modprobe overlay && sudo modprobe br_netfilter
+          printf 'net.ipv4.ip_forward = 1\nnet.bridge.bridge-nf-call-iptables = 1\nnet.bridge.bridge-nf-call-ip6tables = 1\n' \
+            | sudo tee /etc/sysctl.d/k8s.conf && sudo sysctl --system
+
+          sudo apt-get update && sudo apt-get install -y containerd apt-transport-https ca-certificates curl gpg
+          sudo mkdir -p /etc/containerd
+          containerd config default | sudo tee /etc/containerd/config.toml >/dev/null
+          sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml
+          sudo systemctl restart containerd
+
+          sudo mkdir -p /etc/apt/keyrings
+          curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.36/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+          echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.36/deb/ /' \
+            | sudo tee /etc/apt/sources.list.d/kubernetes.list
+          sudo apt-get update && sudo apt-get install -y kubelet kubeadm kubectl
+          sudo apt-mark hold kubelet kubeadm kubectl
+          sudo crictl config --set runtime-endpoint=unix:///run/containerd/containerd.sock
+          ```
+          Trên worker, nhanh hơn:
+          ```bash
+          for n in node01 node02; do scp -r ~/cka-labs/setup $n: && ssh $n sudo ./setup/node-prep.sh; done
+          ```
+        checks:
+          - - Swap đã tắt trên controlplane và node01
+            - '[[ -z "$(swapon --noheadings)" && -z "$(on_node node01 "swapon --noheadings")" ]]'
+          - - ip_forward = 1 trên controlplane và node01
+            - '[[ "$(sysctl -n net.ipv4.ip_forward)" == 1 && "$(on_node node01 "sysctl -n net.ipv4.ip_forward")" == 1 ]]'
+          - - br_netfilter đã nạp trên node01
+            - |
+              on_node node01 "lsmod | grep -q br_netfilter"
+          - - containerd dùng SystemdCgroup = true trên controlplane và node01
+            - |
+              file_has /etc/containerd/config.toml 'SystemdCgroup = true' && file_has /etc/containerd/config.toml 'SystemdCgroup = true' node01
+          - - kubeadm v1.36 trên controlplane và node01
+            - '[[ "$(kubeadm version -o short)" == v1.36.* && "$(on_node node01 "kubeadm version -o short")" == v1.36.* ]]'
+          - - kubelet, kubeadm, kubectl được hold
+            - '[[ $(apt-mark showhold | grep -cE "^(kubelet|kubeadm|kubectl)$") -eq 3 ]]'
+      - title: Khởi tạo control plane
+        body: |
+          Trên `controlplane`, khởi tạo cluster với:
+
+          - control-plane endpoint `k8s-api:6443`
+          - Pod network CIDR `10.244.0.0/16`
+          - kèm `--upload-certs` để sau này join thêm control plane
+
+          Sau đó cấu hình `kubectl` cho user thường (không phải root).
+        hints:
+          - "`sudo kubeadm init --help` liệt kê mọi cờ."
+          - Lưu lại lệnh `kubeadm join` in ra ở cuối. Mất thì tạo lại bằng `kubeadm token create --print-join-command`.
+        solution: |
+          ```bash
+          sudo kubeadm init --control-plane-endpoint k8s-api:6443 \
+            --pod-network-cidr 10.244.0.0/16 --upload-certs | tee ~/kubeadm-init.log
+          mkdir -p ~/.kube
+          sudo cp /etc/kubernetes/admin.conf ~/.kube/config
+          sudo chown "$(id -u):$(id -g)" ~/.kube/config
+          kubectl get nodes      # NotReady cho tới khi có CNI
+          ```
+        checks:
+          - - kube-apiserver trả lời
+            - |
+              k get --raw=/readyz
+          - - controlPlaneEndpoint là k8s-api:6443
+            - |
+              has "$(val cm kubeadm-config kube-system '{.data.ClusterConfiguration}')" 'controlPlaneEndpoint: k8s-api:6443'
+          - - podSubnet là 10.244.0.0/16
+            - |
+              has "$(val cm kubeadm-config kube-system '{.data.ClusterConfiguration}')" 'podSubnet: 10.244.0.0/16'
+          - - ~/.kube/config thuộc user hiện tại
+            - '[[ -O "$HOME/.kube/config" ]]'
+      - title: Cài CNI Calico
+        body: |
+          Cài Calico **v3.32.2** bằng manifest. Calico tự nhận Pod CIDR từ cấu hình kubeadm. Chờ tới khi node `controlplane` chuyển `Ready` và CoreDNS chạy.
+        hints:
+          - Manifest nằm ở `https://raw.githubusercontent.com/projectcalico/calico/v3.32.2/manifests/calico.yaml`.
+          - "`kubectl get pods -n kube-system -w` để theo dõi."
+        solution: |
+          ```bash
+          kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.32.2/manifests/calico.yaml
+          kubectl -n kube-system rollout status ds/calico-node --timeout=5m
+          kubectl get nodes
+          ```
+        checks:
+          - - DaemonSet calico-node có Pod Ready
+            - '[[ $(val ds calico-node kube-system "{.status.numberReady}") -ge 1 ]]'
+          - - CoreDNS có ít nhất 1 Pod Ready
+            - '[[ $(ready_pods kube-system k8s-app=kube-dns) -ge 1 ]]'
+          - - Node controlplane Ready
+            - |
+              eq "$(val node controlplane - '{.status.conditions[?(@.type=="Ready")].status}')" True
+      - title: Join worker
+        body: |
+          Đưa `node01` (và `node02` nếu có) vào cluster. Mọi node phải `Ready`.
+        hints:
+          - "`kubeadm token create --print-join-command` in ra lệnh join mới."
+          - Chạy lệnh join bằng `sudo` trên worker.
+        solution: |
+          ```bash
+          JOIN=$(kubeadm token create --print-join-command)
+          for n in node01 node02; do ssh $n "sudo $JOIN"; done
+          kubectl get nodes -w
+          ```
+        checks:
+          - - Có ít nhất 2 node
+            - '[[ $(k get nodes --no-headers | wc -l) -ge 2 ]]'
+          - - Mọi node Ready
+            - '! k get nodes --no-headers | grep -v " Ready "'
+          - - node01 chạy kubelet v1.36
+            - '[[ "$(val node node01 - "{.status.nodeInfo.kubeletVersion}")" == v1.36.* ]]'
+      - title: kubectl cho phòng thi
+        body: |
+          Trong `~/.bashrc` của user hiện tại, thêm:
+
+          - `alias k=kubectl` và bash completion cho cả `kubectl` lẫn `k`
+          - `export do="--dry-run=client -o yaml"` và `export now="--force --grace-period 0"`
+
+          Rồi ghi danh sách node kèm phiên bản kubelet vào `/opt/cka/answers/01-nodes.txt`, mỗi dòng `tên phiên-bản`.
+        hints:
+          - "`complete -o default -F __start_kubectl k`"
+          - "`kubectl get nodes -o custom-columns=...` hoặc jsonpath với `range`."
+        solution: |
+          ```bash
+          cat >> ~/.bashrc <<'EOF'
+          source <(kubectl completion bash)
+          alias k=kubectl
+          complete -o default -F __start_kubectl k
+          export do="--dry-run=client -o yaml"
+          export now="--force --grace-period 0"
+          EOF
+          source ~/.bashrc
+          k get nodes -o jsonpath='{range .items[*]}{.metadata.name} {.status.nodeInfo.kubeletVersion}{"\n"}{end}' \
+            > /opt/cka/answers/01-nodes.txt
+          ```
+        checks:
+          - - alias k và completion trong ~/.bashrc
+            - |
+              grep -q 'alias k=kubectl' ~/.bashrc && grep -q '__start_kubectl k' ~/.bashrc
+          - - biến do trong ~/.bashrc
+            - |
+              grep -q 'dry-run=client -o yaml' ~/.bashrc
+          - - File 01-nodes.txt có đủ node và phiên bản
+            - '[[ -s $ANS/01-nodes.txt ]] && for n in $(k get nodes -o name | cut -d/ -f2); do grep -qE "^$n v1\.36\." $ANS/01-nodes.txt || exit 1; done'
+    refs:
+      - [Installing kubeadm, "setup/production-environment/tools/kubeadm/install-kubeadm/"]
+      - [Container runtimes, "setup/production-environment/container-runtimes/"]
+      - [Creating a cluster with kubeadm, "setup/production-environment/tools/kubeadm/create-cluster-kubeadm/"]
+      - [kubectl quick reference, "reference/kubectl/quick-reference/"]

@@ -1,0 +1,401 @@
+- id: 0
+  slug: lab-environment
+  title: Dựng cluster lab và làm quen công cụ
+  level: 0
+  minutes: 30
+  env: any
+  goal: |
+    Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.35 để làm mọi bài lab, cấu hình terminal giống phòng thi và biết cách dùng `./lab`.
+  concepts: |
+    - **kind** (Kubernetes in Docker) dựng mỗi node thành một container. Bên trong là kubeadm, kubelet chạy bằng systemd và control plane dạng static pod, giống hệt cluster thật. Gần như mọi lab chạy trên kind.
+    - **Cluster kubeadm trên máy ảo** (thư mục `env/kubeadm`) chỉ cần cho các bài cài đặt, nâng cấp và HA (lab 01, 30, 32).
+    - `./lab start <id>` dựng tình huống, `./lab check <id>` chấm bài, `./lab reset <id>` dọn dẹp.
+    - Một số bài yêu cầu ghi đáp án ra file. Thư mục đáp án mặc định là `~/cka-answers`; đổi bằng biến `CKA_ANSWERS`.
+    - Trong bài, `$CP`, `$NODE1`, `$NODE2` là tên node control plane và hai worker. Nạp chúng bằng `eval "$(./lab env)"`. Với kind, tên là `cka-control-plane`, `cka-worker`, `cka-worker2`.
+  tasks:
+    - |
+      Cài Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.33+ và kubectl v1.35, rồi dựng cluster:
+      ```bash
+      ./env/kind/up.sh
+      ```
+    - |
+      Cấu hình shell giống phòng thi. Thêm vào `~/.bashrc` rồi `source ~/.bashrc`:
+      ```bash
+      alias k=kubectl
+      source <(kubectl completion bash)
+      complete -o default -F __start_kubectl k
+      export do="--dry-run=client -o yaml"
+      export now="--force --grace-period 0"
+      ```
+    - |
+      Chạy `./lab doctor` và `eval "$(./lab env)"`. Ghi tên node control plane vào `~/cka-answers/00-cp.txt`.
+    - |
+      Ghi phiên bản kubelet của `$NODE1` (ví dụ `v1.35.8`) vào `~/cka-answers/00-kubelet.txt`. Lấy từ `kubectl get node`, không gõ tay.
+    - |
+      Vào shell của `$NODE1` bằng `./lab ssh $NODE1`, chạy `crictl ps` để thấy container trên node, rồi `exit`.
+  hints:
+    - |
+      Lấy phiên bản kubelet
+      `kubectl get node $NODE1 -o jsonpath='{.status.nodeInfo.kubeletVersion}'`
+    - |
+      Máy dùng chip Apple
+      kind tự chọn image arm64. Cần Docker Desktop hoặc OrbStack với ít nhất 4 CPU và 6 GB RAM.
+  solution: |
+    ```bash
+    ./env/kind/up.sh
+    cat >> ~/.bashrc <<'EOF'
+    alias k=kubectl
+    source <(kubectl completion bash)
+    complete -o default -F __start_kubectl k
+    export do="--dry-run=client -o yaml"
+    export now="--force --grace-period 0"
+    EOF
+    source ~/.bashrc
+    eval "$(./lab env)"
+    mkdir -p ~/cka-answers
+    echo "$CP" > ~/cka-answers/00-cp.txt
+    kubectl get node "$NODE1" -o jsonpath='{.status.nodeInfo.kubeletVersion}' > ~/cka-answers/00-kubelet.txt
+    ./lab ssh "$NODE1"     # rồi: crictl ps ; exit
+    ```
+  setup: |
+    answers_dir
+    rm -f "$ANS/00-cp.txt" "$ANS/00-kubelet.txt"
+  verify: |
+    ready=$(kubectl get nodes --no-headers 2>/dev/null | awk '$2=="Ready"' | wc -l)
+    expect_ge "Có ít nhất 3 node Ready" "$ready" 3
+    check "Có control plane và 2 worker" test -n "$NODE2"
+    expect "00-cp.txt đúng tên control plane" "$(tr -d '[:space:]' < "$ANS/00-cp.txt" 2>/dev/null)" "$CP"
+    expect "00-kubelet.txt đúng phiên bản kubelet của NODE1" "$(tr -d '[:space:]' < "$ANS/00-kubelet.txt" 2>/dev/null)" "$(jp node "$NODE1" '{.status.nodeInfo.kubeletVersion}')"
+  cleanup: |
+    rm -f "$ANS/00-cp.txt" "$ANS/00-kubelet.txt"
+  solve: |
+    answers_dir
+    echo "$CP" > "$ANS/00-cp.txt"
+    kubectl get node "$NODE1" -o jsonpath='{.status.nodeInfo.kubeletVersion}' > "$ANS/00-kubelet.txt"
+  docs:
+    - [kind quick start, "https://kind.sigs.k8s.io/docs/user/quick-start/"]
+    - [kubectl cheat sheet, "https://kubernetes.io/docs/reference/kubectl/quick-reference/"]
+
+- id: 1
+  slug: kubeadm-install
+  title: Cài cluster bằng kubeadm trên máy ảo
+  level: 0
+  minutes: 60
+  env: vm
+  test: false
+  competencies: ["arch:1", "arch:2", "arch:6"]
+  goal: |
+    Tự tay dựng cluster kubeadm 3 node: chuẩn bị node, `kubeadm init`, cài CNI, join worker. Đây là năng lực "Prepare underlying infrastructure" và "Create and manage clusters using kubeadm" của đề thi.
+  concepts: |
+    - Mỗi node cần: tắt swap, module `overlay` và `br_netfilter`, sysctl `net.ipv4.ip_forward=1`, container runtime (containerd với `SystemdCgroup = true`), và 3 gói `kubeadm kubelet kubectl` cùng phiên bản, được `apt-mark hold`.
+    - `kubeadm init` sinh chứng chỉ trong `/etc/kubernetes/pki`, kubeconfig trong `/etc/kubernetes/*.conf`, static pod trong `/etc/kubernetes/manifests`, rồi in lệnh `kubeadm join`.
+    - Node chỉ `Ready` khi đã có CNI. Lab này dùng Calico vì nó hỗ trợ NetworkPolicy.
+    - `--control-plane-endpoint k8s-api:6443` đặt tên chung cho API server, để sau này thêm control plane thứ hai (lab 32).
+  setup_note: |
+    Lab này không dùng `./lab start`. Dựng 3 máy ảo trước:
+    ```bash
+    cd env/kubeadm && vagrant up      # cp-1, worker-1, worker-2 với Kubernetes v1.34
+    vagrant ssh cp-1
+    ```
+    `prepare-node.sh` đã chuẩn bị sẵn từng node (swap, module, sysctl, containerd, các gói kube*). Hãy đọc file đó: đề thi có thể yêu cầu bạn tự làm từng bước.
+  tasks:
+    - |
+      Trên `cp-1`, kiểm tra node đã sẵn sàng: `swapon --show` trống, `sysctl net.ipv4.ip_forward` bằng 1, `systemctl is-active containerd` là active, `kubeadm version`.
+    - |
+      Khởi tạo control plane với: endpoint `k8s-api:6443`, pod CIDR `10.244.0.0/16`, địa chỉ quảng bá `192.168.56.10`, và tải cert lên để join control plane sau này.
+    - |
+      Cấu hình kubectl cho user `vagrant`.
+    - |
+      Cài Calico v3.32.2 với pool IP `10.244.0.0/16`.
+    - |
+      Join `worker-1` và `worker-2`. Chờ cả 3 node `Ready`.
+    - |
+      Clone repo này trên `cp-1` và chạy `./lab check 1`.
+  hints:
+    - |
+      Lệnh init
+      `kubeadm init --control-plane-endpoint ... --pod-network-cidr ... --apiserver-advertise-address ... --upload-certs`
+    - |
+      Mất lệnh join?
+      `kubeadm token create --print-join-command`
+    - |
+      Calico manifest
+      Tải `calico.yaml`, bỏ comment biến `CALICO_IPV4POOL_CIDR` và đặt giá trị `10.244.0.0/16` trước khi apply.
+  solution: |
+    ```bash
+    # trên cp-1
+    sudo kubeadm init --control-plane-endpoint k8s-api:6443 \
+      --pod-network-cidr 10.244.0.0/16 --apiserver-advertise-address 192.168.56.10 --upload-certs
+    mkdir -p $HOME/.kube
+    sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
+    sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+    curl -LO https://raw.githubusercontent.com/projectcalico/calico/v3.32.2/manifests/calico.yaml
+    sed -i 's|# - name: CALICO_IPV4POOL_CIDR|- name: CALICO_IPV4POOL_CIDR|; s|#   value: "192.168.0.0/16"|  value: "10.244.0.0/16"|' calico.yaml
+    kubectl apply -f calico.yaml
+
+    kubeadm token create --print-join-command
+    # chạy lệnh in ra trên worker-1 và worker-2 với sudo:
+    ssh worker-1 sudo kubeadm join k8s-api:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+    ssh worker-2 sudo kubeadm join k8s-api:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
+    kubectl get nodes -w
+    ```
+    Nếu node đứng `NotReady`: `kubectl -n kube-system get pods -l k8s-app=calico-node` và `journalctl -u kubelet` trên node đó.
+  setup: |
+    true
+  verify: |
+    ready=$(kubectl get nodes --no-headers 2>/dev/null | awk '$2=="Ready"' | wc -l)
+    expect_ge "3 node Ready" "$ready" 3
+    for c in kube-apiserver etcd kube-scheduler kube-controller-manager; do
+      expect "static pod $c Running trên $CP" "$(jp pod "$c-$CP" -n kube-system '{.status.phase}')" "Running"
+    done
+    expect_match "Phiên bản kubelet là v1.34 hoặc mới hơn" "$(jp node "$CP" '{.status.nodeInfo.kubeletVersion}')" '^v1\.3[4-9]'
+    expect "podCIDR của cluster là 10.244.0.0/16" "$(node_exec "$CP" "grep -o 'cluster-cidr=[^ ]*' /etc/kubernetes/manifests/kube-controller-manager.yaml | cut -d= -f2")" "10.244.0.0/16"
+    expect "API endpoint là k8s-api:6443" "$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')" "https://k8s-api:6443"
+    check "CoreDNS sẵn sàng" kubectl -n kube-system rollout status deploy/coredns --timeout=5s
+  cleanup: |
+    true
+  docs:
+    - [Creating a cluster with kubeadm, "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/create-cluster-kubeadm/"]
+    - [Container runtimes, "https://kubernetes.io/docs/setup/production-environment/container-runtimes/"]
+
+- id: 2
+  slug: kubectl-api
+  title: kubectl, namespace, context và Kubernetes API
+  level: 1
+  minutes: 20
+  goal: |
+    Thao tác nhanh với namespace và context, tra cứu API bằng `api-resources` và `explain`, đọc trạng thái cluster mà không cần mở tài liệu.
+  concepts: |
+    - Mọi object có `apiVersion`, `kind`, `metadata`, `spec`, `status`. Deployment thuộc group `apps`, version `v1`; Pod thuộc core group nên chỉ ghi `v1`.
+    - Một số resource thuộc namespace (Pod, Service), một số thuộc cả cluster (Node, PersistentVolume, ClusterRole). `kubectl api-resources --namespaced=false` liệt kê nhóm sau.
+    - Context = cluster + user + namespace mặc định. Mỗi câu thi bắt đầu bằng `kubectl config use-context …`.
+    - `kubectl explain pod.spec.containers --recursive` là cách nhanh nhất để nhớ tên field.
+  tasks:
+    - |
+      Tạo namespace `lab02` có label `team=blue`.
+    - |
+      Tạo context `lab02-ctx` dùng cùng cluster và user với context hiện tại, namespace mặc định `lab02`. **Không** chuyển sang context đó.
+    - |
+      Ghi `apiVersion` của CronJob (ví dụ dạng `group/version`) vào `~/cka-answers/02-cronjob-api.txt`.
+    - |
+      Ghi **số lượng** loại resource cluster-scoped mà cluster hỗ trợ vào `~/cka-answers/02-cluster-scoped.txt`.
+    - |
+      Namespace `lab02-apps` (đã tạo sẵn) có nhiều Pod. Ghi tên Pod có label `tier=db` vào `~/cka-answers/02-db-pod.txt`, và tên node nó đang chạy vào `~/cka-answers/02-db-node.txt`.
+  hints:
+    - |
+      Tạo context
+      `kubectl config set-context lab02-ctx --cluster=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}') --user=... --namespace=lab02`
+    - |
+      Đếm resource
+      `kubectl api-resources --namespaced=false --no-headers | wc -l`
+  solution: |
+    ```bash
+    kubectl create ns lab02
+    kubectl label ns lab02 team=blue
+
+    CL=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
+    US=$(kubectl config view --minify -o jsonpath='{.users[0].name}')
+    kubectl config set-context lab02-ctx --cluster="$CL" --user="$US" --namespace=lab02
+
+    kubectl api-resources | grep -i cronjob          # cronjobs  cj  batch/v1  true  CronJob
+    echo batch/v1 > ~/cka-answers/02-cronjob-api.txt
+
+    kubectl api-resources --namespaced=false --no-headers | wc -l > ~/cka-answers/02-cluster-scoped.txt
+
+    kubectl get pods -n lab02-apps -l tier=db -o wide
+    kubectl get pods -n lab02-apps -l tier=db -o jsonpath='{.items[0].metadata.name}' > ~/cka-answers/02-db-pod.txt
+    kubectl get pods -n lab02-apps -l tier=db -o jsonpath='{.items[0].spec.nodeName}' > ~/cka-answers/02-db-node.txt
+    ```
+  setup: |
+    answers_dir
+    rm -f "$ANS"/02-*.txt
+    kubectl delete ns lab02 --ignore-not-found >/dev/null
+    kubectl config delete-context lab02-ctx >/dev/null 2>&1 || true
+    ns_fresh lab02-apps
+    for p in web:front api:back cache:back; do
+      kubectl run "${p%%:*}-$RANDOM" -n lab02-apps --image=nginx:1.27 --labels="tier=${p##*:}" >/dev/null
+    done
+    kubectl run "pg-$RANDOM" -n lab02-apps --image=busybox:1.36 --labels=tier=db --command -- sleep 3600 >/dev/null
+    kubectl wait --for=condition=Ready pod --all -n lab02-apps --timeout=120s >/dev/null
+  verify: |
+    expect "Namespace lab02 có label team=blue" "$(jp ns lab02 '{.metadata.labels.team}')" "blue"
+    expect "Context lab02-ctx có namespace lab02" "$(kubectl config view -o jsonpath='{.contexts[?(@.name=="lab02-ctx")].context.namespace}')" "lab02"
+    cur=$(kubectl config current-context)
+    check "Context hiện tại không phải lab02-ctx" test "$cur" != "lab02-ctx"
+    expect "02-cronjob-api.txt" "$(tr -d '[:space:]' < "$ANS/02-cronjob-api.txt" 2>/dev/null)" "batch/v1"
+    expect "02-cluster-scoped.txt" "$(tr -d '[:space:]' < "$ANS/02-cluster-scoped.txt" 2>/dev/null)" "$(kubectl api-resources --namespaced=false --no-headers 2>/dev/null | wc -l | tr -d ' ')"
+    expect "02-db-pod.txt" "$(tr -d '[:space:]' < "$ANS/02-db-pod.txt" 2>/dev/null)" "$(jp pods -n lab02-apps -l tier=db '{.items[0].metadata.name}')"
+    expect "02-db-node.txt" "$(tr -d '[:space:]' < "$ANS/02-db-node.txt" 2>/dev/null)" "$(jp pods -n lab02-apps -l tier=db '{.items[0].spec.nodeName}')"
+  cleanup: |
+    kubectl delete ns lab02 lab02-apps --ignore-not-found --wait=false >/dev/null
+    kubectl config delete-context lab02-ctx >/dev/null 2>&1 || true
+    rm -f "$ANS"/02-*.txt
+  solve: |
+    kubectl create ns lab02
+    kubectl label ns lab02 team=blue
+    CL=$(kubectl config view --minify -o jsonpath='{.clusters[0].name}')
+    US=$(kubectl config view --minify -o jsonpath='{.users[0].name}')
+    kubectl config set-context lab02-ctx --cluster="$CL" --user="$US" --namespace=lab02
+    echo batch/v1 > "$ANS/02-cronjob-api.txt"
+    kubectl api-resources --namespaced=false --no-headers | wc -l > "$ANS/02-cluster-scoped.txt"
+    kubectl get pods -n lab02-apps -l tier=db -o jsonpath='{.items[0].metadata.name}' > "$ANS/02-db-pod.txt"
+    kubectl get pods -n lab02-apps -l tier=db -o jsonpath='{.items[0].spec.nodeName}' > "$ANS/02-db-node.txt"
+  docs:
+    - [Namespaces, "https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/"]
+    - [Organizing access with kubeconfig, "https://kubernetes.io/docs/concepts/configuration/organize-cluster-access-kubeconfig/"]
+
+- id: 3
+  slug: pods
+  title: Pod, label, log và exec
+  level: 1
+  minutes: 25
+  competencies: ["trouble:3"]
+  goal: |
+    Tạo và sửa Pod thật nhanh bằng lệnh imperative, đọc log, chạy lệnh trong container, và biết field nào của Pod đang chạy thì sửa được.
+  concepts: |
+    - `kubectl run` tạo Pod; `--labels`, `--env`, `--port`, `--command -- …` bao phủ phần lớn yêu cầu.
+    - Phần lớn spec của Pod đang chạy là bất biến. Sửa được tại chỗ: `image` của container, `activeDeadlineSeconds`, `tolerations` (chỉ thêm), label và annotation.
+    - Field khác (command, env, resources…) phải xóa rồi tạo lại: `kubectl get pod x -o yaml > x.yaml`, sửa, `kubectl replace --force -f x.yaml`.
+    - `kubectl logs` đọc stdout/stderr; `--previous` cho lần chạy trước khi container bị restart; `-c` chọn container.
+  tasks:
+    - |
+      Trong namespace `lab03`, tạo Pod `web` image `nginx:1.27`, label `app=web` và `tier=front`, khai báo containerPort 80.
+    - |
+      Tạo Pod `worker` image `busybox:1.36`, biến môi trường `MODE=lab`, chạy lệnh `sh -c 'echo started; sleep 3600'`.
+    - |
+      Pod `noisy` đang ghi log. Ghi mọi dòng chứa `ERROR` trong log của nó vào `~/cka-answers/03-errors.txt`.
+    - |
+      Pod `broken` đứng `ImagePullBackOff`. Sửa nó chạy được với image `nginx:1.27` mà **không xóa Pod**.
+    - |
+      Ghi hostname bên trong container của Pod `web` vào `~/cka-answers/03-hostname.txt` (lấy bằng `kubectl exec`).
+    - |
+      Xóa ngay Pod `old` (không chờ grace period).
+  hints:
+    - |
+      Đặt namespace mặc định cho đỡ gõ
+      `kubectl config set-context --current --namespace=lab03` (nhớ đổi lại `default` sau lab).
+    - |
+      Sửa image tại chỗ
+      `kubectl set image pod/broken <tên-container>=nginx:1.27`. Tên container xem bằng `kubectl get pod broken -o jsonpath='{.spec.containers[*].name}'`.
+  solution: |
+    ```bash
+    kubectl run web -n lab03 --image=nginx:1.27 --labels=app=web,tier=front --port=80
+    kubectl run worker -n lab03 --image=busybox:1.36 --env=MODE=lab --command -- sh -c 'echo started; sleep 3600'
+    kubectl logs noisy -n lab03 | grep ERROR > ~/cka-answers/03-errors.txt
+    kubectl get pod broken -n lab03 -o jsonpath='{.spec.containers[*].name}'   # app
+    kubectl set image pod/broken -n lab03 app=nginx:1.27
+    kubectl exec web -n lab03 -- hostname > ~/cka-answers/03-hostname.txt
+    kubectl delete pod old -n lab03 --force --grace-period 0
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS"/03-*.txt
+    ns_fresh lab03
+    kubectl run noisy -n lab03 --image=busybox:1.36 --command -- sh -c 'i=0; while [ $i -lt 6 ]; do echo "INFO request $i ok"; [ $((i%2)) -eq 0 ] && echo "ERROR timeout calling payments ($i)"; i=$((i+1)); done; sleep 3600' >/dev/null
+    kubectl apply -n lab03 -f - >/dev/null <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: broken}
+    spec:
+      containers:
+      - {name: app, image: "nginx:1.27-does-not-exist"}
+    EOF
+    kubectl run old -n lab03 --image=busybox:1.36 --command -- sh -c 'trap "" TERM; sleep 3600' >/dev/null
+    kubectl wait --for=condition=Ready pod/noisy pod/old -n lab03 --timeout=90s >/dev/null
+    kubectl create configmap lab-state -n lab03 --from-literal=broken-uid="$(jp pod broken -n lab03 '{.metadata.uid}')" >/dev/null
+  verify: |
+    expect "Pod web dùng nginx:1.27" "$(jp pod web -n lab03 '{.spec.containers[0].image}')" "nginx:1.27"
+    expect "Pod web có label app=web" "$(jp pod web -n lab03 '{.metadata.labels.app}')" "web"
+    expect "Pod web có label tier=front" "$(jp pod web -n lab03 '{.metadata.labels.tier}')" "front"
+    expect "Pod web khai báo containerPort 80" "$(jp pod web -n lab03 '{.spec.containers[0].ports[0].containerPort}')" "80"
+    expect "Pod worker có MODE=lab" "$(jp pod worker -n lab03 '{.spec.containers[0].env[?(@.name=="MODE")].value}')" "lab"
+    expect_match "Pod worker chạy lệnh đúng" "$(jp pod worker -n lab03 '{.spec.containers[0].command} {.spec.containers[0].args}')" "echo started; sleep 3600"
+    expect "03-errors.txt có đúng 3 dòng ERROR" "$(grep -c ERROR "$ANS/03-errors.txt" 2>/dev/null)/$(wc -l < "$ANS/03-errors.txt" 2>/dev/null | tr -d ' ')" "3/3"
+    expect "Pod broken dùng nginx:1.27" "$(jp pod broken -n lab03 '{.spec.containers[0].image}')" "nginx:1.27"
+    expect "Pod broken Running" "$(jp pod broken -n lab03 '{.status.phase}')" "Running"
+    expect "Pod broken là Pod cũ (không xóa rồi tạo lại)" "$(jp pod broken -n lab03 '{.metadata.uid}')" "$(jp cm lab-state -n lab03 '{.data.broken-uid}')"
+    expect "03-hostname.txt" "$(tr -d '[:space:]' < "$ANS/03-hostname.txt" 2>/dev/null)" "web"
+    check "Pod old đã bị xóa" bash -c '! kubectl get pod old -n lab03 >/dev/null 2>&1'
+  cleanup: |
+    kubectl delete ns lab03 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS"/03-*.txt
+  solve: |
+    kubectl run web -n lab03 --image=nginx:1.27 --labels=app=web,tier=front --port=80
+    kubectl run worker -n lab03 --image=busybox:1.36 --env=MODE=lab --command -- sh -c 'echo started; sleep 3600'
+    kubectl logs noisy -n lab03 | grep ERROR > "$ANS/03-errors.txt"
+    kubectl set image pod/broken -n lab03 app=nginx:1.27
+    kubectl wait --for=condition=Ready pod/web pod/broken -n lab03 --timeout=90s
+    kubectl exec web -n lab03 -- hostname > "$ANS/03-hostname.txt"
+    kubectl delete pod old -n lab03 --force --grace-period 0
+  docs:
+    - [Pods, "https://kubernetes.io/docs/concepts/workloads/pods/"]
+    - [kubectl run, "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_run/"]
+
+- id: 4
+  slug: yaml-jsonpath
+  title: Sinh YAML nhanh và trích xuất bằng jsonpath
+  level: 1
+  minutes: 25
+  competencies: ["trouble:2"]
+  goal: |
+    Viết YAML bằng `--dry-run=client -o yaml` thay vì gõ tay, và trích đúng dữ liệu đề yêu cầu bằng jsonpath, custom-columns, sort-by.
+  concepts: |
+    - `kubectl create deploy … $do > file.yaml` cho khung YAML đúng cú pháp; chỉ cần sửa phần còn thiếu.
+    - jsonpath: `{.items[*].metadata.name}` lấy danh sách; `{range .items[*]}{.a} {.b}{"\n"}{end}` in từng dòng; `[?(@.type=="InternalIP")]` lọc phần tử.
+    - `-o custom-columns=NAME:.metadata.name,IMAGE:.spec.containers[*].image` in bảng theo ý muốn; `--sort-by=.metadata.name` sắp xếp.
+  tasks:
+    - |
+      Sinh YAML Deployment `api` (image `nginx:1.27`, 2 replica) bằng dry-run, lưu vào `~/cka-answers/04-api.yaml`. Sửa file để Pod template có thêm label `tier=backend`, rồi apply vào namespace `lab04`.
+    - |
+      Ghi vào `~/cka-answers/04-pod-ips.txt` mỗi dòng một Pod trong `lab04` theo dạng `<tên> <podIP>`.
+    - |
+      Ghi InternalIP của mọi node vào `~/cka-answers/04-node-ips.txt`, cách nhau bởi dấu cách, trên một dòng.
+    - |
+      Ghi vào `~/cka-answers/04-images.txt` bảng hai cột `POD` và `IMAGE` của các Pod trong `lab04`, sắp xếp theo tên Pod.
+  hints:
+    - |
+      Một dòng cho mỗi Pod
+      `kubectl get pods -n lab04 -o jsonpath='{range .items[*]}{.metadata.name} {.status.podIP}{"\n"}{end}'`
+    - |
+      Lọc theo type
+      `{.items[*].status.addresses[?(@.type=="InternalIP")].address}`
+  solution: |
+    ```bash
+    kubectl create deploy api --image=nginx:1.27 --replicas=2 $do > ~/cka-answers/04-api.yaml
+    # sửa file: dưới spec.template.metadata.labels thêm  tier: backend
+    kubectl apply -n lab04 -f ~/cka-answers/04-api.yaml
+    kubectl rollout status deploy/api -n lab04
+
+    kubectl get pods -n lab04 -o jsonpath='{range .items[*]}{.metadata.name} {.status.podIP}{"\n"}{end}' > ~/cka-answers/04-pod-ips.txt
+    kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}' > ~/cka-answers/04-node-ips.txt
+    kubectl get pods -n lab04 --sort-by=.metadata.name -o custom-columns=POD:.metadata.name,IMAGE:.spec.containers[*].image > ~/cka-answers/04-images.txt
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS"/04-*
+    ns_fresh lab04
+    kubectl run cache -n lab04 --image=busybox:1.36 --command -- sleep 3600 >/dev/null
+  verify: |
+    check "04-api.yaml tồn tại" test -s "$ANS/04-api.yaml"
+    check "04-api.yaml là Deployment api" grep -q 'name: api' "$ANS/04-api.yaml"
+    expect "Deployment api có 2 replica sẵn sàng" "$(jp deploy api -n lab04 '{.status.readyReplicas}')" "2"
+    expect "Pod template có tier=backend" "$(jp deploy api -n lab04 '{.spec.template.metadata.labels.tier}')" "backend"
+    want=$(kubectl get pods -n lab04 -o jsonpath='{range .items[*]}{.metadata.name} {.status.podIP}{"\n"}{end}' 2>/dev/null | sort)
+    expect "04-pod-ips.txt đúng" "$(sort "$ANS/04-pod-ips.txt" 2>/dev/null | sed '/^$/d')" "$(echo "$want" | sed '/^$/d')"
+    want=$(jp nodes '{.items[*].status.addresses[?(@.type=="InternalIP")].address}' | tr ' ' '\n' | sort | xargs)
+    expect "04-node-ips.txt đúng" "$(tr ' ' '\n' < "$ANS/04-node-ips.txt" 2>/dev/null | sed '/^$/d' | sort | xargs)" "$want"
+    want=$(kubectl get pods -n lab04 --sort-by=.metadata.name -o custom-columns=POD:.metadata.name,IMAGE:.spec.containers[*].image 2>/dev/null | awk '{print $1,$2}')
+    expect "04-images.txt đúng nội dung và thứ tự" "$(awk '{print $1,$2}' "$ANS/04-images.txt" 2>/dev/null)" "$want"
+  cleanup: |
+    kubectl delete ns lab04 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS"/04-*
+  solve: |
+    kubectl create deploy api --image=nginx:1.27 --replicas=2 --dry-run=client -o yaml > "$ANS/04-api.yaml"
+    sed -i '0,/      labels:/{s/      labels:/      labels:\n        tier: backend/}' "$ANS/04-api.yaml"
+    kubectl apply -n lab04 -f "$ANS/04-api.yaml"
+    kubectl rollout status deploy/api -n lab04 --timeout=90s
+    kubectl get pods -n lab04 -o jsonpath='{range .items[*]}{.metadata.name} {.status.podIP}{"\n"}{end}' > "$ANS/04-pod-ips.txt"
+    kubectl get nodes -o jsonpath='{.items[*].status.addresses[?(@.type=="InternalIP")].address}' > "$ANS/04-node-ips.txt"
+    kubectl get pods -n lab04 --sort-by=.metadata.name -o custom-columns=POD:.metadata.name,IMAGE:.spec.containers[*].image > "$ANS/04-images.txt"
+  docs:
+    - [JSONPath support, "https://kubernetes.io/docs/reference/kubectl/jsonpath/"]
+    - [kubectl quick reference, "https://kubernetes.io/docs/reference/kubectl/quick-reference/"]

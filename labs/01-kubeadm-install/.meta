@@ -1,0 +1,4 @@
+ID=01
+LEVEL=0
+ENV=vm
+TITLE="Cài cluster bằng kubeadm trên máy ảo"

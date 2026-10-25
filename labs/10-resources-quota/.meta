@@ -1,0 +1,4 @@
+ID=10
+LEVEL=2
+ENV=any
+TITLE="Requests, limits, LimitRange và ResourceQuota"

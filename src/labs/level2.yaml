@@ -1,0 +1,799 @@
+- id: 5
+  slug: deployment-rollout
+  title: "Deployment: scale, rolling update, rollback"
+  level: 2
+  minutes: 30
+  competencies: ["work:0"]
+  goal: |
+    Điều khiển vòng đời một Deployment: scale, chỉnh chiến lược cập nhật, nâng image có ghi chú, nhận ra rollout bị kẹt và quay lại phiên bản tốt.
+  concepts: |
+    - Deployment quản lý ReplicaSet; mỗi lần đổi **Pod template** (image, env…) tạo ReplicaSet mới. Đổi `replicas` thì không.
+    - `RollingUpdate` với `maxSurge` (được tạo dư bao nhiêu Pod) và `maxUnavailable` (được thiếu bao nhiêu Pod sẵn sàng). `maxUnavailable: 0` là không gián đoạn. `Recreate` xóa hết Pod cũ rồi mới tạo mới.
+    - `kubectl rollout history` đọc annotation `kubernetes.io/change-cause` của từng ReplicaSet. `rollout undo --to-revision=N` quay về một revision; revision đó được đánh số mới.
+    - Image sai thì Pod mới đứng `ImagePullBackOff`. Với `maxUnavailable: 0`, Pod cũ vẫn phục vụ: rollout kẹt nhưng không sập dịch vụ.
+  tasks:
+    - |
+      Scale Deployment `shop` trong namespace `lab05` lên **4** replica.
+    - |
+      Đặt chiến lược cho `shop`: `RollingUpdate`, `maxSurge: 1`, `maxUnavailable: 0`, và giữ tối đa **5** revision.
+    - |
+      Nâng `shop` lên `nginx:1.28` với change-cause `nang cap nginx 1.28`. Chờ rollout xong.
+    - |
+      Một đồng nghiệp đẩy `nginx:1.99` (không tồn tại) lên `shop`. Hãy làm điều đó, quan sát rollout kẹt, rồi **rollback** về revision chạy `nginx:1.28`.
+    - |
+      Deployment `legacy` không được phép chạy hai phiên bản cùng lúc. Đổi chiến lược của nó sang `Recreate`.
+  hints:
+    - |
+      Ghi change-cause
+      Sau `kubectl set image`, chạy `kubectl annotate deploy/shop kubernetes.io/change-cause='…' --overwrite`.
+    - |
+      Đổi sang Recreate
+      Khi chuyển sang `Recreate` phải xóa luôn khối `rollingUpdate`, nếu không API báo lỗi. `kubectl edit` hoặc patch với `"rollingUpdate": null`.
+  solution: |
+    ```bash
+    kubectl scale deploy shop -n lab05 --replicas=4
+    kubectl patch deploy shop -n lab05 -p '{"spec":{"revisionHistoryLimit":5,"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
+
+    kubectl set image deploy/shop -n lab05 nginx=nginx:1.28
+    kubectl annotate deploy/shop -n lab05 kubernetes.io/change-cause='nang cap nginx 1.28' --overwrite
+    kubectl rollout status deploy/shop -n lab05
+
+    kubectl set image deploy/shop -n lab05 nginx=nginx:1.99
+    kubectl annotate deploy/shop -n lab05 kubernetes.io/change-cause='thu nginx 1.99' --overwrite
+    kubectl rollout status deploy/shop -n lab05 --timeout=30s     # kẹt
+    kubectl get pods -n lab05                                     # 1 Pod ImagePullBackOff, 4 Pod cũ vẫn chạy
+    kubectl rollout history deploy/shop -n lab05
+    kubectl rollout undo deploy/shop -n lab05                     # về revision trước (1.28)
+
+    kubectl patch deploy legacy -n lab05 -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+    ```
+  setup: |
+    ns_fresh lab05
+    kubectl create deploy shop -n lab05 --image=nginx:1.27 --replicas=2 >/dev/null
+    kubectl annotate deploy/shop -n lab05 kubernetes.io/change-cause='ban dau nginx 1.27' >/dev/null
+    kubectl create deploy legacy -n lab05 --image=nginx:1.27 >/dev/null
+    kubectl rollout status deploy/shop -n lab05 --timeout=120s >/dev/null
+  verify: |
+    expect "shop có 4 replica" "$(jp deploy shop -n lab05 '{.spec.replicas}')" "4"
+    expect "shop maxSurge = 1" "$(jp deploy shop -n lab05 '{.spec.strategy.rollingUpdate.maxSurge}')" "1"
+    expect "shop maxUnavailable = 0" "$(jp deploy shop -n lab05 '{.spec.strategy.rollingUpdate.maxUnavailable}')" "0"
+    expect "shop revisionHistoryLimit = 5" "$(jp deploy shop -n lab05 '{.spec.revisionHistoryLimit}')" "5"
+    expect "shop đang chạy nginx:1.28" "$(jp deploy shop -n lab05 '{.spec.template.spec.containers[0].image}')" "nginx:1.28"
+    expect "shop 4/4 Pod sẵn sàng" "$(jp deploy shop -n lab05 '{.status.readyReplicas}')/$(jp deploy shop -n lab05 '{.status.updatedReplicas}')" "4/4"
+    hist=$(kubectl rollout history deploy/shop -n lab05 2>/dev/null)
+    check "History có change-cause 'nang cap nginx 1.28'" grep -q 'nang cap nginx 1.28' <<<"$hist"
+    check "Đã thử nginx:1.99 (có ReplicaSet chạy 1.99)" bash -c "kubectl get rs -n lab05 -l app=shop -o jsonpath='{.items[*].spec.template.spec.containers[0].image}' | grep -q 'nginx:1.99'"
+    expect "legacy dùng Recreate" "$(jp deploy legacy -n lab05 '{.spec.strategy.type}')" "Recreate"
+  cleanup: |
+    kubectl delete ns lab05 --ignore-not-found --wait=false >/dev/null
+  solve: |
+    kubectl scale deploy shop -n lab05 --replicas=4
+    kubectl patch deploy shop -n lab05 -p '{"spec":{"revisionHistoryLimit":5,"strategy":{"type":"RollingUpdate","rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
+    kubectl set image deploy/shop -n lab05 nginx=nginx:1.28
+    kubectl annotate deploy/shop -n lab05 kubernetes.io/change-cause='nang cap nginx 1.28' --overwrite
+    kubectl rollout status deploy/shop -n lab05 --timeout=180s
+    kubectl set image deploy/shop -n lab05 nginx=nginx:1.99
+    kubectl annotate deploy/shop -n lab05 kubernetes.io/change-cause='thu nginx 1.99' --overwrite
+    kubectl rollout status deploy/shop -n lab05 --timeout=20s || true
+    kubectl rollout undo deploy/shop -n lab05
+    kubectl rollout status deploy/shop -n lab05 --timeout=180s
+    kubectl patch deploy legacy -n lab05 -p '{"spec":{"strategy":{"type":"Recreate","rollingUpdate":null}}}'
+  docs:
+    - [Deployments, "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"]
+    - [kubectl rollout, "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_rollout/"]
+
+- id: 6
+  slug: configmap-secret
+  title: ConfigMap và Secret
+  level: 2
+  minutes: 30
+  competencies: ["work:1"]
+  goal: |
+    Tách cấu hình khỏi image: tạo ConfigMap và Secret từ literal và file, đưa vào container qua biến môi trường và volume, đọc giá trị Secret có sẵn.
+  concepts: |
+    - `envFrom` nạp mọi key của ConfigMap/Secret thành biến môi trường; `env[].valueFrom.secretKeyRef` lấy một key.
+    - ConfigMap gắn qua volume: mỗi key thành một file. File tự cập nhật khi ConfigMap đổi (trừ khi dùng `subPath`); biến môi trường thì **không**, phải restart Pod.
+    - Secret chỉ được **base64**, không mã hóa. Đọc: `kubectl get secret x -o jsonpath='{.data.key}' | base64 -d`.
+  tasks:
+    - |
+      Trong namespace `lab06`, tạo ConfigMap `app-config` với `APP_MODE=production` và `APP_PORT=8080`.
+    - |
+      Tạo ConfigMap `app-files` từ file `~/cka-answers/06-app.properties` (setup đã tạo sẵn), key là `app.properties`.
+    - |
+      Tạo Secret `db-cred` với `username=admin` và `password=S3cr3t-pass`.
+    - |
+      Tạo Deployment `app` (image `busybox:1.36`, lệnh `sleep 3600`) sao cho container có:
+      mọi key của `app-config` thành biến môi trường; biến `DB_PASSWORD` lấy từ key `password` của `db-cred`; ConfigMap `app-files` gắn chỉ đọc tại `/etc/app`.
+    - |
+      Secret `legacy-token` có sẵn. Giải mã key `token` và ghi giá trị vào `~/cka-answers/06-token.txt`.
+  hints:
+    - |
+      Khung YAML
+      `kubectl create deploy app --image=busybox:1.36 $do -- sleep 3600 > app.yaml` rồi thêm `envFrom`, `env`, `volumes`, `volumeMounts`.
+    - |
+      Thêm biến từ Secret bằng lệnh
+      `kubectl set env deploy/app --from=secret/db-cred --keys=password --prefix=DB_` tạo `DB_PASSWORD`.
+  solution: |
+    ```bash
+    kubectl create cm app-config -n lab06 --from-literal=APP_MODE=production --from-literal=APP_PORT=8080
+    kubectl create cm app-files -n lab06 --from-file=app.properties=$HOME/cka-answers/06-app.properties
+    kubectl create secret generic db-cred -n lab06 --from-literal=username=admin --from-literal=password=S3cr3t-pass
+    kubectl get secret legacy-token -n lab06 -o jsonpath='{.data.token}' | base64 -d > ~/cka-answers/06-token.txt
+    ```
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: app, namespace: lab06}
+    spec:
+      selector: {matchLabels: {app: app}}
+      template:
+        metadata: {labels: {app: app}}
+        spec:
+          containers:
+          - name: busybox
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+            envFrom:
+            - configMapRef: {name: app-config}
+            env:
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: db-cred, key: password}}
+            volumeMounts:
+            - {name: files, mountPath: /etc/app, readOnly: true}
+          volumes:
+          - name: files
+            configMap: {name: app-files}
+    ```
+    Kiểm tra: `kubectl exec -n lab06 deploy/app -- sh -c 'env | grep -E "APP_|DB_"; cat /etc/app/app.properties'`
+  setup: |
+    answers_dir; rm -f "$ANS"/06-token.txt
+    ns_fresh lab06
+    printf 'feature.search=true\ncache.ttl=300\n' > "$ANS/06-app.properties"
+    kubectl create secret generic legacy-token -n lab06 --from-literal=token="tok-$RANDOM$RANDOM" >/dev/null
+  verify: |
+    expect "app-config APP_MODE" "$(jp cm app-config -n lab06 '{.data.APP_MODE}')" "production"
+    expect "app-config APP_PORT" "$(jp cm app-config -n lab06 '{.data.APP_PORT}')" "8080"
+    check "app-files có key app.properties" bash -c "kubectl get cm app-files -n lab06 -o jsonpath='{.data.app\.properties}' | grep -q cache.ttl=300"
+    expect "db-cred password" "$(jp secret db-cred -n lab06 '{.data.password}' | base64 -d 2>/dev/null)" "S3cr3t-pass"
+    expect "db-cred username" "$(jp secret db-cred -n lab06 '{.data.username}' | base64 -d 2>/dev/null)" "admin"
+    expect "Deployment app sẵn sàng" "$(jp deploy app -n lab06 '{.status.readyReplicas}')" "1"
+    envs=$(kubectl exec -n lab06 deploy/app -- env 2>/dev/null)
+    check "Container có APP_MODE=production" grep -qx 'APP_MODE=production' <<<"$envs"
+    check "Container có DB_PASSWORD đúng" grep -qx 'DB_PASSWORD=S3cr3t-pass' <<<"$envs"
+    check "/etc/app/app.properties đọc được trong container" bash -c "kubectl exec -n lab06 deploy/app -- cat /etc/app/app.properties | grep -q feature.search"
+    expect "Volume gắn chỉ đọc" "$(jp deploy app -n lab06 '{.spec.template.spec.containers[0].volumeMounts[?(@.mountPath=="/etc/app")].readOnly}')" "true"
+    expect "06-token.txt" "$(ans 06-token.txt)" "$(jp secret legacy-token -n lab06 '{.data.token}' | base64 -d 2>/dev/null)"
+  cleanup: |
+    kubectl delete ns lab06 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS"/06-*
+  solve: |
+    kubectl create cm app-config -n lab06 --from-literal=APP_MODE=production --from-literal=APP_PORT=8080
+    kubectl create cm app-files -n lab06 --from-file=app.properties="$ANS/06-app.properties"
+    kubectl create secret generic db-cred -n lab06 --from-literal=username=admin --from-literal=password=S3cr3t-pass
+    kubectl get secret legacy-token -n lab06 -o jsonpath='{.data.token}' | base64 -d > "$ANS/06-token.txt"
+    kubectl apply -f - <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: app, namespace: lab06}
+    spec:
+      selector: {matchLabels: {app: app}}
+      template:
+        metadata: {labels: {app: app}}
+        spec:
+          containers:
+          - name: busybox
+            image: busybox:1.36
+            command: ["sleep", "3600"]
+            envFrom:
+            - configMapRef: {name: app-config}
+            env:
+            - name: DB_PASSWORD
+              valueFrom: {secretKeyRef: {name: db-cred, key: password}}
+            volumeMounts:
+            - {name: files, mountPath: /etc/app, readOnly: true}
+          volumes:
+          - name: files
+            configMap: {name: app-files}
+    EOF
+    kubectl rollout status deploy/app -n lab06 --timeout=120s
+  docs:
+    - [ConfigMaps, "https://kubernetes.io/docs/concepts/configuration/configmap/"]
+    - [Secrets, "https://kubernetes.io/docs/concepts/configuration/secret/"]
+    - [Configure a Pod to use a ConfigMap, "https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/"]
+
+- id: 7
+  slug: probes
+  title: Liveness, readiness và startup probe
+  level: 2
+  minutes: 30
+  competencies: ["work:3", "trouble:3"]
+  goal: |
+    Chẩn đoán một ứng dụng bị kubelet giết liên tục vì probe sai, sửa bằng startupProbe, và thêm readiness để Service chỉ gửi traffic khi Pod sẵn sàng.
+  concepts: |
+    - **liveness** trượt `failureThreshold` lần liên tiếp thì kubelet giết container. **readiness** trượt chỉ rút Pod khỏi EndpointSlice, không restart. **startup** chặn hai probe kia cho tới khi app khởi động xong; thời gian tối đa = `failureThreshold × periodSeconds`.
+    - Kiểu probe: `httpGet` (mã 200–399), `tcpSocket`, `exec` (thoát 0), `grpc`. Mặc định `periodSeconds: 10`, `timeoutSeconds: 1`, `failureThreshold: 3`.
+    - Dấu hiệu probe sai: event `Unhealthy` và `Killing`, RESTARTS tăng dần, `READY 0/1` dù `STATUS Running`.
+  tasks:
+    - |
+      Deployment `slow-api` trong `lab07` cần khoảng **25 giây** để khởi động và restart liên tục. Tìm probe nào gây restart, ghi tên probe (`liveness`, `readiness` hoặc `startup`) vào `~/cka-answers/07-culprit.txt`.
+    - |
+      Sửa `slow-api` mà **không** tăng `initialDelaySeconds` của liveness: thêm `startupProbe` HTTP `GET /healthz` cổng 8080, cho phép tối đa ít nhất 60 giây để khởi động.
+    - |
+      Readiness của `slow-api` đang trỏ sai cổng. Sửa để nó kiểm tra `GET /ready` cổng 8080. Cả 2 Pod phải `READY 1/1` và không restart nữa.
+    - |
+      Deployment `cache` chưa có readiness. Thêm `readinessProbe` kiểu `exec` chạy `cat /tmp/ready`, chu kỳ 5 giây.
+  hints:
+    - |
+      Xem probe nào đang trượt
+      `kubectl describe pod -n lab07 -l app=slow-api | grep -E 'Liveness|Readiness|Startup|Killing'`
+    - |
+      Sửa nhanh
+      `kubectl edit deploy slow-api -n lab07`. Thêm `startupProbe` ngang hàng với `livenessProbe`.
+  solution: |
+    `kubectl describe pod` cho thấy event `Liveness probe failed … connection refused` và `Killing`: liveness giết app trước khi nó kịp khởi động.
+    ```bash
+    echo liveness > ~/cka-answers/07-culprit.txt
+    kubectl edit deploy slow-api -n lab07
+    ```
+    ```yaml
+            startupProbe:
+              httpGet: {path: /healthz, port: 8080}
+              periodSeconds: 5
+              failureThreshold: 12        # 60 giây
+            livenessProbe:                # giữ nguyên
+              httpGet: {path: /healthz, port: 8080}
+              periodSeconds: 5
+              failureThreshold: 2
+            readinessProbe:
+              httpGet: {path: /ready, port: 8080}   # trước đây là 8081
+              periodSeconds: 5
+    ```
+    ```bash
+    kubectl patch deploy cache -n lab07 --type=json -p '[{"op":"add","path":"/spec/template/spec/containers/0/readinessProbe","value":{"exec":{"command":["cat","/tmp/ready"]},"periodSeconds":5}}]'
+    kubectl rollout status deploy/slow-api -n lab07 --timeout=180s
+    kubectl get pods -n lab07
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/07-culprit.txt"
+    ns_fresh lab07
+    kubectl apply -n lab07 -f - >/dev/null <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: slow-api}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: slow-api}}
+      template:
+        metadata: {labels: {app: slow-api}}
+        spec:
+          containers:
+          - name: api
+            image: busybox:1.36
+            command: ["sh", "-c", "sleep 25; mkdir -p /www; echo ok > /www/healthz; echo ok > /www/ready; exec httpd -f -p 8080 -h /www"]
+            ports: [{containerPort: 8080}]
+            livenessProbe:
+              httpGet: {path: /healthz, port: 8080}
+              periodSeconds: 5
+              failureThreshold: 2
+            readinessProbe:
+              httpGet: {path: /ready, port: 8081}
+              periodSeconds: 5
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: cache}
+    spec:
+      selector: {matchLabels: {app: cache}}
+      template:
+        metadata: {labels: {app: cache}}
+        spec:
+          containers:
+          - name: cache
+            image: busybox:1.36
+            command: ["sh", "-c", "sleep 8; touch /tmp/ready; sleep 3600"]
+    EOF
+  verify: |
+    expect "07-culprit.txt" "$(ans 07-culprit.txt)" "liveness"
+    sp=$(jp deploy slow-api -n lab07 '{.spec.template.spec.containers[0].startupProbe.httpGet.path}:{.spec.template.spec.containers[0].startupProbe.httpGet.port}')
+    expect "slow-api có startupProbe GET /healthz:8080" "$sp" "/healthz:8080"
+    p=$(jp deploy slow-api -n lab07 '{.spec.template.spec.containers[0].startupProbe.periodSeconds}'); f=$(jp deploy slow-api -n lab07 '{.spec.template.spec.containers[0].startupProbe.failureThreshold}')
+    expect_ge "startupProbe cho phép ít nhất 60 giây" "$(( ${p:-10} * ${f:-3} ))" 60
+    expect_match "Liveness không bị tăng initialDelaySeconds" "$(jp deploy slow-api -n lab07 '{.spec.template.spec.containers[0].livenessProbe.initialDelaySeconds}')" '^0?$'
+    check "Vẫn giữ livenessProbe" test -n "$(jp deploy slow-api -n lab07 '{.spec.template.spec.containers[0].livenessProbe.httpGet.path}')"
+    expect "readiness kiểm tra /ready:8080" "$(jp deploy slow-api -n lab07 '{.spec.template.spec.containers[0].readinessProbe.httpGet.path}:{.spec.template.spec.containers[0].readinessProbe.httpGet.port}')" "/ready:8080"
+    expect "slow-api 2/2 Pod sẵn sàng" "$(jp deploy slow-api -n lab07 '{.status.readyReplicas}')" "2"
+    rs=$(kubectl get pods -n lab07 -l app=slow-api -o jsonpath='{range .items[*]}{.metadata.deletionTimestamp}|{.status.containerStatuses[0].restartCount}{"\n"}{end}' | awk -F'|' '$1==""{print $2}' | sort -u | xargs)
+    expect "Pod slow-api hiện tại không restart" "$rs" "0"
+    expect "cache có readinessProbe exec cat /tmp/ready" "$(jp deploy cache -n lab07 '{.spec.template.spec.containers[0].readinessProbe.exec.command[*]}')" "cat /tmp/ready"
+    expect "cache readiness chu kỳ 5 giây" "$(jp deploy cache -n lab07 '{.spec.template.spec.containers[0].readinessProbe.periodSeconds}')" "5"
+    expect "cache sẵn sàng" "$(jp deploy cache -n lab07 '{.status.readyReplicas}')" "1"
+  cleanup: |
+    kubectl delete ns lab07 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS/07-culprit.txt"
+  solve: |
+    echo liveness > "$ANS/07-culprit.txt"
+    kubectl patch deploy slow-api -n lab07 --type=json -p '[
+      {"op":"add","path":"/spec/template/spec/containers/0/startupProbe","value":{"httpGet":{"path":"/healthz","port":8080},"periodSeconds":5,"failureThreshold":12}},
+      {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/httpGet/port","value":8080}]'
+    kubectl patch deploy cache -n lab07 --type=json -p '[{"op":"add","path":"/spec/template/spec/containers/0/readinessProbe","value":{"exec":{"command":["cat","/tmp/ready"]},"periodSeconds":5}}]'
+    kubectl rollout status deploy/slow-api -n lab07 --timeout=240s
+    kubectl rollout status deploy/cache -n lab07 --timeout=120s
+    sleep 5
+  docs:
+    - [Configure liveness, readiness and startup probes, "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"]
+    - [Pod lifecycle, "https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/"]
+
+- id: 8
+  slug: init-sidecar
+  title: Init container và sidecar container
+  level: 2
+  minutes: 30
+  competencies: ["work:3", "trouble:3"]
+  goal: |
+    Dùng init container để chờ phụ thuộc, và thêm sidecar đọc log file của ứng dụng cũ ra stdout để `kubectl logs` đọc được.
+  concepts: |
+    - Init container chạy **tuần tự** trước container chính, mỗi cái phải thoát 0. Pod hiển thị `Init:0/1` trong lúc chờ.
+    - Sidecar kiểu mới (GA từ v1.33): khai báo trong `initContainers` với `restartPolicy: Always`. Nó khởi động trước app, chạy suốt đời Pod và dừng sau app.
+    - Các container trong Pod dùng chung volume (`emptyDir`) và network namespace (gọi nhau qua `localhost`).
+    - Spec của Pod đang chạy gần như bất biến: muốn thêm container phải xuất YAML, sửa, rồi `kubectl replace --force -f`.
+  tasks:
+    - |
+      Trong `lab08`, tạo Pod `web` (image `nginx:1.27`) có init container `wait-db` (image `busybox:1.36`) chờ tới khi phân giải được tên `db.lab08.svc.cluster.local`. Pod phải đứng ở `Init:0/1`.
+    - |
+      Tạo Service `db` kiểu ClusterIP cổng 5432 (không cần selector). Xác nhận Pod `web` chuyển sang `Running`.
+    - |
+      Pod `legacy` ghi log vào file `/var/log/app/app.log` (volume `logs`). Thêm sidecar tên `log-tail` (image `busybox:1.36`) dạng native sidecar, chạy `tail -n+1 -F /var/log/app/app.log`, để `kubectl logs legacy -c log-tail` thấy log.
+  hints:
+    - |
+      Lệnh chờ DNS
+      `until nslookup db.lab08.svc.cluster.local; do echo waiting; sleep 2; done`
+    - |
+      Thêm container vào Pod đang chạy
+      `kubectl get pod legacy -n lab08 -o yaml > legacy.yaml`, sửa, rồi `kubectl replace --force -f legacy.yaml`.
+  solution: |
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: web, namespace: lab08}
+    spec:
+      initContainers:
+      - name: wait-db
+        image: busybox:1.36
+        command: ["sh", "-c", "until nslookup db.lab08.svc.cluster.local; do echo waiting; sleep 2; done"]
+      containers:
+      - {name: web, image: nginx:1.27}
+    ```
+    ```bash
+    kubectl get pod web -n lab08          # Init:0/1
+    kubectl create svc clusterip db -n lab08 --tcp=5432
+    kubectl get pod web -n lab08 -w       # → Running
+    kubectl get pod legacy -n lab08 -o yaml > legacy.yaml
+    ```
+    Thêm vào `spec` của `legacy.yaml`:
+    ```yaml
+      initContainers:
+      - name: log-tail
+        image: busybox:1.36
+        restartPolicy: Always
+        command: ["sh", "-c", "tail -n+1 -F /var/log/app/app.log"]
+        volumeMounts:
+        - {name: logs, mountPath: /var/log/app}
+    ```
+    ```bash
+    kubectl replace --force -f legacy.yaml
+    kubectl logs legacy -n lab08 -c log-tail
+    ```
+  setup: |
+    ns_fresh lab08
+    kubectl apply -n lab08 -f - >/dev/null <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: legacy}
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "while true; do echo \"$(date) heartbeat order-service\" >> /var/log/app/app.log; sleep 3; done"]
+        volumeMounts:
+        - {name: logs, mountPath: /var/log/app}
+      volumes:
+      - name: logs
+        emptyDir: {}
+    EOF
+  verify: |
+    expect "web có init container wait-db" "$(jp pod web -n lab08 '{.spec.initContainers[0].name}')" "wait-db"
+    check "wait-db chờ tên db.lab08.svc.cluster.local" bash -c "kubectl get pod web -n lab08 -o jsonpath='{.spec.initContainers[0].command} {.spec.initContainers[0].args}' | grep -q 'db.lab08'"
+    expect "Service db cổng 5432" "$(jp svc db -n lab08 '{.spec.ports[0].port}')" "5432"
+    expect "web Running" "$(jp pod web -n lab08 '{.status.phase}')" "Running"
+    expect "legacy có sidecar log-tail" "$(jp pod legacy -n lab08 '{.spec.initContainers[?(@.name=="log-tail")].restartPolicy}')" "Always"
+    check "kubectl logs legacy -c log-tail có log" bash -c "kubectl logs legacy -n lab08 -c log-tail | grep -q heartbeat"
+  cleanup: |
+    kubectl delete ns lab08 --ignore-not-found --wait=false >/dev/null
+  solve: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: web, namespace: lab08}
+    spec:
+      initContainers:
+      - name: wait-db
+        image: busybox:1.36
+        command: ["sh", "-c", "until nslookup db.lab08.svc.cluster.local; do echo waiting; sleep 2; done"]
+      containers:
+      - {name: web, image: nginx:1.27}
+    EOF
+    sleep 5
+    kubectl create svc clusterip db -n lab08 --tcp=5432
+    kubectl wait --for=condition=Ready pod/web -n lab08 --timeout=120s
+    kubectl get pod legacy -n lab08 -o yaml > /tmp/legacy.yaml
+    python3 - <<'PY'
+    import yaml
+    d = yaml.safe_load(open("/tmp/legacy.yaml"))
+    d["spec"]["initContainers"] = [{"name": "log-tail", "image": "busybox:1.36", "restartPolicy": "Always",
+        "command": ["sh", "-c", "tail -n+1 -F /var/log/app/app.log"], "volumeMounts": [{"name": "logs", "mountPath": "/var/log/app"}]}]
+    d.pop("status", None)
+    yaml.safe_dump(d, open("/tmp/legacy.yaml", "w"))
+    PY
+    kubectl replace --force -f /tmp/legacy.yaml
+    kubectl wait --for=condition=Ready pod/legacy -n lab08 --timeout=120s
+    sleep 8
+  docs:
+    - [Init containers, "https://kubernetes.io/docs/concepts/workloads/pods/init-containers/"]
+    - [Sidecar containers, "https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/"]
+    - [Logging architecture, "https://kubernetes.io/docs/concepts/cluster-administration/logging/"]
+
+- id: 9
+  slug: daemonset-job-cronjob
+  title: DaemonSet, Job và CronJob
+  level: 2
+  minutes: 30
+  competencies: ["work:3"]
+  goal: |
+    Chọn đúng loại workload: một Pod trên mỗi node (DaemonSet), tác vụ chạy tới khi xong (Job), tác vụ theo lịch (CronJob).
+  concepts: |
+    - Không có `kubectl create daemonset`: sinh YAML Deployment rồi đổi `kind: DaemonSet`, bỏ `replicas` và `strategy`. Muốn chạy cả trên control plane phải tolerate taint `node-role.kubernetes.io/control-plane:NoSchedule`.
+    - Job: `completions` (cần bao nhiêu lần thành công), `parallelism` (chạy song song bao nhiêu), `backoffLimit` (số lần thử lại), `ttlSecondsAfterFinished` (tự xóa). `restartPolicy` chỉ được `Never` hoặc `OnFailure`.
+    - CronJob: `schedule` theo cú pháp cron, `concurrencyPolicy` (`Allow`, `Forbid`, `Replace`), giới hạn lịch sử job. `kubectl create job x --from=cronjob/y` chạy ngay một lần.
+  tasks:
+    - |
+      Trong `lab09`, tạo DaemonSet `node-agent` (image `busybox:1.36`, lệnh `sleep 3600`) chạy trên **mọi** node, kể cả control plane.
+    - |
+      Tạo Job `batch-sum` (image `busybox:1.36`, lệnh `sh -c 'echo done'`) cần **4** lần thành công, chạy song song tối đa **2**, thử lại tối đa **2** lần, tự xóa sau **300** giây khi xong. Job phải hoàn thành.
+    - |
+      Tạo CronJob `report` chạy mỗi 15 phút (image `busybox:1.36`, lệnh `date`), không cho chạy chồng (`Forbid`), giữ lại 2 job thành công.
+    - |
+      Chạy ngay một lần CronJob `report` bằng Job tên `report-now`. Job phải hoàn thành.
+  hints:
+    - |
+      Sinh YAML Job và CronJob
+      `kubectl create job batch-sum --image=busybox:1.36 $do -- sh -c 'echo done'` và `kubectl create cronjob report --image=busybox:1.36 --schedule='*/15 * * * *' $do -- date`
+  solution: |
+    ```yaml
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata: {name: node-agent, namespace: lab09}
+    spec:
+      selector: {matchLabels: {app: node-agent}}
+      template:
+        metadata: {labels: {app: node-agent}}
+        spec:
+          tolerations:
+          - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+          containers:
+          - {name: agent, image: busybox:1.36, command: ["sleep", "3600"]}
+    ---
+    apiVersion: batch/v1
+    kind: Job
+    metadata: {name: batch-sum, namespace: lab09}
+    spec:
+      completions: 4
+      parallelism: 2
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - {name: sum, image: busybox:1.36, command: ["sh", "-c", "echo done"]}
+    ---
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata: {name: report, namespace: lab09}
+    spec:
+      schedule: "*/15 * * * *"
+      concurrencyPolicy: Forbid
+      successfulJobsHistoryLimit: 2
+      jobTemplate:
+        spec:
+          template:
+            spec:
+              restartPolicy: OnFailure
+              containers:
+              - {name: report, image: busybox:1.36, command: ["date"]}
+    ```
+    ```bash
+    kubectl create job report-now -n lab09 --from=cronjob/report
+    kubectl get ds,job,cronjob -n lab09
+    ```
+  setup: |
+    ns_fresh lab09
+  verify: |
+    nodes=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    expect "node-agent chạy trên mọi node ($nodes)" "$(jp ds node-agent -n lab09 '{.status.desiredNumberScheduled}')/$(jp ds node-agent -n lab09 '{.status.numberReady}')" "$nodes/$nodes"
+    expect "batch-sum completions=4 parallelism=2" "$(jp job batch-sum -n lab09 '{.spec.completions}/{.spec.parallelism}')" "4/2"
+    expect "batch-sum backoffLimit=2 ttl=300" "$(jp job batch-sum -n lab09 '{.spec.backoffLimit}/{.spec.ttlSecondsAfterFinished}')" "2/300"
+    expect "batch-sum hoàn thành 4 lần" "$(jp job batch-sum -n lab09 '{.status.succeeded}')" "4"
+    expect "report chạy mỗi 15 phút" "$(jp cronjob report -n lab09 '{.spec.schedule}')" "*/15 * * * *"
+    expect "report concurrencyPolicy Forbid" "$(jp cronjob report -n lab09 '{.spec.concurrencyPolicy}')" "Forbid"
+    expect "report giữ 2 job thành công" "$(jp cronjob report -n lab09 '{.spec.successfulJobsHistoryLimit}')" "2"
+    expect "report-now tạo từ CronJob report" "$(jp job report-now -n lab09 '{.metadata.annotations.cronjob\.kubernetes\.io/instantiate}')" "manual"
+    expect "report-now hoàn thành" "$(jp job report-now -n lab09 '{.status.succeeded}')" "1"
+  cleanup: |
+    kubectl delete ns lab09 --ignore-not-found --wait=false >/dev/null
+  solve: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata: {name: node-agent, namespace: lab09}
+    spec:
+      selector: {matchLabels: {app: node-agent}}
+      template:
+        metadata: {labels: {app: node-agent}}
+        spec:
+          tolerations:
+          - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+          containers:
+          - {name: agent, image: busybox:1.36, command: ["sleep", "3600"]}
+    ---
+    apiVersion: batch/v1
+    kind: Job
+    metadata: {name: batch-sum, namespace: lab09}
+    spec:
+      completions: 4
+      parallelism: 2
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 300
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - {name: sum, image: busybox:1.36, command: ["sh", "-c", "echo done"]}
+    ---
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata: {name: report, namespace: lab09}
+    spec:
+      schedule: "*/15 * * * *"
+      concurrencyPolicy: Forbid
+      successfulJobsHistoryLimit: 2
+      jobTemplate:
+        spec:
+          template:
+            spec:
+              restartPolicy: OnFailure
+              containers:
+              - {name: report, image: busybox:1.36, command: ["date"]}
+    EOF
+    kubectl create job report-now -n lab09 --from=cronjob/report
+    kubectl wait --for=condition=complete job/batch-sum job/report-now -n lab09 --timeout=180s
+    kubectl rollout status ds/node-agent -n lab09 --timeout=120s
+  docs:
+    - [DaemonSet, "https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/"]
+    - [Jobs, "https://kubernetes.io/docs/concepts/workloads/controllers/job/"]
+    - [CronJob, "https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/"]
+
+- id: 10
+  slug: resources-quota
+  title: Requests, limits, LimitRange và ResourceQuota
+  level: 2
+  minutes: 35
+  competencies: ["work:4", "trouble:2"]
+  goal: |
+    Hiểu requests/limits tác động thế nào tới scheduling và QoS, tìm vì sao Deployment không đủ Pod khi namespace có quota, và đặt giá trị mặc định bằng LimitRange.
+  concepts: |
+    - Scheduler chỉ nhìn **requests**. Vượt memory **limit** thì container bị OOMKilled; vượt CPU limit thì bị throttle.
+    - QoS: `Guaranteed` (mọi container có requests = limits cho CPU và memory), `Burstable`, `BestEffort` (không đặt gì, bị evict đầu tiên).
+    - ResourceQuota giới hạn tổng của namespace. Khi quota có `requests.cpu`, mọi Pod **bắt buộc** khai báo requests CPU, nếu không bị từ chối.
+    - Pod bị quota từ chối không tồn tại, nên lỗi nằm ở **event của ReplicaSet** (`FailedCreate`), không ở Deployment.
+    - LimitRange điền requests/limits mặc định cho container không khai báo, và có thể đặt min/max.
+    - Quota sát giới hạn có thể làm rolling update **kẹt**: Deployment cần tạo Pod mới (maxSurge) trước khi xóa Pod cũ, nhưng quota không cho tạo. Gỡ bằng cách tạm tăng `maxUnavailable`, giảm `replicas`, hoặc nới quota.
+  tasks:
+    - |
+      Deployment `heavy` trong `lab10` muốn 3 replica nhưng chỉ có 2 Pod. Tìm resource nào của quota bị vượt (ví dụ `limits.memory`) và ghi vào `~/cka-answers/10-quota.txt`.
+    - |
+      Sửa `heavy` để đủ 3 replica: requests `cpu: 200m`, `memory: 128Mi`; limits `memory: 256Mi`.
+    - |
+      Tạo LimitRange `defaults` trong `lab10`: container không khai báo sẽ nhận request `cpu: 100m`, `memory: 64Mi` và limit `cpu: 200m`, `memory: 128Mi`.
+    - |
+      Tạo Pod `plain` (image `nginx:1.27`, không khai báo resources). Nó phải chạy được nhờ LimitRange.
+    - |
+      Tạo Pod `gold` (image `nginx:1.27`) thuộc QoS class `Guaranteed` với CPU 100m và memory 64Mi.
+  hints:
+    - |
+      Tìm lý do
+      `kubectl describe rs -n lab10 -l app=heavy | grep -A3 FailedCreate` và `kubectl describe quota -n lab10`
+    - |
+      Sửa resources nhanh
+      `kubectl set resources deploy heavy -n lab10 --requests=cpu=200m,memory=128Mi --limits=memory=256Mi`
+  solution: |
+    ```bash
+    kubectl describe rs -n lab10 -l app=heavy | grep FailedCreate
+    #   exceeded quota: team-quota, requested: requests.cpu=800m, used: requests.cpu=1600m, limited: requests.cpu=2
+    echo requests.cpu > ~/cka-answers/10-quota.txt
+    kubectl set resources deploy heavy -n lab10 --requests=cpu=200m,memory=128Mi --limits=memory=256Mi
+    ```
+    ```yaml
+    apiVersion: v1
+    kind: LimitRange
+    metadata: {name: defaults, namespace: lab10}
+    spec:
+      limits:
+      - type: Container
+        defaultRequest: {cpu: 100m, memory: 64Mi}
+        default: {cpu: 200m, memory: 128Mi}
+    ```
+    ```bash
+    kubectl run plain -n lab10 --image=nginx:1.27
+    kubectl get pod plain -n lab10 -o jsonpath='{.spec.containers[0].resources}'
+    kubectl run gold -n lab10 --image=nginx:1.27 $do > gold.yaml
+    # thêm resources: requests và limits đều cpu: 100m, memory: 64Mi
+    kubectl apply -f gold.yaml
+    kubectl get pod gold -n lab10 -o jsonpath='{.status.qosClass}'   # Guaranteed
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/10-quota.txt"
+    ns_fresh lab10
+    kubectl create quota team-quota -n lab10 --hard=requests.cpu=2,requests.memory=1Gi,pods=6 >/dev/null
+    kubectl apply -n lab10 -f - >/dev/null <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: heavy}
+    spec:
+      replicas: 3
+      selector: {matchLabels: {app: heavy}}
+      template:
+        metadata: {labels: {app: heavy}}
+        spec:
+          containers:
+          - name: nginx
+            image: nginx:1.27
+            resources:
+              requests: {cpu: 800m, memory: 128Mi}
+              limits: {memory: 256Mi}
+    EOF
+  verify: |
+    expect "10-quota.txt" "$(ans 10-quota.txt)" "requests.cpu"
+    expect "heavy 3/3 sẵn sàng" "$(jp deploy heavy -n lab10 '{.status.readyReplicas}')" "3"
+    expect "heavy requests cpu 200m" "$(jp deploy heavy -n lab10 '{.spec.template.spec.containers[0].resources.requests.cpu}')" "200m"
+    expect "heavy limits memory 256Mi" "$(jp deploy heavy -n lab10 '{.spec.template.spec.containers[0].resources.limits.memory}')" "256Mi"
+    lr='{.spec.limits[0].defaultRequest.cpu}/{.spec.limits[0].defaultRequest.memory}/{.spec.limits[0].default.cpu}/{.spec.limits[0].default.memory}'
+    expect "LimitRange defaults đúng giá trị" "$(jp limitrange defaults -n lab10 "$lr")" "100m/64Mi/200m/128Mi"
+    expect "plain Running" "$(jp pod plain -n lab10 '{.status.phase}')" "Running"
+    expect "plain nhận request cpu 100m từ LimitRange" "$(jp pod plain -n lab10 '{.spec.containers[0].resources.requests.cpu}')" "100m"
+    expect "gold là Guaranteed" "$(jp pod gold -n lab10 '{.status.qosClass}')" "Guaranteed"
+    expect "gold cpu 100m" "$(jp pod gold -n lab10 '{.spec.containers[0].resources.limits.cpu}')" "100m"
+  cleanup: |
+    kubectl delete ns lab10 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS/10-quota.txt"
+  solve: |
+    echo requests.cpu > "$ANS/10-quota.txt"
+    kubectl set resources deploy heavy -n lab10 --requests=cpu=200m,memory=128Mi --limits=memory=256Mi
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: LimitRange
+    metadata: {name: defaults, namespace: lab10}
+    spec:
+      limits:
+      - type: Container
+        defaultRequest: {cpu: 100m, memory: 64Mi}
+        default: {cpu: 200m, memory: 128Mi}
+    EOF
+    kubectl rollout status deploy heavy -n lab10 --timeout=180s
+    kubectl run plain -n lab10 --image=nginx:1.27
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: gold, namespace: lab10}
+    spec:
+      containers:
+      - name: gold
+        image: nginx:1.27
+        resources:
+          requests: {cpu: 100m, memory: 64Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+    EOF
+    kubectl wait --for=condition=Ready pod/plain pod/gold -n lab10 --timeout=120s
+  docs:
+    - [Resource management for Pods and containers, "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"]
+    - [Resource quotas, "https://kubernetes.io/docs/concepts/policy/resource-quotas/"]
+    - [Limit ranges, "https://kubernetes.io/docs/concepts/policy/limit-range/"]
+    - [Pod QoS classes, "https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/"]
+
+- id: 11
+  slug: hpa-metrics
+  title: metrics-server và HorizontalPodAutoscaler
+  level: 2
+  minutes: 30
+  competencies: ["work:2", "trouble:2"]
+  goal: |
+    Theo dõi CPU/RAM bằng `kubectl top`, tạo HPA có behavior, và sửa HPA hiện `<unknown>` vì Pod không khai báo requests.
+  concepts: |
+    - metrics-server lấy số liệu từ kubelet và phục vụ Metrics API cho `kubectl top` và HPA. Lab 00 đã cài nó trên kind.
+    - HPA tính `desiredReplicas = ceil(replicas × giá trị hiện tại / mục tiêu)`. Utilization tính theo **requests**, nên Pod không có CPU request thì HPA không tính được (`<unknown>`).
+    - `behavior.scaleDown.stabilizationWindowSeconds` (mặc định 300) chống dao động: khi giảm, HPA lấy khuyến nghị cao nhất trong cửa sổ.
+  tasks:
+    - |
+      Ghi tên Pod trong namespace `kube-system` đang dùng **nhiều memory nhất** vào `~/cka-answers/11-top-pod.txt`.
+    - |
+      Trong `lab11`, tạo HPA cho Deployment `web`: tối thiểu 2, tối đa 6 replica, mục tiêu CPU **50%**, và scale down chờ **60 giây**.
+    - |
+      HPA `api` đã có sẵn nhưng hiển thị `<unknown>`. Sửa Deployment `api` để HPA đọc được metric (CPU request `100m`).
+    - |
+      (Không chấm) Tạo tải để thấy HPA scale up: `kubectl run load -n lab11 --image=busybox:1.36 -- sh -c 'while true; do wget -qO- http://web >/dev/null; done'` rồi `kubectl get hpa -n lab11 -w`.
+  hints:
+    - |
+      Sắp xếp theo memory
+      `kubectl top pod -n kube-system --sort-by=memory --no-headers | head -1`
+    - |
+      HPA có behavior
+      `kubectl autoscale` không đặt được behavior. Sinh YAML (`$do`) rồi thêm `spec.behavior`.
+  solution: |
+    ```bash
+    kubectl top pod -n kube-system --sort-by=memory --no-headers | head -1 | awk '{print $1}' > ~/cka-answers/11-top-pod.txt
+    kubectl autoscale deploy web -n lab11 --min=2 --max=6 --cpu-percent=50 $do > hpa.yaml
+    ```
+    Thêm vào `spec` của `hpa.yaml` rồi `kubectl apply -f hpa.yaml`:
+    ```yaml
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 60
+    ```
+    ```bash
+    kubectl describe hpa api -n lab11        # failed to get cpu utilization: missing request for cpu
+    kubectl set resources deploy api -n lab11 --requests=cpu=100m
+    kubectl get hpa -n lab11                 # sau khoảng 1 phút TARGETS hiện %
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/11-top-pod.txt"
+    kubectl get apiservice v1beta1.metrics.k8s.io >/dev/null 2>&1 || die "Chưa có metrics-server. Chạy lại env/kind/up.sh"
+    ns_fresh lab11
+    kubectl create deploy web -n lab11 --image=nginx:1.27 >/dev/null
+    kubectl set resources deploy web -n lab11 --requests=cpu=100m >/dev/null
+    kubectl expose deploy web -n lab11 --port=80 >/dev/null
+    kubectl create deploy api -n lab11 --image=nginx:1.27 >/dev/null
+    kubectl autoscale deploy api -n lab11 --min=1 --max=3 --cpu-percent=70 >/dev/null
+  verify: |
+    top=$(kubectl top pod -n kube-system --sort-by=memory --no-headers 2>/dev/null | awk 'NR<=2{print $1}')
+    check "11-top-pod.txt là Pod dùng nhiều memory nhất" bash -c "grep -qx '$(ans 11-top-pod.txt)' <<<'$top'"
+    expect "HPA web min/max 2/6" "$(jp hpa web -n lab11 '{.spec.minReplicas}/{.spec.maxReplicas}')" "2/6"
+    expect "HPA web mục tiêu CPU 50%" "$(jp hpa web -n lab11 '{.spec.metrics[0].resource.target.averageUtilization}')" "50"
+    expect "HPA web scale down chờ 60 giây" "$(jp hpa web -n lab11 '{.spec.behavior.scaleDown.stabilizationWindowSeconds}')" "60"
+    expect "api có CPU request 100m" "$(jp deploy api -n lab11 '{.spec.template.spec.containers[0].resources.requests.cpu}')" "100m"
+    expect_match "HPA api đọc được metric CPU" "$(jp hpa api -n lab11 '{.status.currentMetrics[0].resource.current.averageUtilization}')" '^[0-9]+$'
+  cleanup: |
+    kubectl delete ns lab11 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS/11-top-pod.txt"
+  solve: |
+    for i in $(seq 1 30); do kubectl top pod -n kube-system --no-headers >/dev/null 2>&1 && break; sleep 5; done
+    kubectl top pod -n kube-system --sort-by=memory --no-headers | head -1 | awk '{print $1}' > "$ANS/11-top-pod.txt"
+    kubectl apply -f - <<'EOF'
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata: {name: web, namespace: lab11}
+    spec:
+      scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web}
+      minReplicas: 2
+      maxReplicas: 6
+      metrics:
+      - type: Resource
+        resource: {name: cpu, target: {type: Utilization, averageUtilization: 50}}
+      behavior:
+        scaleDown: {stabilizationWindowSeconds: 60}
+    EOF
+    kubectl set resources deploy api -n lab11 --requests=cpu=100m
+    kubectl rollout status deploy api -n lab11 --timeout=120s
+    for i in $(seq 1 40); do [ -n "$(kubectl get hpa api -n lab11 -o jsonpath='{.status.currentMetrics[0].resource.current.averageUtilization}')" ] && break; sleep 5; done
+  docs:
+    - [Horizontal Pod Autoscaling, "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/"]
+    - [HPA walkthrough, "https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale-walkthrough/"]
+    - [Resource metrics pipeline, "https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/"]

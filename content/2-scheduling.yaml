@@ -1,0 +1,589 @@
+phase: 2
+title: "Giai đoạn 2 · Tài nguyên, scheduling và autoscaling"
+intro: |
+  Pod chạy ở đâu và được bao nhiêu tài nguyên: requests và limits, QoS, quota, affinity, taint, topology spread, priority, rồi HPA với metrics-server.
+labs:
+  - id: "08"
+    slug: resources-quotas
+    title: Requests, limits, QoS, LimitRange và ResourceQuota
+    level: 2
+    minutes: 45
+    competencies: [work.4]
+    goal:
+      - Đặt requests và limits, dự đoán QoS class
+      - Dùng LimitRange để đặt mặc định và giới hạn cho từng container
+      - Dùng ResourceQuota để giới hạn tổng của namespace và đọc lỗi khi vượt
+    concept: |
+      Scheduler chỉ nhìn **requests** khi xếp Pod. **Limits** do kernel thực thi: vượt memory limit thì OOMKilled, vượt CPU limit thì bị throttle.
+
+      | QoS | Điều kiện | Bị evict |
+      |---|---|---|
+      | Guaranteed | mọi container có requests = limits cho cả CPU và memory | sau cùng |
+      | Burstable | có requests hoặc limits nhưng không đủ điều kiện trên | ở giữa |
+      | BestEffort | không đặt gì | đầu tiên |
+
+      **LimitRange** áp lúc tạo Pod (điền mặc định, chặn vượt min/max). **ResourceQuota** giới hạn tổng; khi namespace có quota cho cpu/memory, Pod bắt buộc khai báo giá trị tương ứng. Pod bị quota từ chối không tồn tại, nên lỗi nằm trong event của **ReplicaSet**.
+    setup: |
+      ensure_answers
+      ns_reset lab08 lab08-q
+    cleanup: |
+      ns_delete lab08 lab08-q
+      rm -f "$ANS"/08-*
+    tasks:
+      - title: Ba lớp QoS
+        body: |
+          Trong `lab08` tạo ba Pod `nginx:1.27`:
+
+          - `guaranteed`: requests và limits đều `cpu=100m,memory=128Mi`
+          - `burstable`: chỉ requests `cpu=50m,memory=64Mi`
+          - `besteffort`: không khai báo gì
+        hints:
+          - "`k run ... $do` rồi thêm khối `resources`, hoặc dùng `--overrides`."
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: guaranteed, namespace: lab08}
+          spec:
+            containers:
+            - name: app
+              image: nginx:1.27
+              resources:
+                requests: {cpu: 100m, memory: 128Mi}
+                limits: {cpu: 100m, memory: 128Mi}
+          ```
+          `burstable` tương tự nhưng chỉ có `requests`. `besteffort`: `k run besteffort -n lab08 --image=nginx:1.27`.
+        checks:
+          - - guaranteed là Guaranteed
+            - |
+              eq "$(val pod guaranteed lab08 '{.status.qosClass}')" Guaranteed
+          - - burstable là Burstable
+            - |
+              eq "$(val pod burstable lab08 '{.status.qosClass}')" Burstable
+          - - besteffort là BestEffort
+            - |
+              eq "$(val pod besteffort lab08 '{.status.qosClass}')" BestEffort
+      - title: LimitRange
+        body: |
+          Tạo LimitRange `defaults` trong `lab08` cho container:
+
+          - `defaultRequest`: `cpu=100m,memory=64Mi`
+          - `default` (limit): `cpu=200m,memory=128Mi`
+          - `max`: `memory=512Mi`
+
+          Rồi tạo Pod `defaulted` (`nginx:1.27`) không khai báo resources và xác nhận nó nhận giá trị mặc định.
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: LimitRange
+          metadata: {name: defaults, namespace: lab08}
+          spec:
+            limits:
+            - type: Container
+              defaultRequest: {cpu: 100m, memory: 64Mi}
+              default: {cpu: 200m, memory: 128Mi}
+              max: {memory: 512Mi}
+          ```
+          ```bash
+          k run defaulted -n lab08 --image=nginx:1.27
+          k get pod defaulted -n lab08 -o jsonpath='{.spec.containers[0].resources}'
+          ```
+        checks:
+          - - LimitRange defaults có max memory 512Mi
+            - |
+              eq "$(val limitrange defaults lab08 '{.spec.limits[0].max.memory}')" 512Mi
+          - - Pod defaulted nhận request memory 64Mi và limit cpu 200m
+            - |
+              eq "$(val pod defaulted lab08 '{.spec.containers[0].resources.requests.memory}/{.spec.containers[0].resources.limits.cpu}')" 64Mi/200m
+      - title: Vượt LimitRange
+        body: |
+          Thử tạo Pod `too-big` (`nginx:1.27`) với memory limit `1Gi` trong `lab08`. Ghi thông báo lỗi nhận được vào `/opt/cka/answers/08-too-big.txt`.
+        solution: |
+          ```bash
+          k run too-big -n lab08 --image=nginx:1.27 $do > too-big.yaml
+          # thêm resources.limits.memory: 1Gi
+          k apply -f too-big.yaml 2> /opt/cka/answers/08-too-big.txt
+          cat /opt/cka/answers/08-too-big.txt
+          ```
+        checks:
+          - - Pod too-big không được tạo
+            - '! exists pod too-big lab08'
+          - - File chứa lỗi về maximum memory
+            - grep -qi 'maximum memory usage' $ANS/08-too-big.txt
+      - title: ResourceQuota
+        body: |
+          Trong `lab08-q` tạo ResourceQuota `team-quota`: `requests.cpu=1`, `requests.memory=1Gi`, `limits.memory=2Gi`, `pods=5`.
+
+          Sau đó tạo Deployment `filler` (`nginx:1.27`, 3 replica, mỗi Pod request `cpu=400m,memory=128Mi`, limit `memory=256Mi`). Chỉ 2 Pod được tạo. Ghi đúng một dòng thông báo lỗi từ event của ReplicaSet vào `/opt/cka/answers/08-quota.txt`.
+        hints:
+          - "`k create quota --help`"
+          - "`k describe rs -n lab08-q` hoặc `k get events -n lab08-q --field-selector reason=FailedCreate`"
+        solution: |
+          ```bash
+          k create quota team-quota -n lab08-q --hard=requests.cpu=1,requests.memory=1Gi,limits.memory=2Gi,pods=5
+          k create deploy filler -n lab08-q --image=nginx:1.27 --replicas=3 $do > filler.yaml
+          # thêm resources vào container
+          k apply -f filler.yaml
+          k get events -n lab08-q --field-selector reason=FailedCreate -o jsonpath='{.items[0].message}' > /opt/cka/answers/08-quota.txt
+          k describe quota team-quota -n lab08-q
+          ```
+        checks:
+          - - Quota có requests.cpu 1 và pods 5
+            - |
+              eq "$(val quota team-quota lab08-q '{.spec.hard.requests\.cpu}/{.spec.hard.pods}')" 1/5
+          - - filler có đúng 2 Pod
+            - |
+              eq "$(val deploy filler lab08-q '{.status.readyReplicas}')" 2
+          - - File ghi lỗi exceeded quota
+            - grep -q 'exceeded quota' $ANS/08-quota.txt
+      - title: Đọc mức sử dụng quota
+        body: |
+          Ghi lượng `requests.cpu` đã dùng của `team-quota` (đúng giá trị như trong `status.used`) vào `/opt/cka/answers/08-used.txt`.
+        solution: |
+          ```bash
+          k get quota team-quota -n lab08-q -o jsonpath='{.status.used.requests\.cpu}' > /opt/cka/answers/08-used.txt
+          ```
+        checks:
+          - - Giá trị khớp status.used
+            - |
+              eq "$(cat $ANS/08-used.txt)" "$(val quota team-quota lab08-q '{.status.used.requests\.cpu}')"
+    refs:
+      - [Resource management for Pods and containers, "concepts/configuration/manage-resources-containers/"]
+      - [Pod QoS classes, "concepts/workloads/pods/pod-qos/"]
+      - [Limit ranges, "concepts/policy/limit-range/"]
+      - [Resource quotas, "concepts/policy/resource-quotas/"]
+
+  - id: "09"
+    slug: node-placement
+    title: nodeSelector, affinity, taint và cordon
+    level: 2
+    minutes: 50
+    competencies: [work.4]
+    needs: Cluster có ít nhất 1 worker; 2 worker để thấy rõ anti-affinity.
+    goal:
+      - Gắn Pod vào node bằng label, nodeSelector, nodeAffinity
+      - Tách replica ra các node khác nhau bằng podAntiAffinity
+      - Dùng taint và toleration để dành node; xếp Pod bằng tay với nodeName
+      - Cordon và uncordon node
+    concept: |
+      - `nodeSelector`: luật cứng đơn giản theo label.
+      - `nodeAffinity.requiredDuringScheduling...`: luật cứng với toán tử `In`, `NotIn`, `Exists`…; `preferred...` là cộng điểm.
+      - `podAntiAffinity` với `topologyKey: kubernetes.io/hostname`: không đặt hai Pod cùng nhóm lên một node.
+      - **Taint** đẩy Pod ra khỏi node; **toleration** chỉ cho phép Pod vào, không ép Pod vào. Muốn dành node cho một loại Pod cần cả taint lẫn affinity.
+      - `nodeName` bỏ qua scheduler hoàn toàn.
+    setup: |
+      ensure_answers
+      ns_reset lab09
+      w=$(first_worker)
+      k label node "$w" disktype- topology.kubernetes.io/zone- >/dev/null 2>&1 || true
+      k taint node "$w" dedicated- >/dev/null 2>&1 || true
+      info "Worker dùng trong lab: $w"
+    cleanup: |
+      ns_delete lab09
+      for n in $(k get nodes -o name); do
+        k label "$n" disktype- topology.kubernetes.io/zone- >/dev/null 2>&1 || true
+        k taint "$n" dedicated- >/dev/null 2>&1 || true
+        k uncordon "$n" >/dev/null 2>&1 || true
+      done
+      rm -f "$ANS"/09-*
+    tasks:
+      - title: nodeSelector
+        body: |
+          Gắn label `disktype=ssd` cho `node01`. Tạo Pod `ssd-pod` (`nginx:1.27`) trong `lab09` chỉ được chạy trên node có `disktype=ssd`.
+        solution: |
+          ```bash
+          k label node node01 disktype=ssd
+          k run ssd-pod -n lab09 --image=nginx:1.27 $do > ssd.yaml
+          # thêm spec.nodeSelector: {disktype: ssd}
+          k apply -f ssd.yaml && k get pod ssd-pod -n lab09 -o wide
+          ```
+        checks:
+          - - ssd-pod có nodeSelector disktype=ssd
+            - |
+              eq "$(val pod ssd-pod lab09 '{.spec.nodeSelector.disktype}')" ssd
+          - - ssd-pod chạy trên node có label disktype=ssd
+            - |
+              eq "$(val node "$(val pod ssd-pod lab09 '{.spec.nodeName}')" - '{.metadata.labels.disktype}')" ssd
+      - title: nodeAffinity bắt buộc
+        body: |
+          Gắn `topology.kubernetes.io/zone=zone-a` cho `node01`. Tạo Pod `zone-pod` (`nginx:1.27`) dùng **nodeAffinity required** với toán tử `In` cho giá trị `zone-a` hoặc `zone-b`.
+        solution: |
+          ```yaml
+          spec:
+            affinity:
+              nodeAffinity:
+                requiredDuringSchedulingIgnoredDuringExecution:
+                  nodeSelectorTerms:
+                  - matchExpressions:
+                    - key: topology.kubernetes.io/zone
+                      operator: In
+                      values: [zone-a, zone-b]
+          ```
+        checks:
+          - - zone-pod dùng toán tử In trên topology.kubernetes.io/zone
+            - |
+              eq "$(val pod zone-pod lab09 '{.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].key}/{.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[0].matchExpressions[0].operator}')" topology.kubernetes.io/zone/In
+          - - zone-pod Running trên node zone-a
+            - |
+              eq "$(val node "$(val pod zone-pod lab09 '{.spec.nodeName}')" - '{.metadata.labels.topology\.kubernetes\.io/zone}')" zone-a
+      - title: Tách replica bằng podAntiAffinity
+        body: |
+          Tạo Deployment `spread` (`nginx:1.27`, label `app=spread`) với số replica bằng **số worker** của bạn. Dùng podAntiAffinity **required** theo `kubernetes.io/hostname` để không có hai Pod trên cùng node.
+        solution: |
+          ```yaml
+              spec:
+                affinity:
+                  podAntiAffinity:
+                    requiredDuringSchedulingIgnoredDuringExecution:
+                    - topologyKey: kubernetes.io/hostname
+                      labelSelector:
+                        matchLabels: {app: spread}
+          ```
+        checks:
+          - - Có podAntiAffinity theo kubernetes.io/hostname
+            - |
+              eq "$(val deploy spread lab09 '{.spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey}')" kubernetes.io/hostname
+          - - Mọi Pod Ready, mỗi Pod một node khác nhau
+            - |
+              n=$(val deploy spread lab09 '{.spec.replicas}'); [[ "$(val deploy spread lab09 '{.status.readyReplicas}')" == "$n" ]] && [[ $(k get pods -n lab09 -l app=spread -o jsonpath='{range .items[*]}{.spec.nodeName}{"\n"}{end}' | sort -u | wc -l) -eq $n ]]
+      - title: Dành node bằng taint
+        body: |
+          Gắn taint `dedicated=gpu:NoSchedule` lên `node01`. Tạo Pod `gpu-job` (`busybox:1.36`, `sleep 3600`) chịu được taint này **và** chỉ chạy trên `node01` (dùng nodeSelector `kubernetes.io/hostname`).
+        solution: |
+          ```bash
+          k taint node node01 dedicated=gpu:NoSchedule
+          ```
+          ```yaml
+          spec:
+            nodeSelector: {kubernetes.io/hostname: node01}
+            tolerations:
+            - {key: dedicated, operator: Equal, value: gpu, effect: NoSchedule}
+          ```
+        checks:
+          - - node01 có taint dedicated=gpu:NoSchedule
+            - |
+              k get node "$(first_worker)" -o jsonpath='{range .spec.taints[*]}{.key}={.value}:{.effect}{"\n"}{end}' | grep -qx 'dedicated=gpu:NoSchedule'
+          - - gpu-job có toleration và chạy trên node01
+            - |
+              eq "$(val pod gpu-job lab09 '{.spec.tolerations[?(@.key=="dedicated")].value}/{.spec.nodeName}')" "gpu/$(first_worker)"
+      - title: Xếp Pod bằng tay
+        body: |
+          Tạo Pod `manual` (`nginx:1.27`) chạy trên `controlplane` mà **không** qua scheduler và không thêm toleration.
+        hints:
+          - "`spec.nodeName` bỏ qua scheduler, nên taint `NoSchedule` không áp dụng."
+        solution: |
+          ```bash
+          k run manual -n lab09 --image=nginx:1.27 $do > manual.yaml
+          # thêm spec.nodeName: controlplane
+          k apply -f manual.yaml
+          ```
+        checks:
+          - - manual chạy trên controlplane
+            - |
+              eq "$(val pod manual lab09 '{.spec.nodeName}/{.status.phase}')" "$(cp_node)/Running"
+          - - Không có toleration tự thêm cho control-plane
+            - |
+              ! val pod manual lab09 '{.spec.tolerations[*].key}' | grep -q control-plane
+      - title: Cordon rồi uncordon
+        body: |
+          Cordon `node01`, ghi output của `kubectl get node node01` lúc đó vào `/opt/cka/answers/09-cordon.txt`, rồi uncordon và gỡ taint `dedicated` khỏi `node01`.
+        solution: |
+          ```bash
+          k cordon node01
+          k get node node01 > /opt/cka/answers/09-cordon.txt
+          k uncordon node01
+          k taint node node01 dedicated-
+          ```
+        checks:
+          - - File ghi lại trạng thái SchedulingDisabled
+            - grep -q SchedulingDisabled $ANS/09-cordon.txt
+          - - node01 nhận Pod mới trở lại
+            - |
+              eq "$(val node "$(first_worker)" - '{.spec.unschedulable}')" ""
+          - - Không còn taint dedicated
+            - |
+              ! val node "$(first_worker)" - '{.spec.taints[*].key}' | grep -q dedicated
+    refs:
+      - [Assigning Pods to nodes, "concepts/scheduling-eviction/assign-pod-node/"]
+      - [Taints and tolerations, "concepts/scheduling-eviction/taint-and-toleration/"]
+
+  - id: "10"
+    slug: advanced-scheduling
+    title: Topology spread, priority, PDB và Pod không được lập lịch
+    level: 2
+    minutes: 45
+    competencies: [work.4, work.3]
+    goal:
+      - Trải đều Pod với topologySpreadConstraints
+      - Dùng PriorityClass và hiểu preemption
+      - Bảo vệ ứng dụng khi bảo trì bằng PodDisruptionBudget
+      - Tìm vì sao Pod Pending khi schedulerName sai hoặc có scheduling gate
+    concept: |
+      - `topologySpreadConstraints`: `maxSkew` là độ lệch tối đa giữa các miền (node, zone); `whenUnsatisfiable: DoNotSchedule` là luật cứng.
+      - **PriorityClass**: Pod ưu tiên cao có thể đuổi Pod thấp hơn khi thiếu chỗ. `preemptionPolicy: Never` để chỉ xếp hàng trước, không đuổi ai.
+      - **PodDisruptionBudget** giới hạn số Pod bị gián đoạn **tự nguyện** (drain, eviction API) cùng lúc.
+      - Pod có `schedulerName` không tồn tại đứng Pending mãi mà **không có event**. Pod có `schedulingGates` hiển thị `SchedulingGated`.
+    setup: |
+      ns_reset lab10
+      apply_yaml <<'EOF'
+      apiVersion: v1
+      kind: Pod
+      metadata: {name: custom-sched, namespace: lab10}
+      spec:
+        schedulerName: my-scheduler
+        containers: [{name: app, image: nginx:1.27}]
+      ---
+      apiVersion: v1
+      kind: Pod
+      metadata: {name: gated, namespace: lab10}
+      spec:
+        schedulingGates: [{name: example.com/wait-for-quota}]
+        containers: [{name: app, image: nginx:1.27}]
+      EOF
+    cleanup: |
+      ns_delete lab10
+      k delete priorityclass high low --ignore-not-found >/dev/null
+    tasks:
+      - title: Trải đều theo node
+        body: |
+          Tạo Deployment `zonal` (`nginx:1.27`, 4 replica, label `app=zonal`) với topologySpreadConstraints: `maxSkew: 1`, `topologyKey: kubernetes.io/hostname`, `whenUnsatisfiable: ScheduleAnyway`.
+        solution: |
+          ```yaml
+              spec:
+                topologySpreadConstraints:
+                - maxSkew: 1
+                  topologyKey: kubernetes.io/hostname
+                  whenUnsatisfiable: ScheduleAnyway
+                  labelSelector:
+                    matchLabels: {app: zonal}
+          ```
+        checks:
+          - - Constraint maxSkew 1 theo hostname
+            - |
+              eq "$(val deploy zonal lab10 '{.spec.template.spec.topologySpreadConstraints[0].maxSkew}/{.spec.template.spec.topologySpreadConstraints[0].topologyKey}')" 1/kubernetes.io/hostname
+          - - 4 Pod Ready
+            - |
+              eq "$(val deploy zonal lab10 '{.status.readyReplicas}')" 4
+      - title: PriorityClass
+        body: |
+          Tạo PriorityClass `high` (value `100000`) và `low` (value `10`), cả hai không phải mặc định. Gán `high` cho Deployment `zonal`. Tạo Pod `vip` (`nginx:1.27`) dùng `high` nhưng **không** được đuổi Pod khác.
+        solution: |
+          ```bash
+          k create priorityclass high --value=100000 --description='prod'
+          k create priorityclass low --value=10 --description='batch'
+          k patch deploy zonal -n lab10 -p '{"spec":{"template":{"spec":{"priorityClassName":"high"}}}}'
+          ```
+          ```yaml
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: vip, namespace: lab10}
+          spec:
+            priorityClassName: high
+            preemptionPolicy: Never
+            containers: [{name: app, image: nginx:1.27}]
+          ```
+        checks:
+          - - high = 100000, low = 10
+            - |
+              eq "$(val priorityclass high - '{.value}')/$(val priorityclass low - '{.value}')" 100000/10
+          - - Pod của zonal có priority 100000
+            - |
+              eq "$(k get pods -n lab10 -l app=zonal -o jsonpath='{.items[0].spec.priority}')" 100000
+          - - vip có preemptionPolicy Never
+            - |
+              eq "$(val pod vip lab10 '{.spec.priorityClassName}/{.spec.preemptionPolicy}')" high/Never
+      - title: PodDisruptionBudget
+        body: |
+          Tạo PDB `zonal-pdb` cho Pod `app=zonal`, luôn giữ ít nhất 3 Pod sẵn sàng. Ghi số gián đoạn còn được phép (`status.disruptionsAllowed`) vào `/opt/cka/answers/10-pdb.txt`.
+        solution: |
+          ```bash
+          k create pdb zonal-pdb -n lab10 --selector=app=zonal --min-available=3
+          k get pdb zonal-pdb -n lab10 -o jsonpath='{.status.disruptionsAllowed}' > /opt/cka/answers/10-pdb.txt
+          ```
+        checks:
+          - - minAvailable 3
+            - |
+              eq "$(val pdb zonal-pdb lab10 '{.spec.minAvailable}')" 3
+          - - File ghi đúng disruptionsAllowed
+            - |
+              eq "$(cat $ANS/10-pdb.txt)" "$(val pdb zonal-pdb lab10 '{.status.disruptionsAllowed}')"
+      - title: Pod đứng Pending không có event
+        body: |
+          Pod `custom-sched` đứng `Pending` và không có event nào. Tìm nguyên nhân và cho nó chạy bằng scheduler mặc định, giữ nguyên tên.
+        hints:
+          - "`k get pod custom-sched -o yaml | grep -i scheduler`"
+          - "`schedulerName` không sửa được trên Pod đã tạo: xuất YAML, sửa, `replace --force`."
+        solution: |
+          ```bash
+          k get pod custom-sched -n lab10 -o jsonpath='{.spec.schedulerName}'    # my-scheduler không tồn tại
+          k get pod custom-sched -n lab10 -o yaml > cs.yaml
+          sed -i 's/schedulerName: my-scheduler/schedulerName: default-scheduler/' cs.yaml
+          k replace --force -f cs.yaml
+          ```
+        checks:
+          - - custom-sched dùng default-scheduler và Running
+            - |
+              eq "$(val pod custom-sched lab10 '{.spec.schedulerName}/{.status.phase}')" default-scheduler/Running
+      - title: Scheduling gate
+        body: |
+          Pod `gated` hiển thị `SchedulingGated`. Gỡ gate để Pod được lập lịch.
+        hints:
+          - "`schedulingGates` chỉ được xóa bớt, không thêm, trên Pod đã tạo."
+        solution: |
+          ```bash
+          k get pod gated -n lab10      # SchedulingGated
+          k patch pod gated -n lab10 --type=json -p '[{"op":"remove","path":"/spec/schedulingGates"}]'
+          ```
+        checks:
+          - - gated không còn gate và Running
+            - |
+              eq "$(val pod gated lab10 '{.spec.schedulingGates}')" "" && eq "$(val pod gated lab10 '{.status.phase}')" Running
+    refs:
+      - [Pod topology spread constraints, "concepts/scheduling-eviction/topology-spread-constraints/"]
+      - [Pod priority and preemption, "concepts/scheduling-eviction/pod-priority-preemption/"]
+      - [Disruptions, "concepts/workloads/pods/disruptions/"]
+      - [Pod scheduling readiness, "concepts/scheduling-eviction/pod-scheduling-readiness/"]
+
+  - id: "11"
+    slug: autoscaling-metrics
+    title: metrics-server, HPA và đổi tài nguyên tại chỗ
+    level: 2
+    minutes: 50
+    competencies: [work.2, trouble.2]
+    goal:
+      - Cài metrics-server và dùng kubectl top
+      - Tạo HPA bằng lệnh và bằng YAML autoscaling/v2 có behavior
+      - Tạo tải và quan sát HPA scale
+      - Đổi requests của Pod đang chạy mà không tạo lại Pod
+    concept: |
+      HPA đọc Metrics API (do **metrics-server** cung cấp qua aggregation layer) mỗi 15 giây và tính:
+
+      `desiredReplicas = ceil(currentReplicas × currentUtilization / targetUtilization)`
+
+      Utilization tính theo **requests**: Pod không có requests CPU thì HPA hiện `<unknown>`. Khi scale down, HPA lấy khuyến nghị lớn nhất trong cửa sổ ổn định (mặc định 300 giây) để tránh dao động.
+
+      **In-place resize** (GA từ v1.35): `kubectl patch pod --subresource resize` đổi requests/limits mà container không bị khởi động lại (với CPU).
+    setup: |
+      ensure_answers
+      ns_reset lab11
+    cleanup: |
+      ns_delete lab11
+      rm -f "$ANS"/11-*
+    tasks:
+      - title: Cài metrics-server
+        body: |
+          Cài metrics-server **v0.8.1** từ manifest chính thức. Vì kubelet dùng chứng chỉ tự ký, thêm cờ `--kubelet-insecure-tls` vào container (chỉ dùng cho lab). Xác nhận `kubectl top nodes` chạy được.
+        hints:
+          - Manifest ở `https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml`.
+          - "`k -n kube-system patch deploy metrics-server --type=json -p '[{\"op\":\"add\",\"path\":\"/spec/template/spec/containers/0/args/-\",\"value\":\"--kubelet-insecure-tls\"}]'`"
+        solution: |
+          ```bash
+          k apply -f https://github.com/kubernetes-sigs/metrics-server/releases/download/v0.8.1/components.yaml
+          k -n kube-system patch deploy metrics-server --type=json \
+            -p '[{"op":"add","path":"/spec/template/spec/containers/0/args/-","value":"--kubelet-insecure-tls"}]'
+          k -n kube-system rollout status deploy/metrics-server
+          k get apiservice v1beta1.metrics.k8s.io
+          k top nodes
+          ```
+        checks:
+          - - APIService v1beta1.metrics.k8s.io Available
+            - |
+              eq "$(val apiservice v1beta1.metrics.k8s.io - '{.status.conditions[?(@.type=="Available")].status}')" True
+          - - kubectl top nodes trả về số liệu
+            - k top nodes --no-headers | grep -q '%'
+      - title: Ứng dụng để scale
+        body: |
+          Trong `lab11` tạo Deployment `php` image `registry.k8s.io/hpa-example`, request `cpu=200m`, limit `cpu=500m`, và Service `php` cổng 80.
+        solution: |
+          ```bash
+          k create deploy php -n lab11 --image=registry.k8s.io/hpa-example --port=80
+          k set resources deploy php -n lab11 --requests=cpu=200m --limits=cpu=500m
+          k expose deploy php -n lab11 --port=80
+          ```
+        checks:
+          - - php request cpu 200m
+            - |
+              eq "$(val deploy php lab11 '{.spec.template.spec.containers[0].resources.requests.cpu}')" 200m
+          - - Service php cổng 80
+            - |
+              eq "$(val svc php lab11 '{.spec.ports[0].port}')" 80
+      - title: HPA bằng YAML autoscaling/v2
+        body: |
+          Tạo HPA `php` (autoscaling/v2) cho Deployment `php`: CPU utilization trung bình `50%`, tối thiểu 1, tối đa 5 replica. Khi scale down, cửa sổ ổn định là 60 giây.
+        hints:
+          - "`k autoscale deploy php --cpu-percent=50 --min=1 --max=5 $do` rồi thêm `behavior`."
+        solution: |
+          ```yaml
+          apiVersion: autoscaling/v2
+          kind: HorizontalPodAutoscaler
+          metadata: {name: php, namespace: lab11}
+          spec:
+            scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: php}
+            minReplicas: 1
+            maxReplicas: 5
+            metrics:
+            - type: Resource
+              resource:
+                name: cpu
+                target: {type: Utilization, averageUtilization: 50}
+            behavior:
+              scaleDown:
+                stabilizationWindowSeconds: 60
+          ```
+        checks:
+          - - min 1, max 5, target 50%
+            - |
+              eq "$(val hpa php lab11 '{.spec.minReplicas}/{.spec.maxReplicas}/{.spec.metrics[0].resource.target.averageUtilization}')" 1/5/50
+          - - scaleDown stabilizationWindowSeconds 60
+            - |
+              eq "$(val hpa php lab11 '{.spec.behavior.scaleDown.stabilizationWindowSeconds}')" 60
+          - - HPA đọc được metric (không còn unknown)
+            - |
+              [[ -n "$(val hpa php lab11 '{.status.currentMetrics[0].resource.current.averageUtilization}')" ]]
+      - title: Tạo tải và quan sát
+        body: |
+          Chạy Pod `load` (`busybox:1.36`) gọi `http://php` liên tục. Theo dõi `kubectl get hpa php -w` cho tới khi số replica tăng. Ghi số replica lớn nhất bạn thấy vào `/opt/cka/answers/11-max.txt`, rồi xóa Pod `load`.
+        solution: |
+          ```bash
+          k run load -n lab11 --image=busybox:1.36 -- sh -c 'while true; do wget -q -O- http://php >/dev/null; done'
+          k get hpa php -n lab11 -w
+          echo 4 > /opt/cka/answers/11-max.txt     # số bạn quan sát được
+          k delete pod load -n lab11
+          ```
+        checks:
+          - - File ghi số replica lớn hơn 1
+            - '[[ $(cat $ANS/11-max.txt) -gt 1 ]]'
+          - - Pod load đã xóa
+            - '! exists pod load lab11'
+      - title: Đổi requests tại chỗ
+        body: |
+          Tạo Pod `resizable` (`nginx:1.27`, request và limit `cpu=100m`). Không tạo lại Pod, đổi cả request và limit CPU thành `200m`.
+        solution: |
+          ```bash
+          k run resizable -n lab11 --image=nginx:1.27 --overrides='{"spec":{"containers":[{"name":"resizable","image":"nginx:1.27","resources":{"requests":{"cpu":"100m"},"limits":{"cpu":"100m"}}}]}}'
+          k patch pod resizable -n lab11 --subresource resize \
+            -p '{"spec":{"containers":[{"name":"resizable","resources":{"requests":{"cpu":"200m"},"limits":{"cpu":"200m"}}}]}}'
+          k get pod resizable -n lab11 -o jsonpath='{.status.containerStatuses[0].resources}'
+          ```
+        checks:
+          - - Container đang chạy với request cpu 200m
+            - |
+              eq "$(val pod resizable lab11 '{.status.containerStatuses[0].resources.requests.cpu}')" 200m
+          - - Container không bị restart
+            - |
+              eq "$(val pod resizable lab11 '{.status.containerStatuses[0].restartCount}')" 0
+      - title: kubectl top ra file
+        body: |
+          Ghi tên Pod trong `kube-system` đang dùng **nhiều memory nhất** vào `/opt/cka/answers/11-top.txt` (chỉ tên Pod).
+        solution: |
+          ```bash
+          k top pod -n kube-system --sort-by=memory --no-headers | head -1 | awk '{print $1}' > /opt/cka/answers/11-top.txt
+          ```
+        checks:
+          - - Tên Pod là một trong 3 Pod dùng nhiều memory nhất lúc chấm
+            - |
+              k top pod -n kube-system --sort-by=memory --no-headers | head -3 | awk '{print $1}' | grep -qx "$(cat $ANS/11-top.txt)"
+    refs:
+      - [Horizontal Pod Autoscaling, "tasks/run-application/horizontal-pod-autoscale/"]
+      - [HPA walkthrough, "tasks/run-application/horizontal-pod-autoscale-walkthrough/"]
+      - [Resize container resources, "tasks/configure-pod-container/resize-container-resources/"]

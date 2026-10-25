@@ -1,0 +1,388 @@
+- id: 12
+  slug: node-selection
+  title: nodeSelector, node affinity, taint và toleration
+  level: 3
+  minutes: 30
+  competencies: ["work:4"]
+  goal: |
+    Đặt Pod lên đúng node: chọn node bằng label, giữ riêng một node cho workload đặc biệt bằng taint, và cho đúng workload đó vào bằng toleration cộng affinity.
+  concepts: |
+    - `nodeSelector` là điều kiện cứng đơn giản. `nodeAffinity` có `requiredDuringScheduling…` (cứng) và `preferredDuringScheduling…` (cộng điểm, có `weight`).
+    - **Taint** đẩy Pod ra khỏi node (`NoSchedule`, `PreferNoSchedule`, `NoExecute`). **Toleration** chỉ *cho phép* Pod vào node có taint, không *ép* Pod vào đó. Muốn dành riêng node: taint + toleration + affinity.
+    - `IgnoredDuringExecution`: đổi label node sau khi Pod đã chạy không đuổi Pod. Riêng taint `NoExecute` thì đuổi.
+  tasks:
+    - |
+      Gắn label `disktype=ssd` cho `$NODE1` và `disktype=hdd` cho `$NODE2`.
+    - |
+      Trong `lab12`, tạo Pod `fast` (image `nginx:1.27`) chỉ chạy trên node có `disktype=ssd`, dùng `nodeSelector`.
+    - |
+      Dành `$NODE2` cho workload GPU: gắn taint `dedicated=gpu:NoSchedule` và label `accelerator=nvidia`.
+    - |
+      Tạo Deployment `gpu-job` (2 replica, image `busybox:1.36`, lệnh `sleep 3600`) chạy **chỉ** trên `$NODE2`: tolerate taint ở trên và dùng `requiredDuringSchedulingIgnoredDuringExecution` với label `accelerator=nvidia`.
+    - |
+      Tạo Pod `flex` (image `nginx:1.27`) **ưu tiên** (không bắt buộc) node có `disktype=hdd`, weight 80.
+  hints:
+    - |
+      Gỡ taint
+      Thêm dấu `-` ở cuối: `kubectl taint node $NODE2 dedicated-`
+    - |
+      Vì sao Pod tolerate rồi vẫn chạy sang node khác?
+      Toleration không chọn node. Cần thêm affinity hoặc nodeSelector.
+  solution: |
+    ```bash
+    eval "$(./lab env)"
+    kubectl label node $NODE1 disktype=ssd
+    kubectl label node $NODE2 disktype=hdd accelerator=nvidia
+    kubectl taint node $NODE2 dedicated=gpu:NoSchedule
+    kubectl run fast -n lab12 --image=nginx:1.27 $do > fast.yaml   # thêm nodeSelector rồi apply
+    ```
+    ```yaml
+    # fast
+    spec:
+      nodeSelector: {disktype: ssd}
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: gpu-job, namespace: lab12}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: gpu-job}}
+      template:
+        metadata: {labels: {app: gpu-job}}
+        spec:
+          tolerations:
+          - {key: dedicated, operator: Equal, value: gpu, effect: NoSchedule}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - {key: accelerator, operator: In, values: [nvidia]}
+          containers:
+          - {name: job, image: busybox:1.36, command: ["sleep", "3600"]}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: flex, namespace: lab12}
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - {key: disktype, operator: In, values: [hdd]}
+      containers:
+      - {name: flex, image: nginx:1.27}
+    ```
+  setup: |
+    ns_fresh lab12
+    kubectl label node "$NODE1" "$NODE2" disktype- accelerator- >/dev/null 2>&1 || true
+    kubectl taint node "$NODE2" dedicated- >/dev/null 2>&1 || true
+  verify: |
+    expect "$NODE1 có disktype=ssd" "$(jp node "$NODE1" '{.metadata.labels.disktype}')" "ssd"
+    expect "$NODE2 có disktype=hdd" "$(jp node "$NODE2" '{.metadata.labels.disktype}')" "hdd"
+    expect "Pod fast dùng nodeSelector disktype=ssd" "$(jp pod fast -n lab12 '{.spec.nodeSelector.disktype}')" "ssd"
+    expect "Pod fast chạy trên $NODE1" "$(jp pod fast -n lab12 '{.spec.nodeName}')" "$NODE1"
+    expect "$NODE2 có taint dedicated=gpu:NoSchedule" "$(jp node "$NODE2" '{.spec.taints[?(@.key=="dedicated")].value}:{.spec.taints[?(@.key=="dedicated")].effect}')" "gpu:NoSchedule"
+    expect "$NODE2 có label accelerator=nvidia" "$(jp node "$NODE2" '{.metadata.labels.accelerator}')" "nvidia"
+    expect "gpu-job 2/2 sẵn sàng" "$(jp deploy gpu-job -n lab12 '{.status.readyReplicas}')" "2"
+    expect "gpu-job chỉ chạy trên $NODE2" "$(jp pods -n lab12 -l app=gpu-job '{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u | xargs)" "$NODE2"
+    check "gpu-job dùng required node affinity" test -n "$(jp deploy gpu-job -n lab12 '{.spec.template.spec.affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution}')"
+    expect "flex ưu tiên disktype=hdd với weight 80" "$(jp pod flex -n lab12 '{.spec.affinity.nodeAffinity.preferredDuringSchedulingIgnoredDuringExecution[0].weight}')" "80"
+  cleanup: |
+    kubectl delete ns lab12 --ignore-not-found --wait=false >/dev/null
+    kubectl label node "$NODE1" "$NODE2" disktype- accelerator- >/dev/null 2>&1 || true
+    kubectl taint node "$NODE2" dedicated- >/dev/null 2>&1 || true
+  solve: |
+    kubectl label node "$NODE1" disktype=ssd
+    kubectl label node "$NODE2" disktype=hdd accelerator=nvidia
+    kubectl taint node "$NODE2" dedicated=gpu:NoSchedule
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: fast, namespace: lab12}
+    spec:
+      nodeSelector: {disktype: ssd}
+      containers:
+      - {name: fast, image: nginx:1.27}
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: gpu-job, namespace: lab12}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: gpu-job}}
+      template:
+        metadata: {labels: {app: gpu-job}}
+        spec:
+          tolerations:
+          - {key: dedicated, operator: Equal, value: gpu, effect: NoSchedule}
+          affinity:
+            nodeAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                nodeSelectorTerms:
+                - matchExpressions:
+                  - {key: accelerator, operator: In, values: [nvidia]}
+          containers:
+          - {name: job, image: busybox:1.36, command: ["sleep", "3600"]}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: flex, namespace: lab12}
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 80
+            preference:
+              matchExpressions:
+              - {key: disktype, operator: In, values: [hdd]}
+      containers:
+      - {name: flex, image: nginx:1.27}
+    EOF
+    kubectl rollout status deploy/gpu-job -n lab12 --timeout=120s
+    kubectl wait --for=condition=Ready pod/fast -n lab12 --timeout=90s
+  docs:
+    - [Assigning Pods to nodes, "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/"]
+    - [Taints and tolerations, "https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/"]
+
+- id: 13
+  slug: spread-priority
+  title: Anti-affinity, topology spread và PriorityClass
+  level: 3
+  minutes: 30
+  competencies: ["work:4"]
+  goal: |
+    Tách replica ra các node khác nhau để chịu lỗi, chia đều Pod theo topology, và gán độ ưu tiên cho workload quan trọng.
+  concepts: |
+    - `podAntiAffinity` với `topologyKey: kubernetes.io/hostname` cấm hai Pod cùng label nằm chung node. Nếu `required` mà không đủ node, Pod thừa đứng Pending.
+    - `topologySpreadConstraints`: `maxSkew` là chênh lệch tối đa giữa các miền, `whenUnsatisfiable: DoNotSchedule` (cứng) hoặc `ScheduleAnyway`. `nodeTaintsPolicy: Honor` loại khỏi phép tính các node có taint mà Pod không tolerate (mặc định là `Ignore`, tức vẫn tính).
+    - PriorityClass gán số ưu tiên; Pod ưu tiên cao có thể **preempt** (đuổi) Pod thấp hơn khi thiếu chỗ. Một PriorityClass có thể là `globalDefault`.
+  tasks:
+    - |
+      Trong `lab13`, tạo Deployment `web` (2 replica, `nginx:1.27`, label `app=web`) mà hai Pod **bắt buộc** nằm trên hai node khác nhau.
+    - |
+      Tạo Deployment `spread` (4 replica, `nginx:1.27`, label `app=spread`) chia đều theo node (`kubernetes.io/hostname`), `maxSkew: 1`, không được vi phạm. Cả 4 Pod phải chạy.
+    - |
+      Cluster có một PriorityClass là mặc định toàn cục. Ghi tên của nó vào `~/cka-answers/13-default-pc.txt`.
+    - |
+      Tạo PriorityClass `critical-app` với value `1000000`, không phải mặc định, mô tả `payment`. Tạo Pod `vip` (`nginx:1.27`) dùng nó.
+  hints:
+    - |
+      spread chỉ chạy được 2 Pod?
+      Control plane cũng được tính là một "miền" với 0 Pod, nên mỗi worker chỉ được 1 Pod. Đặt `nodeTaintsPolicy: Honor` để bỏ qua node có taint mà Pod không tolerate.
+    - |
+      Tìm PriorityClass mặc định
+      `kubectl get priorityclass` rồi xem cột `GLOBAL-DEFAULT`.
+  solution: |
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: web, namespace: lab13}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: web}}
+      template:
+        metadata: {labels: {app: web}}
+        spec:
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - topologyKey: kubernetes.io/hostname
+                labelSelector: {matchLabels: {app: web}}
+          containers:
+          - {name: nginx, image: nginx:1.27}
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: spread, namespace: lab13}
+    spec:
+      replicas: 4
+      selector: {matchLabels: {app: spread}}
+      template:
+        metadata: {labels: {app: spread}}
+        spec:
+          topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            nodeTaintsPolicy: Honor
+            labelSelector: {matchLabels: {app: spread}}
+          containers:
+          - {name: nginx, image: nginx:1.27}
+    ```
+    ```bash
+    kubectl get pc                     # cột GLOBAL-DEFAULT
+    echo team-default > ~/cka-answers/13-default-pc.txt
+    kubectl create priorityclass critical-app --value=1000000 --description=payment
+    kubectl run vip -n lab13 --image=nginx:1.27 $do > vip.yaml   # thêm spec.priorityClassName: critical-app
+    kubectl apply -f vip.yaml
+    kubectl get pod vip -n lab13 -o jsonpath='{.spec.priority}'   # 1000000
+    ```
+    Nếu thiếu `nodeTaintsPolicy: Honor`, control plane (có taint) vẫn được tính là một miền với 0 Pod, nên mỗi worker chỉ nhận 1 Pod và 2 Pod còn lại đứng Pending. Có `Honor` thì chỉ tính 2 worker: 2 + 2.
+  setup: |
+    answers_dir; rm -f "$ANS/13-default-pc.txt"
+    ns_fresh lab13
+    kubectl delete pc critical-app team-default --ignore-not-found >/dev/null
+    kubectl create priorityclass team-default --value=1000 --global-default=true --description="lab13 default" >/dev/null
+  verify: |
+    expect "web 2/2 sẵn sàng" "$(jp deploy web -n lab13 '{.status.readyReplicas}')" "2"
+    expect "web dùng required podAntiAffinity theo hostname" "$(jp deploy web -n lab13 '{.spec.template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[0].topologyKey}')" "kubernetes.io/hostname"
+    expect "Hai Pod web trên hai node khác nhau" "$(jp pods -n lab13 -l app=web '{.items[*].spec.nodeName}' | tr ' ' '\n' | sort -u | wc -l | tr -d ' ')" "2"
+    expect "spread 4/4 sẵn sàng" "$(jp deploy spread -n lab13 '{.status.readyReplicas}')" "4"
+    expect "spread maxSkew 1, DoNotSchedule" "$(jp deploy spread -n lab13 '{.spec.template.spec.topologySpreadConstraints[0].maxSkew}/{.spec.template.spec.topologySpreadConstraints[0].whenUnsatisfiable}')" "1/DoNotSchedule"
+    counts=$(jp pods -n lab13 -l app=spread '{.items[*].spec.nodeName}' | tr ' ' '\n' | sort | uniq -c | awk '{print $1}' | sort -n | xargs)
+    check "Pod spread chia đều (lệch ≤ 1)" bash -c "set -- $counts; [ \$# -ge 2 ] && [ \$((\${@: -1} - \$1)) -le 1 ]"
+    expect "13-default-pc.txt" "$(ans 13-default-pc.txt)" "team-default"
+    expect "critical-app value 1000000" "$(jp pc critical-app '{.value}')" "1000000"
+    expect_match "critical-app không phải mặc định" "$(jp pc critical-app '{.globalDefault}')" '^(false)?$'
+    expect "vip có priority 1000000" "$(jp pod vip -n lab13 '{.spec.priority}')" "1000000"
+  cleanup: |
+    kubectl delete ns lab13 --ignore-not-found --wait=false >/dev/null
+    kubectl delete pc critical-app team-default --ignore-not-found >/dev/null
+    rm -f "$ANS/13-default-pc.txt"
+  solve: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: web, namespace: lab13}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: web}}
+      template:
+        metadata: {labels: {app: web}}
+        spec:
+          affinity:
+            podAntiAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+              - topologyKey: kubernetes.io/hostname
+                labelSelector: {matchLabels: {app: web}}
+          containers:
+          - {name: nginx, image: nginx:1.27}
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: spread, namespace: lab13}
+    spec:
+      replicas: 4
+      selector: {matchLabels: {app: spread}}
+      template:
+        metadata: {labels: {app: spread}}
+        spec:
+          topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: DoNotSchedule
+            nodeTaintsPolicy: Honor
+            labelSelector: {matchLabels: {app: spread}}
+          containers:
+          - {name: nginx, image: nginx:1.27}
+    EOF
+    echo team-default > "$ANS/13-default-pc.txt"
+    kubectl create priorityclass critical-app --value=1000000 --description=payment
+    kubectl apply -f - <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: vip, namespace: lab13}
+    spec:
+      priorityClassName: critical-app
+      containers:
+      - {name: vip, image: nginx:1.27}
+    EOF
+    kubectl rollout status deploy/web -n lab13 --timeout=120s
+    kubectl rollout status deploy/spread -n lab13 --timeout=120s
+  docs:
+    - [Inter-pod affinity and anti-affinity, "https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#inter-pod-affinity-and-anti-affinity"]
+    - [Pod topology spread constraints, "https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/"]
+    - [Pod priority and preemption, "https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/"]
+
+- id: 14
+  slug: static-pod-maintenance
+  title: Static pod, lập lịch thủ công và bảo trì node
+  level: 3
+  minutes: 35
+  env: kind
+  competencies: ["work:4", "work:3", "trouble:0"]
+  goal: |
+    Chạy Pod không qua scheduler (static pod, `nodeName`), và đưa một node vào bảo trì an toàn với PodDisruptionBudget, `cordon` và `drain`.
+  concepts: |
+    - **Static pod**: kubelet đọc file YAML trong `staticPodPath` (kubeadm: `/etc/kubernetes/manifests`) và chạy Pod mà không cần API server. API chỉ thấy một "mirror pod" tên `<tên>-<node>`; xóa bằng kubectl không có tác dụng, phải xóa file.
+    - Đặt `spec.nodeName` thì bỏ qua scheduler: kubelet của node đó nhận Pod luôn. Hữu ích khi scheduler chết.
+    - `cordon` chặn Pod mới; `drain` = cordon + đuổi Pod qua Eviction API, tôn trọng **PodDisruptionBudget**. DaemonSet và mirror pod không bị đuổi; cần `--ignore-daemonsets`, `--delete-emptydir-data`.
+  tasks:
+    - |
+      Tạo static pod `static-web` (image `nginx:1.27`) trên `$NODE1`. Tìm đúng thư mục từ cấu hình kubelet của node.
+    - |
+      Giả sử scheduler đang hỏng. Tạo Pod `manual` (image `nginx:1.27`) trong `lab14` chạy trên `$NODE2` **mà không qua scheduler**.
+    - |
+      Deployment `web` trong `lab14` có 3 replica. Tạo PodDisruptionBudget `web-pdb` đảm bảo luôn còn ít nhất 2 Pod `app=web`.
+    - |
+      Đưa `$NODE1` vào bảo trì: không nhận Pod mới và mọi Pod thường đã dời đi. Để nguyên trạng thái này khi chấm; `./lab reset 14` sẽ đưa node trở lại.
+  hints:
+    - |
+      Tìm thư mục static pod
+      `./lab ssh $NODE1` rồi `grep staticPodPath /var/lib/kubelet/config.yaml`
+    - |
+      Drain bị chặn?
+      Đọc thông báo: thường do DaemonSet (`--ignore-daemonsets`), Pod dùng emptyDir (`--delete-emptydir-data`), hoặc Pod không có controller (Pod trần, cần `--force`, và Pod đó sẽ mất hẳn). Pod trần còn sót từ lab khác: `./lab reset <id>` hoặc thêm `--force`.
+  solution: |
+    ```bash
+    eval "$(./lab env)"
+    kubectl run static-web --image=nginx:1.27 $do > static-web.yaml
+    ./lab ssh $NODE1
+    #   trên node:
+    #   grep staticPodPath /var/lib/kubelet/config.yaml     → /etc/kubernetes/manifests
+    #   cat > /etc/kubernetes/manifests/static-web.yaml     (dán nội dung) ; exit
+    kubectl get pod static-web-$NODE1                         # mirror pod
+
+    kubectl run manual -n lab14 --image=nginx:1.27 $do > manual.yaml
+    # thêm  spec.nodeName: <tên NODE2>  rồi apply
+    kubectl apply -f manual.yaml
+
+    kubectl create pdb web-pdb -n lab14 --selector=app=web --min-available=2
+    kubectl drain $NODE1 --ignore-daemonsets --delete-emptydir-data
+    kubectl get nodes          # NODE1: Ready,SchedulingDisabled
+    ```
+  setup: |
+    ns_fresh lab14
+    kubectl uncordon "$NODE1" >/dev/null 2>&1 || true
+    node_exec "$NODE1" "rm -f $(static_dir "$NODE1")/static-web.yaml" >/dev/null 2>&1 || true
+    kubectl create deploy web -n lab14 --image=nginx:1.27 --replicas=3 >/dev/null
+    kubectl rollout status deploy/web -n lab14 --timeout=120s >/dev/null
+  verify: |
+    expect "Mirror pod static-web-$NODE1 Running" "$(jp pod "static-web-$NODE1" '{.status.phase}')" "Running"
+    check "static-web là static pod (mirror)" test -n "$(jp pod "static-web-$NODE1" '{.metadata.annotations.kubernetes\.io/config\.mirror}')"
+    expect "manual chạy trên $NODE2" "$(jp pod manual -n lab14 '{.spec.nodeName}')" "$NODE2"
+    expect "manual Running" "$(jp pod manual -n lab14 '{.status.phase}')" "Running"
+    check "manual không qua scheduler (không có event Scheduled)" bash -c "! kubectl get events -n lab14 --field-selector involvedObject.name=manual,reason=Scheduled -o name | grep -q ."
+    expect "web-pdb minAvailable 2" "$(jp pdb web-pdb -n lab14 '{.spec.minAvailable}')" "2"
+    expect "web-pdb chọn app=web" "$(jp pdb web-pdb -n lab14 '{.spec.selector.matchLabels.app}')" "web"
+    expect "$NODE1 đã cordon" "$(jp node "$NODE1" '{.spec.unschedulable}')" "true"
+    expect "Không còn Pod web trên $NODE1" "$(jp pods -n lab14 -l app=web '{.items[*].spec.nodeName}' | tr ' ' '\n' | grep -c "^$NODE1$")" "0"
+    expect "web vẫn 3/3 sẵn sàng" "$(jp deploy web -n lab14 '{.status.readyReplicas}')" "3"
+  cleanup: |
+    kubectl uncordon "$NODE1" >/dev/null 2>&1 || true
+    node_exec "$NODE1" "rm -f $(static_dir "$NODE1")/static-web.yaml" >/dev/null 2>&1 || true
+    kubectl delete ns lab14 --ignore-not-found --wait=false >/dev/null
+  solve: |
+    dir=$(static_dir "$NODE1")
+    kubectl run static-web --image=nginx:1.27 --dry-run=client -o yaml > /tmp/static-web.yaml
+    node_put "$NODE1" /tmp/static-web.yaml "$dir/static-web.yaml"
+    kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: manual, namespace: lab14}
+    spec:
+      nodeName: $NODE2
+      containers:
+      - {name: manual, image: nginx:1.27}
+    EOF
+    kubectl create pdb web-pdb -n lab14 --selector=app=web --min-available=2
+    kubectl drain "$NODE1" --ignore-daemonsets --delete-emptydir-data --timeout=180s
+    kubectl rollout status deploy/web -n lab14 --timeout=120s
+    for i in $(seq 1 30); do [ "$(kubectl get pod "static-web-$NODE1" -o jsonpath='{.status.phase}' 2>/dev/null)" = Running ] && break; sleep 3; done
+  docs:
+    - [Create static Pods, "https://kubernetes.io/docs/tasks/configure-pod-container/static-pod/"]
+    - [Safely drain a node, "https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/"]
+    - [Disruptions, "https://kubernetes.io/docs/concepts/workloads/pods/disruptions/"]

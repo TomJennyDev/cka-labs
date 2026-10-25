@@ -1,0 +1,933 @@
+phase: 1
+title: "Giai đoạn 1 · Nền tảng: kubectl, Pod và workload"
+intro: |
+  Thao tác nhanh với kubectl và các object hàng ngày: Pod, Deployment, ConfigMap, Secret, probe, Job, DaemonSet, StatefulSet, static Pod. Đây là phần nền mà mọi câu hỏi khác dựa vào.
+labs:
+  - id: "02"
+    slug: kubectl-essentials
+    title: kubectl nhanh như trong phòng thi
+    level: 1
+    minutes: 40
+    competencies: [trouble.2]
+    goal:
+      - Đổi context và namespace mặc định không nhầm
+      - Sinh YAML bằng lệnh imperative thay vì gõ tay
+      - Trích dữ liệu bằng jsonpath, custom-columns, sort-by và ghi ra file đúng định dạng
+      - Tra field bằng kubectl explain thay vì nhớ
+    concept: |
+      Mỗi câu trong đề bắt đầu bằng một lệnh `kubectl config use-context ...`. Bỏ qua dòng đó là làm đúng bài trên sai cluster và mất trọn điểm.
+
+      Ba kỹ thuật tiết kiệm nhiều thời gian nhất:
+
+      - **Sinh YAML**: `k run`, `k create deploy|svc|cm|secret|job|cronjob|role|rolebinding ... $do > file.yaml` rồi sửa thêm.
+      - **Trích dữ liệu**: `-o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}'`, `-o custom-columns=`, `--sort-by=`.
+      - **Tra field**: `k explain pod.spec.containers.livenessProbe` hoặc `--recursive`.
+    setup: |
+      ensure_answers
+      ns_reset lab02
+      for i in 1 2 3; do k run "web-$i" -n lab02 --image=nginx:1.27 -l tier=front >/dev/null; done
+      for i in 1 2; do k run "db-$i" -n lab02 --image=nginx:1.27 -l tier=back >/dev/null; done
+      k run "cache-x" -n lab02 --image=nginx:1.27 -l tier=back >/dev/null
+    cleanup: |
+      k config set-context --current --namespace=default >/dev/null
+      ns_delete lab02
+      rm -f "$ANS"/02-*
+    tasks:
+      - title: Namespace mặc định của context
+        body: |
+          Đặt namespace mặc định của context hiện tại thành `lab02`, để `kubectl get pods` không cần `-n`.
+        hints:
+          - "`kubectl config set-context --help`"
+        solution: |
+          ```bash
+          k config set-context --current --namespace=lab02
+          k config view --minify | grep namespace
+          ```
+        checks:
+          - - Context hiện tại dùng namespace lab02
+            - |
+              eq "$(k config view --minify -o jsonpath='{..namespace}')" lab02
+      - title: Tạo Pod bằng một lệnh
+        body: |
+          Trong `lab02`, tạo Pod `nginx` image `nginx:1.27`, label `app=nginx` và `tier=front`, khai báo containerPort 80.
+        solution: |
+          ```bash
+          k run nginx -n lab02 --image=nginx:1.27 --labels=app=nginx,tier=front --port=80
+          ```
+        checks:
+          - - Pod nginx dùng nginx:1.27
+            - |
+              eq "$(val pod nginx lab02 '{.spec.containers[0].image}')" nginx:1.27
+          - - Có label app=nginx và tier=front
+            - |
+              eq "$(val pod nginx lab02 '{.metadata.labels.app}/{.metadata.labels.tier}')" nginx/front
+          - - containerPort 80
+            - |
+              eq "$(val pod nginx lab02 '{.spec.containers[0].ports[0].containerPort}')" 80
+      - title: Sinh manifest rồi mới tạo
+        body: |
+          Ghi manifest Deployment `cache` (image `redis:7.4`, 2 replica) vào `/opt/cka/answers/02-cache.yaml` mà **không** tạo nó bằng lệnh sinh file. Sau đó tạo Deployment từ chính file đó trong `lab02`.
+        hints:
+          - "`--dry-run=client -o yaml` chỉ in ra, không gửi lên API."
+        solution: |
+          ```bash
+          k create deploy cache --image=redis:7.4 --replicas=2 -n lab02 $do > /opt/cka/answers/02-cache.yaml
+          k apply -f /opt/cka/answers/02-cache.yaml
+          ```
+        checks:
+          - - File có kind Deployment và 2 replica
+            - |
+              grep -q 'kind: Deployment' $ANS/02-cache.yaml && grep -q 'replicas: 2' $ANS/02-cache.yaml
+          - - Deployment cache có 2 Pod Ready
+            - |
+              eq "$(val deploy cache lab02 '{.status.readyReplicas}')" 2
+      - title: jsonpath ra file
+        body: |
+          Ghi tên các Pod có label `tier=back` trong `lab02` vào `/opt/cka/answers/02-back.txt`, mỗi dòng một tên, sắp theo bảng chữ cái.
+        solution: |
+          ```bash
+          k get pods -n lab02 -l tier=back -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | sort > /opt/cka/answers/02-back.txt
+          ```
+        checks:
+          - - Đúng danh sách và đúng thứ tự
+            - |
+              diff -q <(k get pods -n lab02 -l tier=back -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | sort) $ANS/02-back.txt
+      - title: custom-columns và sort-by
+        body: |
+          Ghi danh sách node vào `/opt/cka/answers/02-nodes.txt` với 3 cột tiêu đề `NAME`, `VERSION` (kubelet), `IP` (InternalIP), sắp theo tên node.
+        hints:
+          - "IP: `.status.addresses[?(@.type==\"InternalIP\")].address`"
+        solution: |
+          ```bash
+          k get nodes --sort-by=.metadata.name -o custom-columns='NAME:.metadata.name,VERSION:.status.nodeInfo.kubeletVersion,IP:.status.addresses[?(@.type=="InternalIP")].address' \
+            > /opt/cka/answers/02-nodes.txt
+          ```
+        checks:
+          - - Dòng đầu là NAME VERSION IP
+            - |
+              head -1 $ANS/02-nodes.txt | grep -qE '^NAME +VERSION +IP'
+          - - Có mọi node kèm IP
+            - |
+              for n in $(k get nodes -o jsonpath='{.items[*].metadata.name}'); do ip=$(k get node $n -o jsonpath='{.status.addresses[?(@.type=="InternalIP")].address}'); grep -qE "^$n +v[0-9.]+ +$ip" $ANS/02-nodes.txt || exit 1; done
+      - title: Tra field bằng kubectl explain
+        body: |
+          Tìm tên field trong `pod.spec` cho phép các container trong cùng Pod thấy tiến trình của nhau. Ghi đúng tên field (một từ) vào `/opt/cka/answers/02-field.txt`.
+        hints:
+          - "`k explain pod.spec | grep -i process`"
+        solution: |
+          ```bash
+          k explain pod.spec | grep -i -A2 process
+          echo shareProcessNamespace > /opt/cka/answers/02-field.txt
+          ```
+        checks:
+          - - Đúng field shareProcessNamespace
+            - |
+              grep -qx shareProcessNamespace $ANS/02-field.txt
+      - title: Xóa ngay lập tức
+        body: |
+          Xóa Pod `web-3` trong `lab02` mà không chờ grace period.
+        solution: |
+          ```bash
+          k delete pod web-3 -n lab02 $now
+          ```
+        checks:
+          - - web-3 không còn
+            - '! exists pod web-3 lab02'
+    refs:
+      - [kubectl quick reference, "reference/kubectl/quick-reference/"]
+      - [JSONPath support, "reference/kubectl/jsonpath/"]
+
+  - id: "03"
+    slug: pods
+    title: Pod, nhiều container, init và sidecar
+    level: 1
+    minutes: 45
+    competencies: [work.3, trouble.3]
+    goal:
+      - Viết Pod với env, command, args, label, annotation
+      - Ghép nhiều container chung volume, dùng init container và native sidecar
+      - Đọc log từng container, exec vào container
+    concept: |
+      Pod là nhóm container chung **network namespace** (một IP, gọi nhau qua `localhost`) và chung volume. Ba mẫu hay gặp:
+
+      - **Init container** chạy tuần tự trước container chính, phải thoát 0.
+      - **Sidecar** (native): khai báo trong `initContainers` với `restartPolicy: Always`. Khởi động trước, chạy song song suốt đời Pod, dừng sau container chính.
+      - **Chia sẻ dữ liệu** qua `emptyDir`.
+
+      `command` ghi đè ENTRYPOINT của image, `args` ghi đè CMD.
+    setup: |
+      ensure_answers
+      ns_reset lab03
+    cleanup: |
+      ns_delete lab03
+      rm -f "$ANS"/03-*
+    tasks:
+      - title: Pod với biến môi trường
+        body: |
+          Trong `lab03` tạo Pod `envpod` image `busybox:1.36` chạy `sleep 3600`, có:
+
+          - biến `APP_MODE=dev`
+          - biến `POD_NAME` lấy từ tên chính Pod (downward API)
+        hints:
+          - "`valueFrom.fieldRef.fieldPath: metadata.name`"
+        solution: |
+          ```bash
+          k run envpod -n lab03 --image=busybox:1.36 --env=APP_MODE=dev $do -- sleep 3600 > envpod.yaml
+          ```
+          Thêm vào container trong file:
+          ```yaml
+              env:
+              - name: APP_MODE
+                value: dev
+              - name: POD_NAME
+                valueFrom:
+                  fieldRef: {fieldPath: metadata.name}
+          ```
+          ```bash
+          k apply -f envpod.yaml
+          k exec -n lab03 envpod -- env | grep -E 'APP_MODE|POD_NAME'
+          ```
+        checks:
+          - - Pod envpod Running
+            - |
+              eq "$(val pod envpod lab03 '{.status.phase}')" Running
+          - - APP_MODE=dev và POD_NAME=envpod trong container
+            - |
+              e=$(k exec -n lab03 envpod -- env); grep -qx APP_MODE=dev <<<"$e" && grep -qx POD_NAME=envpod <<<"$e"
+      - title: Hai container chung volume
+        body: |
+          Tạo Pod `shared` với volume `emptyDir` tên `data` và hai container `busybox:1.36`:
+
+          - `writer`: mỗi 2 giây ghi `date` nối vào `/data/log.txt`
+          - `reader`: `tail -F /data/log.txt`
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: shared, namespace: lab03}
+          spec:
+            volumes: [{name: data, emptyDir: {}}]
+            containers:
+            - name: writer
+              image: busybox:1.36
+              command: ["sh", "-c", "while true; do date >> /data/log.txt; sleep 2; done"]
+              volumeMounts: [{name: data, mountPath: /data}]
+            - name: reader
+              image: busybox:1.36
+              command: ["sh", "-c", "tail -F /data/log.txt"]
+              volumeMounts: [{name: data, mountPath: /data}]
+          ```
+        checks:
+          - - Pod shared có 2 container Ready
+            - |
+              eq "$(val pod shared lab03 '{.status.containerStatuses[*].ready}')" "true true"
+          - - Volume data là emptyDir
+            - |
+              has "$(val pod shared lab03 '{.spec.volumes[?(@.name=="data")]}')" emptyDir
+          - - reader in ra nội dung
+            - '[[ -n "$(k logs -n lab03 shared -c reader --tail=1)" ]]'
+      - title: Init container chuẩn bị dữ liệu
+        body: |
+          Tạo Pod `withinit` có:
+
+          - init container `prepare` (`busybox:1.36`) ghi chữ `ready` vào `/work/status`
+          - container `main` (`busybox:1.36`) in nội dung `/work/status` rồi `sleep 3600`
+          - volume `emptyDir` chung tên `work`
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: withinit, namespace: lab03}
+          spec:
+            volumes: [{name: work, emptyDir: {}}]
+            initContainers:
+            - name: prepare
+              image: busybox:1.36
+              command: ["sh", "-c", "echo ready > /work/status"]
+              volumeMounts: [{name: work, mountPath: /work}]
+            containers:
+            - name: main
+              image: busybox:1.36
+              command: ["sh", "-c", "cat /work/status; sleep 3600"]
+              volumeMounts: [{name: work, mountPath: /work}]
+          ```
+        checks:
+          - - Init container tên prepare
+            - |
+              eq "$(val pod withinit lab03 '{.spec.initContainers[0].name}')" prepare
+          - - main in ra ready
+            - |
+              k logs -n lab03 withinit -c main | grep -qx ready
+      - title: Native sidecar đọc log
+        body: |
+          Tạo Pod `app-sidecar`:
+
+          - container `app` (`busybox:1.36`) mỗi giây ghi `hello` nối vào `/var/log/app.log`
+          - sidecar `log-tail` (`busybox:1.36`) chạy `tail -F /var/log/app.log`, khai báo là **native sidecar**
+          - chung `emptyDir` gắn ở `/var/log`
+
+          Sau đó `kubectl logs app-sidecar -c log-tail` phải thấy log của app.
+        hints:
+          - 'Native sidecar = phần tử trong `initContainers` có `restartPolicy: Always`.'
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: app-sidecar, namespace: lab03}
+          spec:
+            volumes: [{name: logs, emptyDir: {}}]
+            initContainers:
+            - name: log-tail
+              image: busybox:1.36
+              restartPolicy: Always
+              command: ["sh", "-c", "tail -F /var/log/app.log"]
+              volumeMounts: [{name: logs, mountPath: /var/log}]
+            containers:
+            - name: app
+              image: busybox:1.36
+              command: ["sh", "-c", "while true; do echo hello >> /var/log/app.log; sleep 1; done"]
+              volumeMounts: [{name: logs, mountPath: /var/log}]
+          ```
+        checks:
+          - - log-tail là init container với restartPolicy Always
+            - |
+              eq "$(val pod app-sidecar lab03 '{.spec.initContainers[?(@.name=="log-tail")].restartPolicy}')" Always
+          - - Log của log-tail có hello
+            - |
+              k logs -n lab03 app-sidecar -c log-tail --tail=5 | grep -q hello
+      - title: Log và exec ra file
+        body: |
+          - Ghi 5 dòng log cuối của container `reader` trong Pod `shared` vào `/opt/cka/answers/03-reader.log`.
+          - Ghi hostname nhìn từ bên trong Pod `envpod` vào `/opt/cka/answers/03-hostname.txt`.
+        solution: |
+          ```bash
+          k logs -n lab03 shared -c reader --tail=5 > /opt/cka/answers/03-reader.log
+          k exec -n lab03 envpod -- hostname > /opt/cka/answers/03-hostname.txt
+          ```
+        checks:
+          - - 03-reader.log có 5 dòng
+            - |
+              eq "$(wc -l < $ANS/03-reader.log)" 5
+          - - Hostname là envpod
+            - |
+              grep -qx envpod $ANS/03-hostname.txt
+      - title: Label và annotation
+        body: |
+          Trên Pod `envpod`: thêm label `tier=debug`, thêm annotation `owner=team-a`, xóa label `run`.
+        solution: |
+          ```bash
+          k label pod envpod -n lab03 tier=debug run-
+          k annotate pod envpod -n lab03 owner=team-a
+          ```
+        checks:
+          - - Có label tier=debug
+            - |
+              eq "$(val pod envpod lab03 '{.metadata.labels.tier}')" debug
+          - - Không còn label run
+            - |
+              eq "$(val pod envpod lab03 '{.metadata.labels.run}')" ""
+          - - Có annotation owner=team-a
+            - |
+              eq "$(val pod envpod lab03 '{.metadata.annotations.owner}')" team-a
+    refs:
+      - [Pods, "concepts/workloads/pods/"]
+      - [Init containers, "concepts/workloads/pods/init-containers/"]
+      - [Sidecar containers, "concepts/workloads/pods/sidecar-containers/"]
+
+  - id: "04"
+    slug: deployments
+    title: Deployment, rolling update và rollback
+    level: 1
+    minutes: 40
+    competencies: [work.0]
+    goal:
+      - Tạo, scale, đổi image Deployment và ghi lý do thay đổi
+      - Cấu hình maxSurge, maxUnavailable, Recreate, revisionHistoryLimit
+      - Phát hiện rollout hỏng và rollback về đúng revision
+      - Gộp nhiều thay đổi vào một rollout bằng pause/resume
+    concept: |
+      Deployment quản lý **ReplicaSet**; mỗi lần đổi `spec.template` sinh ReplicaSet mới (một **revision**). Đổi `replicas` thì không tạo revision.
+
+      - `RollingUpdate` (mặc định): `maxSurge` là số Pod được vượt quá replicas, `maxUnavailable` là số Pod được thiếu. Hai giá trị không thể cùng bằng 0.
+      - `Recreate`: xóa hết Pod cũ rồi mới tạo mới, có downtime.
+      - Annotation `kubernetes.io/change-cause` hiện trong `rollout history`.
+    setup: |
+      ns_reset lab04
+    cleanup: |
+      ns_delete lab04
+    tasks:
+      - title: Tạo Deployment
+        body: |
+          Trong `lab04` tạo Deployment `web` image `nginx:1.26`, 3 replica.
+        solution: |
+          ```bash
+          k create deploy web -n lab04 --image=nginx:1.26 --replicas=3
+          ```
+        checks:
+          - - Deployment web tồn tại với label app=web trên Pod template
+            - |
+              eq "$(val deploy web lab04 '{.spec.template.metadata.labels.app}')" web
+      - title: Scale
+        body: |
+          Scale `web` lên 5 replica.
+        solution: |
+          ```bash
+          k scale deploy web -n lab04 --replicas=5
+          ```
+        checks:
+          - - spec.replicas = 5 và đủ 5 Pod Ready
+            - |
+              eq "$(val deploy web lab04 '{.spec.replicas}/{.status.readyReplicas}')" 5/5
+      - title: Rolling update có kiểm soát
+        body: |
+          - Đặt chiến lược của `web`: `maxSurge: 2`, `maxUnavailable: 0`, giữ tối đa 4 revision.
+          - Nâng image lên `nginx:1.27` và ghi change-cause `upgrade nginx to 1.27`.
+        hints:
+          - "`k patch deploy web -p '{\"spec\":{...}}'` hoặc `k edit`."
+          - "`k annotate deploy web kubernetes.io/change-cause=...`"
+        solution: |
+          ```bash
+          k patch deploy web -n lab04 -p '{"spec":{"revisionHistoryLimit":4,"strategy":{"rollingUpdate":{"maxSurge":2,"maxUnavailable":0}}}}'
+          k set image deploy/web -n lab04 nginx=nginx:1.27
+          k annotate deploy/web -n lab04 kubernetes.io/change-cause='upgrade nginx to 1.27' --overwrite
+          k rollout status deploy/web -n lab04
+          ```
+        checks:
+          - - maxSurge 2, maxUnavailable 0
+            - |
+              eq "$(val deploy web lab04 '{.spec.strategy.rollingUpdate.maxSurge}/{.spec.strategy.rollingUpdate.maxUnavailable}')" 2/0
+          - - revisionHistoryLimit 4
+            - |
+              eq "$(val deploy web lab04 '{.spec.revisionHistoryLimit}')" 4
+          - - change-cause được ghi
+            - |
+              k rollout history deploy/web -n lab04 | grep -q 'upgrade nginx to 1.27'
+      - title: Rollout hỏng và rollback
+        body: |
+          Đổi image của `web` thành `nginx:9.99-missing`. Quan sát rollout bị kẹt (vì `maxUnavailable: 0`, dịch vụ không mất Pod nào). Sau đó rollback về revision dùng `nginx:1.27`.
+        hints:
+          - "`k rollout history deploy/web --revision=N` xem chi tiết một revision."
+        solution: |
+          ```bash
+          k set image deploy/web -n lab04 nginx=nginx:9.99-missing
+          k rollout status deploy/web -n lab04 --timeout=30s    # thất bại
+          k get pods -n lab04                                    # Pod mới ErrImagePull, Pod cũ vẫn chạy
+          k rollout history deploy/web -n lab04
+          k rollout undo deploy/web -n lab04                     # hoặc --to-revision=N
+          ```
+        checks:
+          - - Image trở lại nginx:1.27
+            - |
+              eq "$(val deploy web lab04 '{.spec.template.spec.containers[0].image}')" nginx:1.27
+          - - 5 Pod Ready
+            - |
+              eq "$(val deploy web lab04 '{.status.readyReplicas}')" 5
+          - - Có ít nhất 3 revision trong lịch sử
+            - '[[ $(k rollout history deploy/web -n lab04 | grep -cE "^[0-9]+") -ge 3 ]]'
+      - title: Chiến lược Recreate
+        body: |
+          Tạo Deployment `legacy` image `httpd:2.4`, 2 replica, chiến lược `Recreate` (ứng dụng không cho chạy hai phiên bản cùng lúc).
+        solution: |
+          ```bash
+          k create deploy legacy -n lab04 --image=httpd:2.4 --replicas=2 $do > legacy.yaml
+          # sửa: spec.strategy: {type: Recreate} và xóa khối rollingUpdate nếu có
+          k apply -f legacy.yaml
+          ```
+        checks:
+          - - legacy dùng Recreate
+            - |
+              eq "$(val deploy legacy lab04 '{.spec.strategy.type}')" Recreate
+          - - 2 Pod Ready
+            - |
+              eq "$(val deploy legacy lab04 '{.status.readyReplicas}')" 2
+      - title: Gộp thay đổi bằng pause/resume
+        body: |
+          Tạm dừng rollout của `web`, đặt requests `cpu=50m,memory=64Mi` và biến `TZ=Asia/Ho_Chi_Minh`, rồi resume để mọi thay đổi đi trong **một** rollout.
+        solution: |
+          ```bash
+          k rollout pause deploy/web -n lab04
+          k set resources deploy/web -n lab04 --requests=cpu=50m,memory=64Mi
+          k set env deploy/web -n lab04 TZ=Asia/Ho_Chi_Minh
+          k rollout resume deploy/web -n lab04
+          k rollout status deploy/web -n lab04
+          ```
+        checks:
+          - - Deployment không còn paused
+            - |
+              eq "$(val deploy web lab04 '{.spec.paused}')" ""
+          - - requests cpu 50m
+            - |
+              eq "$(val deploy web lab04 '{.spec.template.spec.containers[0].resources.requests.cpu}')" 50m
+          - - Biến TZ có trong template
+            - |
+              eq "$(val deploy web lab04 '{.spec.template.spec.containers[0].env[?(@.name=="TZ")].value}')" Asia/Ho_Chi_Minh
+    refs:
+      - [Deployments, "concepts/workloads/controllers/deployment/"]
+
+  - id: "05"
+    slug: configmaps-secrets
+    title: ConfigMap và Secret
+    level: 1
+    minutes: 40
+    competencies: [work.1]
+    goal:
+      - Tạo ConfigMap và Secret từ literal, file, env-file; Secret TLS
+      - Đưa cấu hình vào Pod qua env, envFrom và volume
+      - Hiểu khi nào Pod thấy thay đổi và khi nào phải restart
+    concept: |
+      | Cách dùng | Cập nhật khi ConfigMap/Secret đổi? |
+      |---|---|
+      | `env` / `envFrom` | Không, phải tạo lại Pod (`rollout restart`) |
+      | volume | Có, sau ít giây đến một phút |
+      | volume với `subPath` | Không |
+
+      Secret chỉ được **mã hóa base64**, không phải mã hóa mật mã. Bảo vệ bằng RBAC và encryption at rest. `immutable: true` khóa nội dung và giảm tải watch cho apiserver.
+    setup: |
+      ns_reset lab05
+      mkdir -p /tmp/lab05
+      printf 'server.port=8080\nserver.mode=production\n' > /tmp/lab05/app.properties
+      printf 'FEATURE_SEARCH=on\nFEATURE_CHAT=off\n' > /tmp/lab05/flags.env
+      openssl req -x509 -nodes -newkey rsa:2048 -days 30 -subj '/CN=web.lab05' \
+        -keyout /tmp/lab05/tls.key -out /tmp/lab05/tls.crt >/dev/null 2>&1
+      info "File mẫu ở /tmp/lab05"
+    cleanup: |
+      ns_delete lab05
+      rm -rf /tmp/lab05
+    tasks:
+      - title: ConfigMap từ literal và file
+        body: |
+          Tạo ConfigMap `app-config` trong `lab05` gồm key `LOG_LEVEL=debug` và file `/tmp/lab05/app.properties` (key là tên file).
+        solution: |
+          ```bash
+          k create cm app-config -n lab05 --from-literal=LOG_LEVEL=debug --from-file=/tmp/lab05/app.properties
+          ```
+        checks:
+          - - LOG_LEVEL = debug
+            - |
+              eq "$(val cm app-config lab05 '{.data.LOG_LEVEL}')" debug
+          - - Có key app.properties
+            - |
+              has "$(val cm app-config lab05 '{.data.app\.properties}')" server.port=8080
+      - title: Secret generic
+        body: |
+          Tạo Secret `db-cred` với `username=admin` và `password=S3cret-pass`.
+        solution: |
+          ```bash
+          k create secret generic db-cred -n lab05 --from-literal=username=admin --from-literal=password=S3cret-pass
+          k get secret db-cred -n lab05 -o jsonpath='{.data.password}' | base64 -d
+          ```
+        checks:
+          - - password giải mã ra S3cret-pass
+            - |
+              eq "$(val secret db-cred lab05 '{.data.password}' | base64 -d)" S3cret-pass
+      - title: Dùng cấu hình trong Deployment
+        body: |
+          Tạo Deployment `api` (`nginx:1.27`, 1 replica) sao cho:
+
+          - mọi key của `app-config` thành biến môi trường (`envFrom`)
+          - biến `DB_PASSWORD` lấy từ key `password` của `db-cred`
+          - `app-config` được gắn dạng volume tại `/etc/app`, chỉ đọc
+        solution: |
+          ```bash
+          k create deploy api -n lab05 --image=nginx:1.27 $do > api.yaml
+          ```
+          Thêm vào container và Pod spec:
+          ```yaml
+                  envFrom:
+                  - configMapRef: {name: app-config}
+                  env:
+                  - name: DB_PASSWORD
+                    valueFrom:
+                      secretKeyRef: {name: db-cred, key: password}
+                  volumeMounts:
+                  - {name: cfg, mountPath: /etc/app, readOnly: true}
+                volumes:
+                - name: cfg
+                  configMap: {name: app-config}
+          ```
+          ```bash
+          k apply -f api.yaml
+          k exec -n lab05 deploy/api -- sh -c 'echo $LOG_LEVEL $DB_PASSWORD; ls /etc/app'
+          ```
+        checks:
+          - - envFrom app-config
+            - |
+              eq "$(val deploy api lab05 '{.spec.template.spec.containers[0].envFrom[0].configMapRef.name}')" app-config
+          - - DB_PASSWORD từ secret db-cred
+            - |
+              eq "$(val deploy api lab05 '{.spec.template.spec.containers[0].env[?(@.name=="DB_PASSWORD")].valueFrom.secretKeyRef.name}')" db-cred
+          - - File app.properties có trong /etc/app
+            - |
+              k exec -n lab05 deploy/api -- test -f /etc/app/app.properties
+      - title: ConfigMap từ env-file
+        body: |
+          Tạo ConfigMap `feature-flags` từ `/tmp/lab05/flags.env` sao cho mỗi dòng thành một key riêng.
+        hints:
+          - Khác với `--from-file`, tùy chọn `--from-env-file` tách từng dòng `KEY=VALUE`.
+        solution: |
+          ```bash
+          k create cm feature-flags -n lab05 --from-env-file=/tmp/lab05/flags.env
+          ```
+        checks:
+          - - FEATURE_SEARCH = on
+            - |
+              eq "$(val cm feature-flags lab05 '{.data.FEATURE_SEARCH}')" on
+      - title: Secret TLS
+        body: |
+          Tạo Secret `web-tls` kiểu TLS từ `/tmp/lab05/tls.crt` và `/tmp/lab05/tls.key`.
+        solution: |
+          ```bash
+          k create secret tls web-tls -n lab05 --cert=/tmp/lab05/tls.crt --key=/tmp/lab05/tls.key
+          ```
+        checks:
+          - - Kiểu kubernetes.io/tls
+            - |
+              eq "$(val secret web-tls lab05 '{.type}')" kubernetes.io/tls
+      - title: ConfigMap bất biến
+        body: |
+          Tạo ConfigMap `release` với `VERSION=1.0`, không cho sửa nội dung về sau.
+        solution: |
+          ```bash
+          k create cm release -n lab05 --from-literal=VERSION=1.0 $do > release.yaml
+          echo 'immutable: true' >> release.yaml
+          k apply -f release.yaml
+          ```
+        checks:
+          - - immutable = true
+            - |
+              eq "$(val cm release lab05 '{.immutable}')" true
+      - title: Đưa thay đổi vào Pod đang chạy
+        body: |
+          Đổi `LOG_LEVEL` trong `app-config` thành `info`. Đảm bảo Pod của `api` thấy giá trị mới trong biến môi trường.
+        solution: |
+          ```bash
+          k patch cm app-config -n lab05 -p '{"data":{"LOG_LEVEL":"info"}}'
+          k rollout restart deploy/api -n lab05
+          k exec -n lab05 deploy/api -- printenv LOG_LEVEL
+          ```
+        checks:
+          - - Biến LOG_LEVEL trong Pod là info
+            - |
+              eq "$(k exec -n lab05 deploy/api -- printenv LOG_LEVEL)" info
+    refs:
+      - [ConfigMaps, "concepts/configuration/configmap/"]
+      - [Secrets, "concepts/configuration/secret/"]
+
+  - id: "06"
+    slug: self-healing
+    title: Probe, restartPolicy và tắt Pod êm
+    level: 1
+    minutes: 45
+    competencies: [work.3]
+    goal:
+      - Cấu hình liveness, readiness, startup probe với các kiểu httpGet, tcpSocket, exec
+      - Phân biệt container bị restart với Pod bị rút khỏi Service
+      - Chọn restartPolicy đúng và cấu hình preStop, terminationGracePeriodSeconds
+    concept: |
+      | Probe | Trượt thì sao |
+      |---|---|
+      | `livenessProbe` | kubelet giết container và chạy lại (RESTARTS tăng) |
+      | `readinessProbe` | Pod `Ready=False`, bị rút khỏi EndpointSlice, không restart |
+      | `startupProbe` | che giai đoạn khởi động; liveness và readiness chờ nó qua |
+
+      Mặc định: `periodSeconds: 10`, `timeoutSeconds: 1`, `failureThreshold: 3`. Liveness không được phụ thuộc hệ thống bên ngoài (database), nếu không một sự cố bên ngoài làm mọi Pod restart cùng lúc.
+    setup: |
+      ns_reset lab06
+      apply_yaml <<'EOF'
+      apiVersion: v1
+      kind: Pod
+      metadata: {name: notready, namespace: lab06, labels: {app: notready}}
+      spec:
+        containers:
+        - name: web
+          image: nginx:1.27
+          readinessProbe:
+            httpGet: {path: /, port: 8080}
+            periodSeconds: 5
+      EOF
+    cleanup: |
+      ns_delete lab06
+    tasks:
+      - title: Liveness exec làm container restart
+        body: |
+          Tạo Pod `liveness-exec` (`busybox:1.36`) chạy:
+
+          ```
+          touch /tmp/healthy; sleep 30; rm -f /tmp/healthy; sleep 600
+          ```
+
+          với livenessProbe kiểu exec `cat /tmp/healthy`, `initialDelaySeconds: 5`, `periodSeconds: 5`. Chờ khoảng một phút và quan sát cột RESTARTS.
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: liveness-exec, namespace: lab06}
+          spec:
+            containers:
+            - name: app
+              image: busybox:1.36
+              command: ["sh", "-c", "touch /tmp/healthy; sleep 30; rm -f /tmp/healthy; sleep 600"]
+              livenessProbe:
+                exec: {command: ["cat", "/tmp/healthy"]}
+                initialDelaySeconds: 5
+                periodSeconds: 5
+          ```
+          ```bash
+          k get pod liveness-exec -n lab06 -w
+          k describe pod liveness-exec -n lab06 | grep -A3 -i liveness
+          ```
+        checks:
+          - - livenessProbe exec cat /tmp/healthy
+            - |
+              eq "$(val pod liveness-exec lab06 '{.spec.containers[0].livenessProbe.exec.command[*]}')" "cat /tmp/healthy"
+          - - Container đã bị restart ít nhất 1 lần
+            - '[[ $(val pod liveness-exec lab06 "{.status.containerStatuses[0].restartCount}") -ge 1 ]]'
+      - title: Ba probe cho một Deployment
+        body: |
+          Tạo Deployment `web` (`nginx:1.27`, 2 replica) với:
+
+          - startupProbe httpGet `/` cổng 80, `periodSeconds: 2`, `failureThreshold: 30`
+          - readinessProbe httpGet `/` cổng 80, `periodSeconds: 5`
+          - livenessProbe tcpSocket cổng 80, `periodSeconds: 10`
+        solution: |
+          ```yaml
+                containers:
+                - name: nginx
+                  image: nginx:1.27
+                  startupProbe:
+                    httpGet: {path: /, port: 80}
+                    periodSeconds: 2
+                    failureThreshold: 30
+                  readinessProbe:
+                    httpGet: {path: /, port: 80}
+                    periodSeconds: 5
+                  livenessProbe:
+                    tcpSocket: {port: 80}
+                    periodSeconds: 10
+          ```
+        checks:
+          - - startupProbe failureThreshold 30
+            - |
+              eq "$(val deploy web lab06 '{.spec.template.spec.containers[0].startupProbe.failureThreshold}')" 30
+          - - readinessProbe httpGet cổng 80
+            - |
+              eq "$(val deploy web lab06 '{.spec.template.spec.containers[0].readinessProbe.httpGet.port}')" 80
+          - - livenessProbe tcpSocket cổng 80
+            - |
+              eq "$(val deploy web lab06 '{.spec.template.spec.containers[0].livenessProbe.tcpSocket.port}')" 80
+          - - 2 Pod Ready
+            - |
+              eq "$(val deploy web lab06 '{.status.readyReplicas}')" 2
+      - title: Pod Running mà không Ready
+        body: |
+          Pod `notready` (đã tạo sẵn) đứng `0/1`. Tìm nguyên nhân và sửa để Pod `Ready`, giữ nguyên tên Pod.
+        hints:
+          - Probe của Pod đang chạy không sửa được bằng `edit`; xuất YAML, sửa rồi `replace --force`.
+        solution: |
+          ```bash
+          k describe pod notready -n lab06 | grep -A2 Readiness    # cổng 8080, nginx nghe 80
+          k get pod notready -n lab06 -o yaml > notready.yaml
+          sed -i 's/port: 8080/port: 80/' notready.yaml
+          k replace --force -f notready.yaml
+          ```
+        checks:
+          - - readinessProbe dùng cổng 80
+            - |
+              eq "$(val pod notready lab06 '{.spec.containers[0].readinessProbe.httpGet.port}')" 80
+          - - Pod notready Ready
+            - |
+              eq "$(val pod notready lab06 '{.status.conditions[?(@.type=="Ready")].status}')" True
+      - title: restartPolicy
+        body: |
+          - Pod `once` (`busybox:1.36`, lệnh `sh -c "exit 1"`) không bao giờ chạy lại.
+          - Pod `retry` (`busybox:1.36`, lệnh `sh -c "exit 1"`) chỉ chạy lại khi lỗi.
+        solution: |
+          ```bash
+          k run once  -n lab06 --image=busybox:1.36 --restart=Never     -- sh -c "exit 1"
+          k run retry -n lab06 --image=busybox:1.36 --restart=OnFailure -- sh -c "exit 1"
+          ```
+        checks:
+          - - once có restartPolicy Never và phase Failed
+            - |
+              eq "$(val pod once lab06 '{.spec.restartPolicy}/{.status.phase}')" Never/Failed
+          - - retry có restartPolicy OnFailure
+            - |
+              eq "$(val pod retry lab06 '{.spec.restartPolicy}')" OnFailure
+      - title: Tắt Pod êm
+        body: |
+          Cho Deployment `web`: `terminationGracePeriodSeconds: 20` và preStop hook chờ 5 giây trước khi nginx nhận SIGTERM.
+        hints:
+          - "`lifecycle.preStop.sleep.seconds` hoặc `exec` chạy `sleep 5`."
+        solution: |
+          ```yaml
+              spec:
+                terminationGracePeriodSeconds: 20
+                containers:
+                - name: nginx
+                  lifecycle:
+                    preStop:
+                      sleep: {seconds: 5}
+          ```
+        checks:
+          - - terminationGracePeriodSeconds 20
+            - |
+              eq "$(val deploy web lab06 '{.spec.template.spec.terminationGracePeriodSeconds}')" 20
+          - - Có preStop
+            - '[[ -n "$(val deploy web lab06 "{.spec.template.spec.containers[0].lifecycle.preStop}")" ]]'
+    refs:
+      - ["Configure liveness, readiness and startup probes", "tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"]
+      - [Pod lifecycle, "concepts/workloads/pods/pod-lifecycle/"]
+
+  - id: "07"
+    slug: workload-controllers
+    title: Job, CronJob, DaemonSet, StatefulSet và static Pod
+    level: 1
+    minutes: 50
+    competencies: [work.3, arch.2]
+    goal:
+      - Chọn đúng controller cho từng kiểu workload
+      - Cấu hình Job song song, CronJob, DaemonSet chạy cả control plane
+      - StatefulSet với headless Service và DNS ổn định
+      - Tạo static Pod trên worker
+    concept: |
+      | Controller | Dùng khi |
+      |---|---|
+      | Deployment | ứng dụng stateless |
+      | StatefulSet | cần tên Pod và volume ổn định (`db-0`, `db-1`), DNS qua headless Service |
+      | DaemonSet | mỗi node một Pod (agent log, CNI, monitoring) |
+      | Job / CronJob | chạy tới khi xong / theo lịch |
+      | static Pod | kubelet chạy thẳng từ file trong `staticPodPath`, không qua apiserver |
+
+      Không có lệnh `kubectl create daemonset`: sinh YAML Deployment rồi đổi `kind` và bỏ `replicas`, `strategy`.
+    setup: |
+      ns_reset lab07
+    cleanup: |
+      ns_delete lab07
+      w=$(first_worker); [[ -n "$w" ]] && on_node "$w" "rm -f /etc/kubernetes/manifests/static-web.yaml" || true
+    tasks:
+      - title: Job song song
+        body: |
+          Tạo Job `batch` (`busybox:1.36`, lệnh `echo done`) cần 4 lần thành công, tối đa 2 Pod chạy cùng lúc, thử lại tối đa 2 lần, tự xóa 10 phút sau khi xong.
+        solution: |
+          ```bash
+          k create job batch -n lab07 --image=busybox:1.36 $do -- echo done > job.yaml
+          ```
+          Thêm dưới `spec:` của Job:
+          ```yaml
+            completions: 4
+            parallelism: 2
+            backoffLimit: 2
+            ttlSecondsAfterFinished: 600
+          ```
+        checks:
+          - - completions 4, parallelism 2, backoffLimit 2
+            - |
+              eq "$(val job batch lab07 '{.spec.completions}/{.spec.parallelism}/{.spec.backoffLimit}')" 4/2/2
+          - - ttlSecondsAfterFinished 600
+            - |
+              eq "$(val job batch lab07 '{.spec.ttlSecondsAfterFinished}')" 600
+          - - Đã thành công 4 lần
+            - |
+              eq "$(val job batch lab07 '{.status.succeeded}')" 4
+      - title: CronJob và chạy tay
+        body: |
+          Tạo CronJob `report` chạy mỗi 15 phút (`busybox:1.36`, lệnh `date`), không cho hai lần chạy chồng nhau, giữ 2 Job thành công và 1 Job thất bại gần nhất. Sau đó chạy ngay một lần bằng Job `report-now` tạo từ CronJob này.
+        solution: |
+          ```bash
+          k create cronjob report -n lab07 --image=busybox:1.36 --schedule='*/15 * * * *' $do -- date > cj.yaml
+          # thêm dưới spec: concurrencyPolicy: Forbid, successfulJobsHistoryLimit: 2, failedJobsHistoryLimit: 1
+          k apply -f cj.yaml
+          k create job report-now -n lab07 --from=cronjob/report
+          ```
+        checks:
+          - - schedule */15 * * * *
+            - |
+              eq "$(val cronjob report lab07 '{.spec.schedule}')" '*/15 * * * *'
+          - - concurrencyPolicy Forbid, lịch sử 2/1
+            - |
+              eq "$(val cronjob report lab07 '{.spec.concurrencyPolicy}/{.spec.successfulJobsHistoryLimit}/{.spec.failedJobsHistoryLimit}')" Forbid/2/1
+          - - Job report-now do CronJob sở hữu
+            - |
+              eq "$(val job report-now lab07 '{.metadata.ownerReferences[0].name}')" report
+      - title: DaemonSet trên mọi node
+        body: |
+          Tạo DaemonSet `node-agent` (`busybox:1.36`, `sleep infinity`) chạy trên **mọi** node, kể cả control plane.
+        hints:
+          - Control plane có taint `node-role.kubernetes.io/control-plane:NoSchedule`.
+        solution: |
+          ```bash
+          k create deploy node-agent -n lab07 --image=busybox:1.36 $do -- sleep infinity > ds.yaml
+          ```
+          Sửa `kind: DaemonSet`, xóa `replicas`, `strategy`, `status`, thêm vào Pod spec:
+          ```yaml
+                tolerations:
+                - key: node-role.kubernetes.io/control-plane
+                  operator: Exists
+                  effect: NoSchedule
+          ```
+        checks:
+          - - Số Pod sẵn sàng bằng số node
+            - |
+              eq "$(val ds node-agent lab07 '{.status.numberReady}')" "$(k get nodes --no-headers | wc -l)"
+      - title: StatefulSet và headless Service
+        body: |
+          Tạo headless Service `db` (cổng 80, selector `app=db`) và StatefulSet `db` (`nginx:1.27`, 2 replica, `serviceName: db`). Từ một Pod tạm, phân giải được tên `db-0.db.lab07.svc.cluster.local`.
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: Service
+          metadata: {name: db, namespace: lab07}
+          spec:
+            clusterIP: None
+            selector: {app: db}
+            ports: [{port: 80}]
+          ---
+          apiVersion: apps/v1
+          kind: StatefulSet
+          metadata: {name: db, namespace: lab07}
+          spec:
+            serviceName: db
+            replicas: 2
+            selector: {matchLabels: {app: db}}
+            template:
+              metadata: {labels: {app: db}}
+              spec:
+                containers:
+                - {name: nginx, image: nginx:1.27, ports: [{containerPort: 80}]}
+          ```
+          ```bash
+          k run t -n lab07 --image=busybox:1.36 --rm -it --restart=Never -- nslookup db-0.db.lab07.svc.cluster.local
+          ```
+        checks:
+          - - Service db là headless
+            - |
+              eq "$(val svc db lab07 '{.spec.clusterIP}')" None
+          - - StatefulSet db có 2 Pod Ready, serviceName db
+            - |
+              eq "$(val sts db lab07 '{.status.readyReplicas}/{.spec.serviceName}')" 2/db
+          - - db-0.db phân giải được
+            - |
+              k run "dns-$RANDOM" -n lab07 --image=busybox:1.36 --restart=Never --rm -i --quiet -- nslookup db-0.db.lab07.svc.cluster.local
+      - title: Static Pod trên worker
+        body: |
+          Tạo static Pod `static-web` (`nginx:1.27`, namespace `default`) trên worker đầu tiên (`node01`). Pod phải hiện trong `kubectl get pods` với tên `static-web-node01`.
+        hints:
+          - "`ssh node01`, tìm `staticPodPath` trong `/var/lib/kubelet/config.yaml`."
+        solution: |
+          ```bash
+          ssh node01
+          sudo grep staticPodPath /var/lib/kubelet/config.yaml
+          kubectl run static-web --image=nginx:1.27 --dry-run=client -o yaml | sudo tee /etc/kubernetes/manifests/static-web.yaml
+          exit
+          k get pod static-web-node01
+          ```
+        checks:
+          - - Mirror Pod static-web-<worker> Running
+            - |
+              eq "$(val pod "static-web-$(first_worker)" default '{.status.phase}')" Running
+    refs:
+      - [Jobs, "concepts/workloads/controllers/job/"]
+      - [CronJob, "concepts/workloads/controllers/cron-jobs/"]
+      - [DaemonSet, "concepts/workloads/controllers/daemonset/"]
+      - [StatefulSets, "concepts/workloads/controllers/statefulset/"]
+      - [Static Pods, "tasks/configure-pod-container/static-pod/"]

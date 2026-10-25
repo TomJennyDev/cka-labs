@@ -1,0 +1,824 @@
+phase: 3
+title: "Giai đoạn 3 · Mạng: Service, DNS, NetworkPolicy, Ingress, Gateway API"
+intro: |
+  Domain Services & Networking chiếm 20%. Lab đi từ kết nối Pod với Pod, qua các loại Service và CoreDNS, tới NetworkPolicy và hai cách đưa traffic từ ngoài vào: Ingress và Gateway API.
+labs:
+  - id: "12"
+    slug: services
+    title: Kết nối Pod và các loại Service
+    level: 2
+    minutes: 50
+    competencies: [net.0, net.2]
+    goal:
+      - Gọi Pod khác bằng IP và hiểu mạng Pod phẳng
+      - Tạo ClusterIP, NodePort cố định, headless, ExternalName, LoadBalancer
+      - Đọc EndpointSlice và tự tạo EndpointSlice cho Service không selector
+      - Dùng targetPort theo tên
+    concept: |
+      Mọi Pod có IP riêng và gọi được nhau không qua NAT. Service cho một IP và tên ổn định trước nhóm Pod chọn bằng **selector**; danh sách Pod thật nằm trong **EndpointSlice**.
+
+      | Loại | Đặc điểm |
+      |---|---|
+      | ClusterIP | IP ảo nội bộ (mặc định) |
+      | NodePort | mở cùng cổng 30000–32767 trên mọi node |
+      | LoadBalancer | NodePort + load balancer bên ngoài; bare metal không có thì `EXTERNAL-IP <pending>` |
+      | Headless (`clusterIP: None`) | DNS trả thẳng IP các Pod |
+      | ExternalName | chỉ là bản ghi CNAME |
+
+      Service không có endpoint gần như luôn do **selector sai** hoặc **Pod chưa Ready**.
+    setup: |
+      ensure_answers
+      ns_reset lab12
+      echo_app web lab12 3
+      k delete svc web -n lab12 >/dev/null
+      k run client -n lab12 --image=busybox:1.36 -- sleep 36000 >/dev/null
+      k -n lab12 wait --for=condition=Ready pod/client --timeout=120s >/dev/null || true
+    cleanup: |
+      ns_delete lab12
+      rm -f "$ANS"/12-*
+    tasks:
+      - title: Pod gọi Pod
+        body: |
+          Deployment `web` (3 Pod, label `app=web`) đã chạy trong `lab12`, mỗi Pod trả về chữ `web` trên cổng 80. Ghi IP của các Pod `web` vào `/opt/cka/answers/12-ips.txt`, mỗi dòng một IP. Từ Pod `client`, gọi thử một IP bằng `wget -qO- IP`.
+        solution: |
+          ```bash
+          k get pods -n lab12 -l app=web -o jsonpath='{range .items[*]}{.status.podIP}{"\n"}{end}' > /opt/cka/answers/12-ips.txt
+          k exec -n lab12 client -- wget -qO- -T 2 "$(head -1 /opt/cka/answers/12-ips.txt)"
+          ```
+        checks:
+          - - File có đúng IP của 3 Pod web
+            - |
+              diff -q <(k get pods -n lab12 -l app=web -o jsonpath='{range .items[*]}{.status.podIP}{"\n"}{end}' | sort) <(sort $ANS/12-ips.txt)
+      - title: ClusterIP
+        body: |
+          Tạo Service ClusterIP `web` cổng 80 trỏ tới Deployment `web`. Từ `client`, `wget -qO- web` phải trả về `web`.
+        solution: |
+          ```bash
+          k expose deploy web -n lab12 --port=80 --target-port=80
+          k get endpointslices -n lab12 -l kubernetes.io/service-name=web
+          k exec -n lab12 client -- wget -qO- -T 2 web
+          ```
+        checks:
+          - - EndpointSlice của web có 3 địa chỉ
+            - |
+              eq "$(k get endpointslices -n lab12 -l kubernetes.io/service-name=web -o jsonpath='{.items[*].endpoints[*].addresses[0]}' | wc -w)" 3
+          - - client gọi được web
+            - |
+              eq "$(k exec -n lab12 client -- wget -qO- -T 3 web)" web
+      - title: NodePort cố định
+        body: |
+          Tạo Service `web-np` kiểu NodePort cho `web`, cổng 80, `nodePort: 30080`. Từ `controlplane`, `curl http://node01:30080` phải trả về `web`.
+        solution: |
+          ```bash
+          k expose deploy web -n lab12 --name=web-np --type=NodePort --port=80 $do > np.yaml
+          # thêm nodePort: 30080 dưới ports[0]
+          k apply -f np.yaml
+          curl -s http://node01:30080
+          ```
+        checks:
+          - - nodePort 30080
+            - |
+              eq "$(val svc web-np lab12 '{.spec.type}/{.spec.ports[0].nodePort}')" NodePort/30080
+          - - Gọi được qua node01:30080
+            - |
+              eq "$(curl -s --max-time 3 "http://$(first_worker):30080")" web
+      - title: Headless Service
+        body: |
+          Tạo Service headless `web-headless` (cổng 80, selector `app=web`). Từ `client`, `nslookup web-headless` phải trả về 3 địa chỉ.
+        solution: |
+          ```bash
+          k create svc clusterip web-headless -n lab12 --clusterip=None --tcp=80:80 $do > hl.yaml
+          # sửa selector thành app: web
+          k apply -f hl.yaml
+          k exec -n lab12 client -- nslookup web-headless
+          ```
+        checks:
+          - - clusterIP None, selector app=web
+            - |
+              eq "$(val svc web-headless lab12 '{.spec.clusterIP}/{.spec.selector.app}')" None/web
+          - - DNS trả về 3 địa chỉ
+            - |
+              [[ $(k exec -n lab12 client -- nslookup web-headless.lab12.svc.cluster.local | grep -cE '^Address: [0-9]') -eq 3 ]]
+      - title: ExternalName
+        body: |
+          Tạo Service `docs` kiểu ExternalName trỏ tới `kubernetes.io`.
+        solution: |
+          ```bash
+          k create svc externalname docs -n lab12 --external-name=kubernetes.io
+          ```
+        checks:
+          - - docs là ExternalName kubernetes.io
+            - |
+              eq "$(val svc docs lab12 '{.spec.type}/{.spec.externalName}')" ExternalName/kubernetes.io
+      - title: Service không selector
+        body: |
+          Tạo Service `legacy` cổng 80 **không có selector**, và tự tạo một EndpointSlice cho nó trỏ tới IP của một Pod `web` (giả lập máy chủ ngoài cluster). Từ `client`, `wget -qO- legacy` trả về `web`.
+        hints:
+          - EndpointSlice phải có label `kubernetes.io/service-name: legacy` và tên cổng khớp với Service (hoặc cùng không đặt tên).
+        solution: |
+          ```bash
+          IP=$(k get pods -n lab12 -l app=web -o jsonpath='{.items[0].status.podIP}')
+          cat <<EOF | k apply -f -
+          apiVersion: v1
+          kind: Service
+          metadata: {name: legacy, namespace: lab12}
+          spec:
+            ports: [{port: 80, protocol: TCP}]
+          ---
+          apiVersion: discovery.k8s.io/v1
+          kind: EndpointSlice
+          metadata:
+            name: legacy-1
+            namespace: lab12
+            labels: {kubernetes.io/service-name: legacy}
+          addressType: IPv4
+          ports: [{port: 80, protocol: TCP}]
+          endpoints: [{addresses: ["$IP"]}]
+          EOF
+          k exec -n lab12 client -- wget -qO- -T 2 legacy
+          ```
+        checks:
+          - - legacy không có selector
+            - |
+              eq "$(val svc legacy lab12 '{.spec.selector}')" ""
+          - - client gọi được legacy
+            - |
+              eq "$(k exec -n lab12 client -- wget -qO- -T 3 legacy)" web
+      - title: LoadBalancer trên bare metal
+        body: |
+          Tạo Service `web-lb` kiểu LoadBalancer cổng 80 cho `web`. Quan sát `EXTERNAL-IP`. Ghi nodePort mà Kubernetes tự cấp cho `web-lb` vào `/opt/cka/answers/12-lb-nodeport.txt`.
+        solution: |
+          ```bash
+          k expose deploy web -n lab12 --name=web-lb --type=LoadBalancer --port=80
+          k get svc web-lb -n lab12          # EXTERNAL-IP <pending>: không có cloud LB
+          k get svc web-lb -n lab12 -o jsonpath='{.spec.ports[0].nodePort}' > /opt/cka/answers/12-lb-nodeport.txt
+          ```
+        checks:
+          - - web-lb là LoadBalancer
+            - |
+              eq "$(val svc web-lb lab12 '{.spec.type}')" LoadBalancer
+          - - File ghi đúng nodePort
+            - |
+              eq "$(cat $ANS/12-lb-nodeport.txt)" "$(val svc web-lb lab12 '{.spec.ports[0].nodePort}')"
+      - title: targetPort theo tên
+        body: |
+          Đặt tên `http` cho containerPort 80 của Deployment `web`, rồi đổi `targetPort` của Service `web` thành `http`. Service vẫn phải hoạt động.
+        solution: |
+          ```bash
+          k patch deploy web -n lab12 --type=json -p '[{"op":"replace","path":"/spec/template/spec/containers/0/ports","value":[{"name":"http","containerPort":80}]}]'
+          k patch svc web -n lab12 -p '{"spec":{"ports":[{"port":80,"targetPort":"http"}]}}'
+          k exec -n lab12 client -- wget -qO- -T 2 web
+          ```
+        checks:
+          - - containerPort mang tên http
+            - |
+              eq "$(val deploy web lab12 '{.spec.template.spec.containers[0].ports[0].name}')" http
+          - - targetPort của Service là http và vẫn gọi được
+            - |
+              eq "$(val svc web lab12 '{.spec.ports[0].targetPort}')" http && eq "$(k exec -n lab12 client -- wget -qO- -T 3 web)" web
+    refs:
+      - [Service, "concepts/services-networking/service/"]
+      - [EndpointSlices, "concepts/services-networking/endpoint-slices/"]
+      - [Cluster networking, "concepts/cluster-administration/networking/"]
+
+  - id: "13"
+    slug: coredns
+    title: CoreDNS và DNS trong cluster
+    level: 2
+    minutes: 40
+    competencies: [net.5]
+    goal:
+      - Đọc resolv.conf của Pod, viết đúng FQDN của Service và Pod
+      - Cấu hình hostname, subdomain, dnsPolicy và dnsConfig cho Pod
+      - Sửa Corefile để thêm bản ghi tĩnh hoặc chuyển tiếp zone
+    concept: |
+      Pod dùng nameserver là ClusterIP của Service `kube-dns` (CoreDNS), với search domain `<ns>.svc.cluster.local svc.cluster.local cluster.local` và `ndots:5`.
+
+      - Service: `<svc>.<ns>.svc.cluster.local`
+      - Pod của headless Service có `hostname` và `subdomain`: `<hostname>.<subdomain>.<ns>.svc.cluster.local`
+      - Cấu hình CoreDNS: ConfigMap `coredns` (Corefile) trong `kube-system`. Plugin `reload` tự nạp lại sau ít giây.
+    setup: |
+      ensure_answers
+      ns_reset lab13
+      echo_app web lab13
+      k run client -n lab13 --image=busybox:1.36 -- sleep 36000 >/dev/null
+      sudo install -d -m 0755 /root/cka-labs-backup
+      k -n kube-system get cm coredns -o yaml | sudo tee /root/cka-labs-backup/coredns-lab13.yaml >/dev/null
+      k -n lab13 wait --for=condition=Ready pod/client --timeout=120s >/dev/null || true
+      info "Đã sao lưu Corefile vào /root/cka-labs-backup/coredns-lab13.yaml"
+    cleanup: |
+      ns_delete lab13
+      if sudo test -f /root/cka-labs-backup/coredns-lab13.yaml; then
+        sudo cat /root/cka-labs-backup/coredns-lab13.yaml | k replace -f - >/dev/null && k -n kube-system rollout restart deploy coredns >/dev/null
+      fi
+      rm -f "$ANS"/13-*
+    tasks:
+      - title: Nameserver của Pod
+        body: |
+          Ghi IP nameserver mà Pod `client` dùng vào `/opt/cka/answers/13-ns.txt`. IP này là của Service nào?
+        solution: |
+          ```bash
+          k exec -n lab13 client -- cat /etc/resolv.conf
+          k exec -n lab13 client -- awk '/nameserver/{print $2}' /etc/resolv.conf > /opt/cka/answers/13-ns.txt
+          k -n kube-system get svc kube-dns      # cùng IP
+          ```
+        checks:
+          - - Đúng ClusterIP của kube-dns
+            - |
+              eq "$(cat $ANS/13-ns.txt)" "$(val svc kube-dns kube-system '{.spec.clusterIP}')"
+      - title: FQDN của Service
+        body: |
+          Ghi FQDN đầy đủ của Service `web` trong `lab13` vào `/opt/cka/answers/13-fqdn.txt`, và kiểm tra nó phân giải được từ `client`.
+        solution: |
+          ```bash
+          echo web.lab13.svc.cluster.local > /opt/cka/answers/13-fqdn.txt
+          k exec -n lab13 client -- nslookup web.lab13.svc.cluster.local
+          ```
+        checks:
+          - - FQDN đúng
+            - grep -qx 'web.lab13.svc.cluster.local' $ANS/13-fqdn.txt
+      - title: Tên DNS cho một Pod
+        body: |
+          Tạo headless Service `grp` (selector `team=grp`, cổng 80) và Pod `alpha` (`nginx:1.27`, label `team=grp`, `hostname: alpha`, `subdomain: grp`). Tên `alpha.grp.lab13.svc.cluster.local` phải phân giải ra IP của Pod.
+        solution: |
+          ```yaml
+          apiVersion: v1
+          kind: Service
+          metadata: {name: grp, namespace: lab13}
+          spec:
+            clusterIP: None
+            selector: {team: grp}
+            ports: [{port: 80}]
+          ---
+          apiVersion: v1
+          kind: Pod
+          metadata: {name: alpha, namespace: lab13, labels: {team: grp}}
+          spec:
+            hostname: alpha
+            subdomain: grp
+            containers: [{name: web, image: nginx:1.27}]
+          ```
+        checks:
+          - - alpha.grp phân giải ra IP của Pod alpha
+            - |
+              k exec -n lab13 client -- nslookup alpha.grp.lab13.svc.cluster.local | grep -q "$(val pod alpha lab13 '{.status.podIP}')"
+      - title: dnsConfig tùy chỉnh
+        body: |
+          Tạo Pod `custom-dns` (`busybox:1.36`, `sleep 3600`) với `dnsPolicy: ClusterFirst` và `dnsConfig` đặt `ndots` bằng `2` và thêm search domain `corp.example`.
+        solution: |
+          ```yaml
+          spec:
+            dnsPolicy: ClusterFirst
+            dnsConfig:
+              searches: [corp.example]
+              options:
+              - {name: ndots, value: "2"}
+          ```
+          ```bash
+          k exec -n lab13 custom-dns -- cat /etc/resolv.conf
+          ```
+        checks:
+          - - resolv.conf có ndots:2 và corp.example
+            - |
+              r=$(k exec -n lab13 custom-dns -- cat /etc/resolv.conf); grep -q 'ndots:2' <<<"$r" && grep -q 'corp.example' <<<"$r"
+      - title: Bản ghi tĩnh trong CoreDNS
+        body: |
+          Sửa Corefile để tên `legacy.internal` phân giải ra `10.10.10.10` cho mọi Pod, các tên khác vẫn hoạt động bình thường.
+        hints:
+          - Plugin `hosts` với `fallthrough`, đặt trong khối `.:53`.
+        solution: |
+          ```bash
+          k -n kube-system edit cm coredns
+          ```
+          Thêm vào trong khối `.:53 { ... }`, trước dòng `forward`:
+          ```
+              hosts {
+                 10.10.10.10 legacy.internal
+                 fallthrough
+              }
+          ```
+          ```bash
+          k -n kube-system rollout restart deploy coredns
+          k exec -n lab13 client -- nslookup legacy.internal
+          ```
+        checks:
+          - - legacy.internal ra 10.10.10.10
+            - |
+              k exec -n lab13 client -- nslookup legacy.internal | grep -q '10.10.10.10'
+          - - Tên Service vẫn phân giải được
+            - |
+              k exec -n lab13 client -- nslookup web.lab13.svc.cluster.local >/dev/null
+    refs:
+      - [DNS for Services and Pods, "concepts/services-networking/dns-pod-service/"]
+      - [Customizing DNS service, "tasks/administer-cluster/dns-custom-nameservers/"]
+      - [Debugging DNS resolution, "tasks/administer-cluster/dns-debugging-resolution/"]
+
+  - id: "14"
+    slug: network-policies
+    title: NetworkPolicy
+    level: 2
+    minutes: 50
+    competencies: [net.1]
+    needs: CNI có thực thi NetworkPolicy (Calico từ lab 01).
+    goal:
+      - Viết default deny cho ingress và egress
+      - Mở đúng đường theo podSelector, namespaceSelector, cổng
+      - Phân biệt AND và OR trong khối from/to
+      - Nhớ mở DNS khi chặn egress
+    concept: |
+      Pod không bị policy nào chọn thì cho phép mọi traffic. Khi một Pod bị ít nhất một policy chọn theo chiều nào (Ingress/Egress), chỉ những đường được liệt kê mới đi qua; các policy cộng dồn.
+
+      ```yaml
+      ingress:
+      - from:
+        - namespaceSelector: {matchLabels: {team: a}}
+          podSelector: {matchLabels: {app: web}}     # AND: Pod app=web TRONG namespace team=a
+      - from:
+        - namespaceSelector: {matchLabels: {team: a}}
+        - podSelector: {matchLabels: {app: web}}     # OR: mọi Pod của ns team=a, HOẶC Pod app=web cùng namespace
+      ```
+
+      Mọi namespace có sẵn label `kubernetes.io/metadata.name: <tên>`.
+    setup: |
+      ns_reset np-frontend np-backend np-other
+      k run web -n np-frontend --image=busybox:1.36 -l app=web -- sleep 36000 >/dev/null
+      k run intruder -n np-other --image=busybox:1.36 -l app=intruder -- sleep 36000 >/dev/null
+      echo_app api np-backend
+      echo_app db np-backend
+      k -n np-backend wait --for=condition=Available deploy/api deploy/db --timeout=120s >/dev/null || true
+      k -n np-frontend wait --for=condition=Ready pod/web --timeout=120s >/dev/null || true
+      k -n np-other wait --for=condition=Ready pod/intruder --timeout=120s >/dev/null || true
+      info "np-frontend/web, np-other/intruder (busybox); np-backend: Service api và db (cổng 80)"
+    cleanup: |
+      ns_delete np-frontend np-backend np-other
+    tasks:
+      - title: Default deny ingress
+        body: |
+          Trong `np-backend`, tạo NetworkPolicy `default-deny-ingress` chặn mọi traffic vào mọi Pod.
+        solution: |
+          ```yaml
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata: {name: default-deny-ingress, namespace: np-backend}
+          spec:
+            podSelector: {}
+            policyTypes: [Ingress]
+          ```
+        checks:
+          - - Policy chọn mọi Pod, loại Ingress
+            - |
+              eq "$(val netpol default-deny-ingress np-backend '{.spec.podSelector}/{.spec.policyTypes[*]}')" "{}/Ingress"
+          - - intruder không gọi được api
+            - |
+              ! k exec -n np-other intruder -- wget -qO- -T 2 api.np-backend
+      - title: Cho frontend gọi api
+        body: |
+          Tạo NetworkPolicy `allow-web-to-api` trong `np-backend`: Pod `app=api` chỉ nhận traffic TCP 80 từ Pod `app=web` **trong namespace** `np-frontend`.
+        solution: |
+          ```yaml
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata: {name: allow-web-to-api, namespace: np-backend}
+          spec:
+            podSelector: {matchLabels: {app: api}}
+            policyTypes: [Ingress]
+            ingress:
+            - from:
+              - namespaceSelector:
+                  matchLabels: {kubernetes.io/metadata.name: np-frontend}
+                podSelector:
+                  matchLabels: {app: web}
+              ports: [{protocol: TCP, port: 80}]
+          ```
+        checks:
+          - - web gọi được api
+            - |
+              eq "$(k exec -n np-frontend web -- wget -qO- -T 3 api.np-backend)" api
+          - - intruder vẫn bị chặn
+            - |
+              ! k exec -n np-other intruder -- wget -qO- -T 2 api.np-backend
+      - title: Chỉ api được gọi db
+        body: |
+          Tạo NetworkPolicy `allow-api-to-db`: Pod `app=db` chỉ nhận TCP 80 từ Pod `app=api` cùng namespace.
+        solution: |
+          ```yaml
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata: {name: allow-api-to-db, namespace: np-backend}
+          spec:
+            podSelector: {matchLabels: {app: db}}
+            policyTypes: [Ingress]
+            ingress:
+            - from:
+              - podSelector: {matchLabels: {app: api}}
+              ports: [{protocol: TCP, port: 80}]
+          ```
+        checks:
+          - - api gọi được db
+            - |
+              eq "$(k exec -n np-backend deploy/api -- curl -s --max-time 3 http://db)" db
+          - - web không gọi được db
+            - |
+              ! k exec -n np-frontend web -- wget -qO- -T 2 db.np-backend
+      - title: Giới hạn egress của api
+        body: |
+          Tạo NetworkPolicy `api-egress` trong `np-backend`: Pod `app=api` chỉ được gọi ra Pod `app=db` cổng TCP 80 và DNS (UDP và TCP 53) tới CoreDNS. Mọi traffic đi ra khác bị chặn.
+        hints:
+          - Pod CoreDNS có label `k8s-app=kube-dns` trong `kube-system`.
+        solution: |
+          ```yaml
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata: {name: api-egress, namespace: np-backend}
+          spec:
+            podSelector: {matchLabels: {app: api}}
+            policyTypes: [Egress]
+            egress:
+            - to:
+              - podSelector: {matchLabels: {app: db}}
+              ports: [{protocol: TCP, port: 80}]
+            - to:
+              - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+                podSelector: {matchLabels: {k8s-app: kube-dns}}
+              ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+          ```
+        checks:
+          - - api vẫn gọi db bằng tên (DNS hoạt động)
+            - |
+              eq "$(k exec -n np-backend deploy/api -- curl -s --max-time 3 http://db)" db
+          - - api không gọi được Service kubernetes (443)
+            - |
+              ! k exec -n np-backend deploy/api -- curl -sk --max-time 3 https://kubernetes.default
+      - title: Default deny egress có chừa DNS
+        body: |
+          Trong `np-other`, chặn mọi traffic đi ra trừ DNS, bằng NetworkPolicy `deny-egress-except-dns`.
+        solution: |
+          ```yaml
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata: {name: deny-egress-except-dns, namespace: np-other}
+          spec:
+            podSelector: {}
+            policyTypes: [Egress]
+            egress:
+            - ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+          ```
+        checks:
+          - - intruder vẫn phân giải được tên
+            - |
+              k exec -n np-other intruder -- nslookup kubernetes.default >/dev/null
+          - - intruder không gọi được web của frontend
+            - |
+              ! k exec -n np-other intruder -- wget -qO- -T 2 "$(val pod web np-frontend '{.status.podIP}')"
+    refs:
+      - [Network Policies, "concepts/services-networking/network-policies/"]
+      - [Declare Network Policy, "tasks/administer-cluster/declare-network-policy/"]
+
+  - id: "15"
+    slug: ingress
+    title: Ingress controller và Ingress
+    level: 2
+    minutes: 50
+    competencies: [net.4, arch.5]
+    goal:
+      - Cài Helm và một Ingress controller (Traefik) bằng Helm
+      - Viết Ingress theo host và path, pathType Prefix và Exact
+      - Thêm TLS và đặt IngressClass mặc định
+    concept: |
+      Ingress chỉ là **luật**; phải có **Ingress controller** đọc luật và làm proxy. `ingressClassName` chọn controller. Dự án ingress-nginx đã ngừng phát triển, nên lab dùng **Traefik** (cài bằng Helm, mở NodePort 30080/30443). Gateway API (lab 16) là hướng thay thế lâu dài, nhưng đề vẫn hỏi cả hai.
+    setup: |
+      ns_reset lab15
+      echo_app app1 lab15
+      echo_app app2 lab15
+      openssl req -x509 -nodes -newkey rsa:2048 -days 30 -subj '/CN=apps.lab' \
+        -keyout /tmp/apps.key -out /tmp/apps.crt >/dev/null 2>&1
+      info "Service app1, app2 (cổng 80) trong lab15; chứng chỉ /tmp/apps.crt và /tmp/apps.key"
+    cleanup: |
+      ns_delete lab15
+      rm -f /tmp/apps.key /tmp/apps.crt
+    tasks:
+      - title: Cài Helm
+        body: |
+          Cài Helm 4 trên `controlplane` bằng script chính thức.
+        solution: |
+          ```bash
+          curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4 | bash
+          helm version
+          ```
+        checks:
+          - - helm v4 có trong PATH
+            - helm version --short | grep -q '^v4'
+      - title: Cài Traefik bằng Helm
+        body: |
+          Cài chart `traefik/traefik` vào namespace `traefik` (tên release `traefik`), Service kiểu NodePort với cổng `web` là 30080 và `websecure` là 30443.
+        hints:
+          - "`helm show values traefik/traefik | grep -n -A3 nodePort`"
+        solution: |
+          ```bash
+          helm repo add traefik https://traefik.github.io/charts && helm repo update
+          helm install traefik traefik/traefik -n traefik --create-namespace \
+            --set service.type=NodePort \
+            --set ports.web.nodePort=30080 --set ports.websecure.nodePort=30443
+          k -n traefik rollout status deploy/traefik
+          k get ingressclass
+          ```
+        checks:
+          - - Release traefik deployed
+            - helm status traefik -n traefik | grep -q 'STATUS. deployed'
+          - - IngressClass traefik tồn tại
+            - exists ingressclass traefik
+          - - NodePort 30080 cho web
+            - |
+              k get svc -n traefik traefik -o jsonpath='{.spec.ports[*].nodePort}' | grep -qw 30080
+      - title: Ingress theo path
+        body: |
+          Tạo Ingress `apps` trong `lab15` (class `traefik`) cho host `apps.lab`: path `/app1` (Prefix) tới `app1:80`, path `/app2` (Prefix) tới `app2:80`.
+
+          Kiểm tra: `curl -H 'Host: apps.lab' http://node01:30080/app1` trả về `app1`.
+        solution: |
+          ```bash
+          k create ingress apps -n lab15 --class=traefik \
+            --rule='apps.lab/app1*=app1:80' --rule='apps.lab/app2*=app2:80'
+          curl -s -H 'Host: apps.lab' http://node01:30080/app1
+          ```
+        checks:
+          - - /app1 trả về app1
+            - |
+              eq "$(curl -s --max-time 3 -H 'Host: apps.lab' "http://$(first_worker):30080/app1")" app1
+          - - /app2 trả về app2
+            - |
+              eq "$(curl -s --max-time 3 -H 'Host: apps.lab' "http://$(first_worker):30080/app2")" app2
+      - title: pathType Exact và default backend
+        body: |
+          Tạo Ingress `exact` cho host `exact.lab`: chỉ đúng đường dẫn `/health` (Exact) tới `app1`, còn mọi request khác của Ingress này đi tới `app2` (defaultBackend).
+        solution: |
+          ```yaml
+          apiVersion: networking.k8s.io/v1
+          kind: Ingress
+          metadata: {name: exact, namespace: lab15}
+          spec:
+            ingressClassName: traefik
+            defaultBackend:
+              service: {name: app2, port: {number: 80}}
+            rules:
+            - host: exact.lab
+              http:
+                paths:
+                - path: /health
+                  pathType: Exact
+                  backend:
+                    service: {name: app1, port: {number: 80}}
+          ```
+        checks:
+          - - /health dùng pathType Exact
+            - |
+              eq "$(val ingress exact lab15 '{.spec.rules[0].http.paths[0].pathType}')" Exact
+          - - exact.lab/health trả về app1
+            - |
+              eq "$(curl -s --max-time 3 -H 'Host: exact.lab' "http://$(first_worker):30080/health")" app1
+          - - defaultBackend là app2
+            - |
+              eq "$(val ingress exact lab15 '{.spec.defaultBackend.service.name}')" app2
+      - title: TLS
+        body: |
+          Tạo Secret TLS `apps-tls` từ `/tmp/apps.crt` và `/tmp/apps.key`, rồi bật TLS cho host `apps.lab` trong Ingress `apps`. `curl -sk --resolve apps.lab:30443:<IP node01> https://apps.lab:30443/app1` phải trả về `app1`.
+        solution: |
+          ```bash
+          k create secret tls apps-tls -n lab15 --cert=/tmp/apps.crt --key=/tmp/apps.key
+          k patch ingress apps -n lab15 --type=merge -p '{"spec":{"tls":[{"hosts":["apps.lab"],"secretName":"apps-tls"}]}}'
+          IP=$(getent hosts node01 | awk '{print $1}')
+          curl -sk --resolve apps.lab:30443:$IP https://apps.lab:30443/app1
+          ```
+        checks:
+          - - Ingress apps có tls với apps-tls
+            - |
+              eq "$(val ingress apps lab15 '{.spec.tls[0].secretName}')" apps-tls
+          - - HTTPS trả về app1
+            - |
+              ip=$(getent hosts "$(first_worker)" | awk '{print $1}'); eq "$(curl -sk --max-time 3 --resolve apps.lab:30443:$ip https://apps.lab:30443/app1)" app1
+      - title: IngressClass mặc định
+        body: |
+          Đặt `traefik` làm IngressClass mặc định, để Ingress không ghi `ingressClassName` vẫn được Traefik xử lý.
+        solution: |
+          ```bash
+          k annotate ingressclass traefik ingressclass.kubernetes.io/is-default-class=true --overwrite
+          ```
+        checks:
+          - - traefik là default class
+            - |
+              eq "$(val ingressclass traefik - '{.metadata.annotations.ingressclass\.kubernetes\.io/is-default-class}')" true
+    refs:
+      - [Ingress, "concepts/services-networking/ingress/"]
+      - [Ingress controllers, "concepts/services-networking/ingress-controllers/"]
+
+  - id: "16"
+    slug: gateway-api
+    title: Gateway API
+    level: 3
+    minutes: 60
+    competencies: [net.3, arch.5]
+    needs: Helm (lab 15).
+    goal:
+      - Cài một implementation Gateway API (Envoy Gateway) bằng Helm
+      - Tạo GatewayClass, Gateway, HTTPRoute
+      - Chia traffic theo weight, match header, redirect
+      - Tham chiếu Service khác namespace với ReferenceGrant
+    concept: |
+      Gateway API tách vai trò:
+
+      - **GatewayClass**: loại controller (do người cài implementation tạo)
+      - **Gateway**: listener, cổng, TLS (do đội platform quản lý)
+      - **HTTPRoute**: định tuyến theo host, path, header; chia weight; filter redirect/rewrite (do đội ứng dụng quản lý)
+      - **ReferenceGrant**: cho phép Route tham chiếu Service ở namespace khác
+
+      Kiểm tra trạng thái qua `status.conditions`: Gateway cần `Programmed=True`, Route cần `Accepted=True` và `ResolvedRefs=True`.
+
+      Envoy Gateway tạo một Service LoadBalancer cho mỗi Gateway; trên bare metal ta gọi qua nodePort của Service đó.
+    setup: |
+      ns_reset lab16 shared16
+      echo_app app1 lab16
+      echo_app app2 lab16
+      echo_app shared shared16
+      cat > /tmp/gw-port.sh <<'EOF'
+      #!/usr/bin/env bash
+      # In nodePort HTTP của Service mà Envoy Gateway tạo cho Gateway web-gw
+      kubectl get svc -n envoy-gateway-system \
+        -l gateway.envoyproxy.io/owning-gateway-name=web-gw,gateway.envoyproxy.io/owning-gateway-namespace=lab16 \
+        -o jsonpath='{.items[0].spec.ports[?(@.port==80)].nodePort}'
+      EOF
+      chmod +x /tmp/gw-port.sh
+      info "Service app1, app2 (lab16) và shared (shared16). Lấy nodePort của Gateway: /tmp/gw-port.sh"
+    cleanup: |
+      ns_delete lab16 shared16
+      k delete gatewayclass eg --ignore-not-found >/dev/null
+    tasks:
+      - title: Cài Envoy Gateway
+        body: |
+          Cài Envoy Gateway **v1.9.1** bằng Helm từ `oci://docker.io/envoyproxy/gateway-helm` vào namespace `envoy-gateway-system`, release `eg`. Chart cài kèm CRD của Gateway API.
+        solution: |
+          ```bash
+          helm install eg oci://docker.io/envoyproxy/gateway-helm --version v1.9.1 \
+            -n envoy-gateway-system --create-namespace
+          k wait -n envoy-gateway-system deploy/envoy-gateway --for=condition=Available --timeout=5m
+          k get crd | grep gateway.networking.k8s.io
+          ```
+        checks:
+          - - CRD gateways.gateway.networking.k8s.io có mặt
+            - exists crd gateways.gateway.networking.k8s.io
+          - - envoy-gateway Available
+            - |
+              eq "$(val deploy envoy-gateway envoy-gateway-system '{.status.conditions[?(@.type=="Available")].status}')" True
+      - title: GatewayClass và Gateway
+        body: |
+          Tạo GatewayClass `eg` với controllerName `gateway.envoyproxy.io/gatewayclass-controller`. Trong `lab16` tạo Gateway `web-gw` dùng class `eg`, một listener `http` giao thức HTTP cổng 80, chỉ nhận Route cùng namespace.
+        solution: |
+          ```yaml
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: GatewayClass
+          metadata: {name: eg}
+          spec:
+            controllerName: gateway.envoyproxy.io/gatewayclass-controller
+          ---
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: Gateway
+          metadata: {name: web-gw, namespace: lab16}
+          spec:
+            gatewayClassName: eg
+            listeners:
+            - name: http
+              protocol: HTTP
+              port: 80
+              allowedRoutes:
+                namespaces: {from: Same}
+          ```
+        checks:
+          - - GatewayClass eg Accepted
+            - |
+              eq "$(val gatewayclass eg - '{.status.conditions[?(@.type=="Accepted")].status}')" True
+          - - Gateway web-gw Programmed
+            - |
+              eq "$(val gateway web-gw lab16 '{.status.conditions[?(@.type=="Programmed")].status}')" True
+      - title: HTTPRoute theo path
+        body: |
+          Tạo HTTPRoute `apps` gắn vào `web-gw`, host `apps.lab`: PathPrefix `/app1` tới `app1:80`, PathPrefix `/app2` tới `app2:80`.
+
+          Kiểm tra: `curl -H 'Host: apps.lab' http://node01:$(/tmp/gw-port.sh)/app1` trả về `app1`.
+        solution: |
+          ```yaml
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata: {name: apps, namespace: lab16}
+          spec:
+            parentRefs: [{name: web-gw}]
+            hostnames: [apps.lab]
+            rules:
+            - matches: [{path: {type: PathPrefix, value: /app1}}]
+              backendRefs: [{name: app1, port: 80}]
+            - matches: [{path: {type: PathPrefix, value: /app2}}]
+              backendRefs: [{name: app2, port: 80}]
+          ```
+        checks:
+          - - Route apps Accepted
+            - |
+              eq "$(val httproute apps lab16 '{.status.parents[0].conditions[?(@.type=="Accepted")].status}')" True
+          - - /app1 trả về app1
+            - |
+              eq "$(curl -s --max-time 3 -H 'Host: apps.lab' "http://$(first_worker):$(/tmp/gw-port.sh)/app1")" app1
+          - - /app2 trả về app2
+            - |
+              eq "$(curl -s --max-time 3 -H 'Host: apps.lab' "http://$(first_worker):$(/tmp/gw-port.sh)/app2")" app2
+      - title: Canary theo weight
+        body: |
+          Tạo HTTPRoute `canary` cho host `canary.lab`: 80% traffic tới `app1`, 20% tới `app2`.
+        solution: |
+          ```yaml
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata: {name: canary, namespace: lab16}
+          spec:
+            parentRefs: [{name: web-gw}]
+            hostnames: [canary.lab]
+            rules:
+            - backendRefs:
+              - {name: app1, port: 80, weight: 80}
+              - {name: app2, port: 80, weight: 20}
+          ```
+          ```bash
+          P=$(/tmp/gw-port.sh); for i in $(seq 20); do curl -s -H 'Host: canary.lab' http://node01:$P/; done | sort | uniq -c
+          ```
+        checks:
+          - - Weight 80 cho app1 và 20 cho app2
+            - |
+              eq "$(val httproute canary lab16 '{.spec.rules[0].backendRefs[?(@.name=="app1")].weight}/{.spec.rules[0].backendRefs[?(@.name=="app2")].weight}')" 80/20
+      - title: Match header
+        body: |
+          Thêm vào HTTPRoute `canary` một rule đứng trước: request có header `x-version: v2` luôn tới `app2`.
+        solution: |
+          ```yaml
+            rules:
+            - matches:
+              - headers: [{name: x-version, value: v2}]
+              backendRefs: [{name: app2, port: 80}]
+            - backendRefs:
+              - {name: app1, port: 80, weight: 80}
+              - {name: app2, port: 80, weight: 20}
+          ```
+        checks:
+          - - Header x-version v2 luôn ra app2
+            - |
+              P=$(/tmp/gw-port.sh); for i in 1 2 3 4 5; do eq "$(curl -s --max-time 3 -H 'Host: canary.lab' -H 'x-version: v2' "http://$(first_worker):$P/")" app2 || exit 1; done
+      - title: Redirect
+        body: |
+          Tạo HTTPRoute `old` cho host `old.lab` trả về redirect 301 tới host `apps.lab`.
+        solution: |
+          ```yaml
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata: {name: old, namespace: lab16}
+          spec:
+            parentRefs: [{name: web-gw}]
+            hostnames: [old.lab]
+            rules:
+            - filters:
+              - type: RequestRedirect
+                requestRedirect: {hostname: apps.lab, statusCode: 301}
+          ```
+        checks:
+          - - old.lab trả 301
+            - |
+              eq "$(curl -s -o /dev/null -w '%{http_code}' --max-time 3 -H 'Host: old.lab' "http://$(first_worker):$(/tmp/gw-port.sh)/")" 301
+      - title: Tham chiếu khác namespace
+        body: |
+          Tạo HTTPRoute `shared` trong `lab16` cho host `shared.lab` tới Service `shared` cổng 80 ở namespace `shared16`. Route phải `ResolvedRefs=True` và trả về `shared`.
+        hints:
+          - ReferenceGrant nằm ở namespace **đích** (`shared16`).
+        solution: |
+          ```yaml
+          apiVersion: gateway.networking.k8s.io/v1
+          kind: HTTPRoute
+          metadata: {name: shared, namespace: lab16}
+          spec:
+            parentRefs: [{name: web-gw}]
+            hostnames: [shared.lab]
+            rules:
+            - backendRefs: [{name: shared, namespace: shared16, port: 80}]
+          ---
+          apiVersion: gateway.networking.k8s.io/v1beta1
+          kind: ReferenceGrant
+          metadata: {name: from-lab16, namespace: shared16}
+          spec:
+            from:
+            - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: lab16}
+            to:
+            - {group: "", kind: Service}
+          ```
+        checks:
+          - - ResolvedRefs True
+            - |
+              eq "$(val httproute shared lab16 '{.status.parents[0].conditions[?(@.type=="ResolvedRefs")].status}')" True
+          - - shared.lab trả về shared
+            - |
+              eq "$(curl -s --max-time 3 -H 'Host: shared.lab' "http://$(first_worker):$(/tmp/gw-port.sh)/")" shared
+    refs:
+      - [Gateway API, "concepts/services-networking/gateway/"]
+      - [Gateway API docs (gateway-api.sigs.k8s.io), "concepts/services-networking/gateway/#resource-model"]

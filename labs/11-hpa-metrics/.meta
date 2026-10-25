@@ -1,0 +1,4 @@
+ID=11
+LEVEL=2
+ENV=any
+TITLE="metrics-server và HorizontalPodAutoscaler"

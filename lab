@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+# CKA Labs command line.  Run ./lab help
+set -uo pipefail
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+# shellcheck source=lib/common.sh
+source "$ROOT/lib/common.sh"
+
+lab_dir() {
+  local id; id="$(printf '%02d' "$((10#${1:-x}))" 2>/dev/null)" || die "Mã lab không hợp lệ: ${1:-}"
+  local d; d="$(ls -d "$ROOT"/labs/"$id"-* 2>/dev/null | head -1)"
+  [ -n "$d" ] || die "Không có lab $id. Xem ./lab list"
+  echo "$d"
+}
+
+usage() {
+  cat <<EOF
+${C_B}CKA Labs${C_0}
+
+  ./lab list               Danh sách bài lab theo thứ tự học
+  ./lab start <id>         Dựng tình huống cho lab (vd: ./lab start 5)
+  ./lab check <id>         Chấm bài
+  ./lab hint <id>          Xem gợi ý
+  ./lab solution <id>      Xem lời giải
+  ./lab reset <id>         Dọn dẹp lab
+  ./lab env                In biến CP, NODE1, NODE2   (dùng: eval "\$(./lab env)")
+  ./lab ssh <node>         Vào shell của node (docker exec với kind, ssh với VM)
+  ./lab doctor             Kiểm tra công cụ và cluster
+
+Đáp án dạng file ghi vào: $ANS
+EOF
+}
+
+cmd="${1:-help}"; shift || true
+case "$cmd" in
+  list|ls)
+    printf "${C_B}%-4s %-6s %-6s %s${C_0}\n" ID LEVEL ENV TITLE
+    for d in "$ROOT"/labs/*/; do
+      m="$d/.meta"; [ -f "$m" ] || continue
+      # shellcheck disable=SC1090
+      ( source "$m"; printf "%-4s %-6s %-6s %s\n" "$ID" "$LEVEL" "$ENV" "$TITLE" )
+    done ;;
+  start|setup)
+    d="$(lab_dir "${1:-}")"; source "$d/.meta"
+    echo "${C_B}▶ Lab $ID · $TITLE${C_0}"
+    bash "$d/setup.sh" || die "setup thất bại"
+    detect_nodes
+    echo
+    echo "Node trong cluster: CP=${C_B}$CP${C_0} NODE1=${C_B}$NODE1${C_0} NODE2=${C_B}${NODE2:-—}${C_0}"
+    echo "Đề bài: ${C_B}labs/$(basename "$d")/README.md${C_0}  ·  chấm bài: ${C_B}./lab check $ID${C_0}" ;;
+  check|verify)
+    d="$(lab_dir "${1:-}")"; bash "$d/verify.sh" ;;
+  hint|hints)
+    d="$(lab_dir "${1:-}")"; awk '/^## Gợi ý/{f=1;next} /^## /{f=0} f' "$d/README.md" | sed 's#</\?details>##; s#<summary>\(.*\)</summary>#• \1#' ;;
+  solution|solve)
+    d="$(lab_dir "${1:-}")"
+    if [ -t 0 ]; then read -r -p "Đã tự làm thử chưa? Xem lời giải? [y/N] " a; [ "$a" = y ] || exit 0; fi
+    cat "$d/SOLUTION.md" ;;
+  reset|cleanup)
+    d="$(lab_dir "${1:-}")"; bash "$d/cleanup.sh" && echo "${C_OK}Đã dọn lab $(basename "$d" | cut -d- -f1).${C_0}" ;;
+  env)
+    detect_nodes; echo "export CP=$CP NODE1=$NODE1 NODE2=${NODE2:-}" ;;
+  ssh|shell)
+    n="${1:-}"; [ -n "$n" ] || die "Dùng: ./lab ssh <tên node>"
+    detect_nodes
+    case "$n" in cp|controlplane) n="$CP";; node1|node01|w1) n="$NODE1";; node2|node02|w2) n="$NODE2";; esac
+    if [ "$(node_mode "$n")" = docker ]; then exec docker exec -it "$n" bash 2>/dev/null || exec docker exec -it "$n" sh
+    else exec ssh -t "$n" 'sudo -i'; fi ;;
+  doctor)
+    for t in kubectl docker kind helm ssh; do
+      if command -v "$t" >/dev/null 2>&1; then echo "  ${C_OK}✔${C_0} $t"; else echo "  ${C_Y}–${C_0} $t (không có)"; fi
+    done
+    if kubectl get nodes >/dev/null 2>&1; then
+      detect_nodes; echo "  ${C_OK}✔${C_0} cluster: $(flavor) · CP=$CP NODE1=$NODE1 NODE2=${NODE2:-—}"
+      kubectl get nodes
+    else echo "  ${C_BAD}✘${C_0} chưa kết nối được cluster"; fi ;;
+  help|-h|--help|*) usage ;;
+esac
