@@ -1,0 +1,4 @@
+ID=31
+LEVEL=7
+ENV=kind
+TITLE="Chứng chỉ, cấu hình control plane và kubelet"

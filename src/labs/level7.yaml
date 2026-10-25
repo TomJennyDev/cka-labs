@@ -1,0 +1,662 @@
+- id: 26
+  slug: helm
+  title: Helm từ chart đến rollback
+  level: 7
+  minutes: 35
+  test: false
+  competencies: ["arch:5"]
+  goal: |
+    Dùng Helm như trong công việc thật: tạo chart, cài release với values, nâng cấp giữ values cũ, quay lại revision tốt, render YAML để kiểm tra trước, và gỡ release.
+  concepts: |
+    - **Chart** là gói template + `values.yaml`; **release** là một lần cài chart vào cluster; mỗi lần `upgrade` hoặc `rollback` tạo một **revision** mới (lưu dạng Secret trong namespace của release).
+    - `--set` và `-f values.yaml` ghi đè giá trị. `helm upgrade` **không** giữ `--set` cũ trừ khi thêm `--reuse-values`.
+    - `helm template` render YAML ở máy, không cần cluster. `helm get values`, `helm history`, `helm rollback <release> <revision>`.
+    - Chart từ repo: `helm repo add`, `helm search repo`, `helm install … --version`. Chart từ OCI registry: `helm install x oci://…`.
+  setup_note: |
+    Cần Helm v3 trên máy chạy lab (`helm version`). Lab dùng chart tạo tại chỗ bằng `helm create`, không cần internet.
+  tasks:
+    - |
+      Tạo chart `webapp` trong `~/cka-answers/lab26/` bằng `helm create`.
+    - |
+      Cài release `web` từ chart đó vào namespace `lab26` với 2 replica và image `nginx:1.27` (chart mặc định dùng repository `nginx`, chỉ cần đặt tag).
+    - |
+      Nâng cấp `web` để Service thành `NodePort`, **giữ** các giá trị đã đặt trước đó.
+    - |
+      Nâng cấp tiếp với image tag `1.99` (không tồn tại), thấy Pod lỗi, rồi rollback về revision có NodePort và `nginx:1.27`.
+    - |
+      Không cài, chỉ render chart với release tên `preview` và 3 replica, lưu vào `~/cka-answers/26-rendered.yaml`.
+    - |
+      Cài thử release `tmp` vào `lab26` rồi gỡ nó.
+  hints:
+    - |
+      Đặt nhiều giá trị
+      `--set replicaCount=2,image.tag=1.27`
+    - |
+      Xem revision
+      `helm history web -n lab26`
+  solution: |
+    ```bash
+    mkdir -p ~/cka-answers/lab26 && cd ~/cka-answers/lab26
+    helm create webapp
+    helm install web ./webapp -n lab26 --set replicaCount=2,image.tag=1.27
+    helm upgrade web ./webapp -n lab26 --reuse-values --set service.type=NodePort
+    helm upgrade web ./webapp -n lab26 --reuse-values --set image.tag=1.99
+    kubectl get pods -n lab26                       # ImagePullBackOff
+    helm history web -n lab26
+    helm rollback web 2 -n lab26
+    helm template preview ./webapp --set replicaCount=3 > ~/cka-answers/26-rendered.yaml
+    helm install tmp ./webapp -n lab26
+    helm uninstall tmp -n lab26
+    helm list -n lab26
+    ```
+  setup: |
+    command -v helm >/dev/null 2>&1 || die "Chưa có helm. Cài theo https://helm.sh/docs/intro/install/"
+    answers_dir; rm -rf "$ANS/lab26" "$ANS/26-rendered.yaml"
+    helm uninstall web tmp -n lab26 >/dev/null 2>&1 || true
+    ns_fresh lab26
+  verify: |
+    check "Có helm trên máy" command -v helm
+    check "Chart ~/cka-answers/lab26/webapp tồn tại" test -f "$ANS/lab26/webapp/Chart.yaml"
+    expect "Release web đang deployed" "$(helm status web -n lab26 2>/dev/null | awk '/^STATUS:/{print $2}')" "deployed"
+    rev=$(helm history web -n lab26 --max 20 2>/dev/null | awk 'NR>1' | wc -l | tr -d ' ')
+    expect_ge "web có ít nhất 4 revision (install, 2 upgrade, rollback)" "$rev" 4
+    check "Revision cuối là rollback" bash -c "helm history web -n lab26 | tail -1 | grep -qi 'rollback to 2'"
+    expect "Service web-webapp là NodePort" "$(jp svc web-webapp -n lab26 '{.spec.type}')" "NodePort"
+    expect "Deployment web-webapp: 2 replica, nginx:1.27" "$(jp deploy web-webapp -n lab26 '{.spec.replicas}:{.spec.template.spec.containers[0].image}')" "2:nginx:1.27"
+    expect "web-webapp 2/2 sẵn sàng" "$(jp deploy web-webapp -n lab26 '{.status.readyReplicas}')" "2"
+    check "26-rendered.yaml có Deployment preview-webapp 3 replica" bash -c "grep -q 'name: preview-webapp' '$ANS/26-rendered.yaml' && grep -q 'replicas: 3' '$ANS/26-rendered.yaml'"
+    check_not "preview không được cài vào cluster" helm status preview -n lab26
+    check_not "Release tmp đã gỡ" helm status tmp -n lab26
+  cleanup: |
+    helm uninstall web tmp -n lab26 >/dev/null 2>&1 || true
+    kubectl delete ns lab26 --ignore-not-found --wait=false >/dev/null
+    rm -rf "$ANS/lab26" "$ANS/26-rendered.yaml"
+  solve: |
+    mkdir -p "$ANS/lab26" && cd "$ANS/lab26"
+    helm create webapp
+    helm install web ./webapp -n lab26 --set replicaCount=2,image.tag=1.27 --wait --timeout 3m
+    helm upgrade web ./webapp -n lab26 --reuse-values --set service.type=NodePort --wait
+    helm upgrade web ./webapp -n lab26 --reuse-values --set image.tag=1.99 || true
+    helm rollback web 2 -n lab26 --wait
+    helm template preview ./webapp --set replicaCount=3 > "$ANS/26-rendered.yaml"
+    helm install tmp ./webapp -n lab26
+    helm uninstall tmp -n lab26
+  docs:
+    - [Helm quickstart, "https://helm.sh/docs/intro/quickstart/"]
+    - [helm upgrade, "https://helm.sh/docs/helm/helm_upgrade/"]
+
+- id: 27
+  slug: kustomize
+  title: Kustomize với base và overlay
+  level: 7
+  minutes: 30
+  competencies: ["arch:5"]
+  goal: |
+    Tùy biến bộ manifest cho từng môi trường mà không sửa file gốc: overlay đổi namespace, tiền tố tên, label, số replica, image, cấu hình sinh tự động và patch.
+  concepts: |
+    - `kustomization.yaml` liệt kê `resources` rồi biến đổi: `namespace`, `namePrefix`, `labels`, `images`, `replicas`, `patches`.
+    - `configMapGenerator` sinh ConfigMap có **hậu tố hash** theo nội dung, và tự sửa mọi chỗ tham chiếu. Đổi cấu hình là đổi tên ConfigMap, nên Deployment tự rollout. Trong overlay dùng `behavior: merge` để ghi đè key của base.
+    - `kubectl kustomize <dir>` xem kết quả; `kubectl apply -k <dir>` áp dụng. kubectl có sẵn Kustomize, không cần cài thêm.
+  tasks:
+    - |
+      Base có sẵn ở `~/cka-answers/lab27/base` (Deployment `web`, Service `web`, ConfigMap `app-config` sinh bằng generator). Đọc nó.
+    - |
+      Tạo overlay `~/cka-answers/lab27/overlays/prod` dùng base đó, với: namespace `lab27`; tiền tố tên `prod-`; label `env=prod` gắn cả vào selector; 3 replica; image `nginx:1.28`; `MODE=prod` thay cho `MODE=dev`; container `web` có request `cpu: 100m`.
+    - |
+      Lưu kết quả render của overlay vào `~/cka-answers/27-rendered.yaml`, rồi áp dụng overlay vào cluster.
+  hints:
+    - |
+      Ghi đè ConfigMap của base
+      ```yaml
+      configMapGenerator:
+      - name: app-config
+        behavior: merge
+        literals: [MODE=prod]
+      ```
+    - |
+      Patch resources
+      File `resources.yaml` dạng strategic merge (Deployment tên `web`, container `web`) rồi `patches: [{path: resources.yaml}]`.
+  solution: |
+    ```yaml
+    # ~/cka-answers/lab27/overlays/prod/kustomization.yaml
+    apiVersion: kustomize.config.k8s.io/v1beta1
+    kind: Kustomization
+    resources: [../../base]
+    namespace: lab27
+    namePrefix: prod-
+    labels:
+    - pairs: {env: prod}
+      includeSelectors: true
+    replicas:
+    - {name: web, count: 3}
+    images:
+    - {name: nginx, newTag: "1.28"}
+    configMapGenerator:
+    - name: app-config
+      behavior: merge
+      literals: [MODE=prod]
+    patches:
+    - path: resources.yaml
+    ---
+    # ~/cka-answers/lab27/overlays/prod/resources.yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: web}
+    spec:
+      template:
+        spec:
+          containers:
+          - name: web
+            resources:
+              requests: {cpu: 100m}
+    ```
+    ```bash
+    kubectl kustomize ~/cka-answers/lab27/overlays/prod > ~/cka-answers/27-rendered.yaml
+    kubectl apply -k ~/cka-answers/lab27/overlays/prod
+    kubectl get deploy,svc,cm -n lab27
+    ```
+  setup: |
+    answers_dir; rm -rf "$ANS/lab27" "$ANS/27-rendered.yaml"
+    ns_fresh lab27
+    mkdir -p "$ANS/lab27/base"
+    cat > "$ANS/lab27/base/deployment.yaml" <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: web}
+    spec:
+      replicas: 1
+      selector: {matchLabels: {app: web}}
+      template:
+        metadata: {labels: {app: web}}
+        spec:
+          containers:
+          - name: web
+            image: nginx:1.27
+            envFrom:
+            - configMapRef: {name: app-config}
+    EOF
+    cat > "$ANS/lab27/base/service.yaml" <<'EOF'
+    apiVersion: v1
+    kind: Service
+    metadata: {name: web}
+    spec:
+      selector: {app: web}
+      ports: [{port: 80}]
+    EOF
+    cat > "$ANS/lab27/base/kustomization.yaml" <<'EOF'
+    apiVersion: kustomize.config.k8s.io/v1beta1
+    kind: Kustomization
+    resources: [deployment.yaml, service.yaml]
+    configMapGenerator:
+    - name: app-config
+      literals: [MODE=dev, LOG_LEVEL=info]
+    EOF
+    echo "Base: $ANS/lab27/base"
+  verify: |
+    check "Overlay prod tồn tại" test -f "$ANS/lab27/overlays/prod/kustomization.yaml"
+    check "27-rendered.yaml chứa prod-web" grep -q 'name: prod-web' "$ANS/27-rendered.yaml"
+    expect "prod-web: 3 replica, nginx:1.28" "$(jp deploy prod-web -n lab27 '{.spec.replicas}:{.spec.template.spec.containers[0].image}')" "3:nginx:1.28"
+    expect "prod-web 3/3 sẵn sàng" "$(jp deploy prod-web -n lab27 '{.status.readyReplicas}')" "3"
+    expect "Label env=prod có cả trên selector" "$(jp deploy prod-web -n lab27 '{.metadata.labels.env}:{.spec.selector.matchLabels.env}')" "prod:prod"
+    expect "Container web request cpu 100m" "$(jp deploy prod-web -n lab27 '{.spec.template.spec.containers[0].resources.requests.cpu}')" "100m"
+    cm=$(jp deploy prod-web -n lab27 '{.spec.template.spec.containers[0].envFrom[0].configMapRef.name}')
+    expect_match "Deployment dùng ConfigMap prod-app-config-<hash>" "$cm" '^prod-app-config-[a-z0-9]+$'
+    expect "ConfigMap có MODE=prod và giữ LOG_LEVEL" "$(jp cm "$cm" -n lab27 '{.data.MODE}:{.data.LOG_LEVEL}')" "prod:info"
+    expect "Service prod-web chọn env=prod" "$(jp svc prod-web -n lab27 '{.spec.selector.env}')" "prod"
+    expect "Base không bị sửa (vẫn MODE=dev)" "$(grep -c 'MODE=dev' "$ANS/lab27/base/kustomization.yaml")" "1"
+  cleanup: |
+    kubectl delete ns lab27 --ignore-not-found --wait=false >/dev/null
+    rm -rf "$ANS/lab27" "$ANS/27-rendered.yaml"
+  solve: |
+    mkdir -p "$ANS/lab27/overlays/prod"
+    cat > "$ANS/lab27/overlays/prod/kustomization.yaml" <<'EOF'
+    apiVersion: kustomize.config.k8s.io/v1beta1
+    kind: Kustomization
+    resources: [../../base]
+    namespace: lab27
+    namePrefix: prod-
+    labels:
+    - pairs: {env: prod}
+      includeSelectors: true
+    replicas:
+    - {name: web, count: 3}
+    images:
+    - {name: nginx, newTag: "1.28"}
+    configMapGenerator:
+    - name: app-config
+      behavior: merge
+      literals: [MODE=prod]
+    patches:
+    - path: resources.yaml
+    EOF
+    cat > "$ANS/lab27/overlays/prod/resources.yaml" <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: web}
+    spec:
+      template:
+        spec:
+          containers:
+          - name: web
+            resources:
+              requests: {cpu: 100m}
+    EOF
+    kubectl kustomize "$ANS/lab27/overlays/prod" > "$ANS/27-rendered.yaml"
+    kubectl apply -k "$ANS/lab27/overlays/prod"
+    kubectl rollout status deploy/prod-web -n lab27 --timeout=180s
+  docs:
+    - [Declarative management with Kustomize, "https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/"]
+    - [Kustomize reference, "https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/"]
+
+- id: 28
+  slug: crd-operator
+  title: CustomResourceDefinition và Operator
+  level: 7
+  minutes: 30
+  competencies: ["arch:7", "arch:6"]
+  goal: |
+    Mở rộng Kubernetes API bằng loại object của riêng bạn, có kiểm tra dữ liệu, tên viết tắt và cột hiển thị; hiểu Operator dùng CRD thế nào.
+  concepts: |
+    - CRD khai báo `group`, `names` (`kind`, `plural`, `singular`, `shortNames`), `scope` (`Namespaced` hoặc `Cluster`), và các `versions` (một version là `storage: true`).
+    - `openAPIV3Schema` kiểm tra dữ liệu ngay khi tạo: kiểu, `required`, `minimum`/`maximum`, `enum`. Object sai bị API từ chối.
+    - `additionalPrinterColumns` thêm cột cho `kubectl get`.
+    - **Operator** = CRD + controller theo dõi các object đó và vận hành phần mềm thay con người (cert-manager, Prometheus Operator, CloudNativePG…). Cài thường bằng Helm hoặc manifest.
+  tasks:
+    - |
+      Tạo CRD `backups.ops.example.com`: kind `Backup`, namespaced, tên ngắn `bk`, version `v1`. Schema: `spec.schedule` (string, **bắt buộc**), `spec.retention` (integer từ 1 tới 30). Thêm hai cột `Schedule` và `Retention` cho `kubectl get`.
+    - |
+      Trong `lab28`, tạo Backup `nightly` với schedule `0 2 * * *`, retention `7`.
+    - |
+      Thử tạo Backup `bad` với retention `100`. API phải từ chối; không được có object `bad`.
+    - |
+      Ghi các tên ngắn của resource thuộc group `ops.example.com` (theo `kubectl api-resources`) vào `~/cka-answers/28-short.txt`.
+  hints:
+    - |
+      Khung CRD
+      Xem ví dụ trong tài liệu "Extend the Kubernetes API with CustomResourceDefinitions" rồi sửa tên. `kubectl explain backup.spec` chạy được khi schema đúng.
+  solution: |
+    ```yaml
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata: {name: backups.ops.example.com}
+    spec:
+      group: ops.example.com
+      scope: Namespaced
+      names: {kind: Backup, plural: backups, singular: backup, shortNames: [bk]}
+      versions:
+      - name: v1
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                required: [schedule]
+                properties:
+                  schedule: {type: string}
+                  retention: {type: integer, minimum: 1, maximum: 30}
+        additionalPrinterColumns:
+        - {name: Schedule, type: string, jsonPath: .spec.schedule}
+        - {name: Retention, type: integer, jsonPath: .spec.retention}
+    ---
+    apiVersion: ops.example.com/v1
+    kind: Backup
+    metadata: {name: nightly, namespace: lab28}
+    spec: {schedule: "0 2 * * *", retention: 7}
+    ```
+    ```bash
+    kubectl get bk -n lab28                # có cột SCHEDULE, RETENTION
+    kubectl explain backup.spec
+    # bad: The Backup "bad" is invalid: spec.retention: Invalid value: 100: must be less than or equal to 30
+    kubectl api-resources --api-group=ops.example.com
+    echo bk > ~/cka-answers/28-short.txt
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/28-short.txt"
+    kubectl delete crd backups.ops.example.com --ignore-not-found --wait=true >/dev/null
+    ns_fresh lab28
+  verify: |
+    crd=backups.ops.example.com
+    expect "CRD: Backup, Namespaced, bk" "$(jp crd $crd '{.spec.names.kind}:{.spec.scope}:{.spec.names.shortNames[*]}')" "Backup:Namespaced:bk"
+    expect "CRD version v1 served và storage" "$(jp crd $crd '{.spec.versions[0].name}:{.spec.versions[0].served}:{.spec.versions[0].storage}')" "v1:true:true"
+    expect "schedule bắt buộc" "$(jp crd $crd '{.spec.versions[0].schema.openAPIV3Schema.properties.spec.required[*]}')" "schedule"
+    expect "retention từ 1 tới 30" "$(jp crd $crd '{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.retention.minimum}-{.spec.versions[0].schema.openAPIV3Schema.properties.spec.properties.retention.maximum}')" "1-30"
+    check "kubectl get bk có cột SCHEDULE và RETENTION" bash -c "kubectl get bk -n lab28 | head -1 | grep -q 'SCHEDULE.*RETENTION'"
+    expect "nightly: 0 2 * * * / 7" "$(jp bk nightly -n lab28 '{.spec.schedule}/{.spec.retention}')" "0 2 * * */7"
+    check_not "Không có Backup bad" kubectl get bk bad -n lab28
+    bad_backup() { printf 'apiVersion: ops.example.com/v1\nkind: Backup\nmetadata: {name: probe, namespace: lab28}\nspec: {schedule: x, retention: 100}\n' | kubectl apply --dry-run=server -f -; }
+    check_not "API từ chối retention 100" bad_backup
+    expect "28-short.txt" "$(ans 28-short.txt)" "bk"
+  cleanup: |
+    kubectl delete ns lab28 --ignore-not-found --wait=false >/dev/null
+    kubectl delete crd backups.ops.example.com --ignore-not-found >/dev/null
+    rm -f "$ANS/28-short.txt"
+  solve: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata: {name: backups.ops.example.com}
+    spec:
+      group: ops.example.com
+      scope: Namespaced
+      names: {kind: Backup, plural: backups, singular: backup, shortNames: [bk]}
+      versions:
+      - name: v1
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                required: [schedule]
+                properties:
+                  schedule: {type: string}
+                  retention: {type: integer, minimum: 1, maximum: 30}
+        additionalPrinterColumns:
+        - {name: Schedule, type: string, jsonPath: .spec.schedule}
+        - {name: Retention, type: integer, jsonPath: .spec.retention}
+    EOF
+    kubectl wait --for=condition=Established crd/backups.ops.example.com --timeout=60s
+    kubectl apply -f - <<'EOF'
+    apiVersion: ops.example.com/v1
+    kind: Backup
+    metadata: {name: nightly, namespace: lab28}
+    spec: {schedule: "0 2 * * *", retention: 7}
+    EOF
+    kubectl api-resources --api-group=ops.example.com --no-headers | awk '{print $2}' > "$ANS/28-short.txt"
+  docs:
+    - [Custom resources, "https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/"]
+    - [Extend the API with CRDs, "https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/"]
+    - [Operator pattern, "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"]
+
+- id: 29
+  slug: etcd-backup-restore
+  title: Sao lưu và khôi phục etcd
+  level: 7
+  minutes: 40
+  env: kind
+  test: false
+  competencies: ["arch:3", "arch:2"]
+  goal: |
+    Chụp snapshot etcd đúng cách, và khôi phục cluster về thời điểm chụp khi dữ liệu bị thay đổi sau đó.
+  concepts: |
+    - etcd bật TLS hai chiều: `etcdctl` cần `--endpoints`, `--cacert`, `--cert`, `--key`. Lấy đường dẫn từ `/etc/kubernetes/manifests/etcd.yaml`.
+    - `etcdctl snapshot save` chụp; `etcdutl snapshot status` kiểm tra; `etcdutl snapshot restore --data-dir <thư mục mới>` khôi phục ra thư mục **mới**.
+    - Sau khi restore, sửa `hostPath` của volume `etcd-data` trong `etcd.yaml` trỏ sang thư mục mới. kubelet tự tạo lại Pod etcd; API server có thể mất 1–2 phút để trở lại.
+    - Restore đưa **toàn bộ** cluster về thời điểm chụp: object tạo sau đó biến mất.
+  setup_note: |
+    Setup cài `etcdctl` và `etcdutl` v3.6.16 vào node control plane nếu chưa có (tải từ GitHub), và tạo namespace `lab29-before`.
+  tasks:
+    - |
+      Vào node control plane (`./lab ssh $CP`). Ghi giá trị `--data-dir` của etcd vào `/root/29-datadir.txt` trên node.
+    - |
+      Chụp snapshot etcd vào `/opt/etcd-backup.db` trên node control plane và kiểm tra nó bằng `etcdutl snapshot status`.
+    - |
+      **Sau** khi chụp, tạo namespace `lab29-after` (giả lập thay đổi xảy ra sau lần sao lưu).
+    - |
+      Khôi phục snapshot ra `/var/lib/etcd-restore` và cho etcd chạy trên dữ liệu đó. Kết quả: `lab29-before` còn, `lab29-after` không còn.
+  hints:
+    - |
+      Biến cho đỡ gõ
+      `export ETCDCTL_API=3; E="--endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key"`
+    - |
+      API server không trả lời sau khi sửa etcd.yaml?
+      Chờ 1–2 phút; xem `crictl ps -a | grep -E 'etcd|apiserver'` và `crictl logs <id>` trên node.
+  solution: |
+    ```bash
+    ./lab ssh $CP
+    grep data-dir /etc/kubernetes/manifests/etcd.yaml | cut -d= -f2 > /root/29-datadir.txt   # /var/lib/etcd
+    E="--endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key"
+    etcdctl $E snapshot save /opt/etcd-backup.db
+    etcdutl snapshot status /opt/etcd-backup.db -w table
+    exit
+
+    kubectl create ns lab29-after
+
+    ./lab ssh $CP
+    etcdutl snapshot restore /opt/etcd-backup.db --data-dir /var/lib/etcd-restore
+    vi /etc/kubernetes/manifests/etcd.yaml
+    #   volumes:
+    #   - hostPath: {path: /var/lib/etcd-restore, type: DirectoryOrCreate}
+    #     name: etcd-data
+    # (chỉ cần đổi hostPath; --data-dir trong container vẫn là /var/lib/etcd)
+    watch crictl ps      # chờ etcd và kube-apiserver chạy lại
+    exit
+    kubectl get ns | grep lab29        # chỉ còn lab29-before
+    ```
+  setup: |
+    kubectl delete ns lab29-after lab29-before --ignore-not-found --wait=true >/dev/null 2>&1
+    node_exec "$CP" 'command -v etcdctl >/dev/null && command -v etcdutl >/dev/null' || {
+      info "Cài etcdctl/etcdutl vào $CP"
+      node_exec "$CP" 'set -e; A=$(uname -m); case $A in x86_64) A=amd64;; aarch64|arm64) A=arm64;; esac
+        V=v3.6.16; cd /tmp; curl -fsSL -o etcd.tgz https://github.com/etcd-io/etcd/releases/download/$V/etcd-$V-linux-$A.tar.gz
+        tar xzf etcd.tgz; cp etcd-$V-linux-$A/etcdctl etcd-$V-linux-$A/etcdutl /usr/local/bin/; rm -rf etcd.tgz etcd-$V-linux-$A' || die "Không cài được etcdctl"
+    }
+    node_exec "$CP" 'rm -f /opt/etcd-backup.db /root/29-datadir.txt'
+    kubectl create ns lab29-before >/dev/null
+  verify: |
+    expect "29-datadir.txt" "$(node_exec "$CP" 'tr -d "[:space:]" < /root/29-datadir.txt')" "/var/lib/etcd"
+    check "Snapshot /opt/etcd-backup.db hợp lệ" node_exec "$CP" 'etcdutl snapshot status /opt/etcd-backup.db'
+    expect "Volume etcd-data trỏ /var/lib/etcd-restore" "$(node_exec "$CP" "grep -oE 'path: /var/lib/etcd[^ ]*' /etc/kubernetes/manifests/etcd.yaml | awk '{print \$2}' | xargs")" "/var/lib/etcd-restore"
+    check "Namespace lab29-before còn" kubectl get ns lab29-before
+    check_not "Namespace lab29-after đã biến mất (cluster về thời điểm chụp)" kubectl get ns lab29-after
+    expect "etcd Running" "$(jp pod "etcd-$CP" -n kube-system '{.status.phase}')" "Running"
+  cleanup: |
+    kubectl delete ns lab29-before lab29-after --ignore-not-found --wait=false >/dev/null 2>&1
+  docs:
+    - [Operating etcd clusters for Kubernetes, "https://kubernetes.io/docs/tasks/administer-cluster/configure-upgrade-etcd/"]
+    - [etcd disaster recovery, "https://etcd.io/docs/v3.6/op-guide/recovery/"]
+
+- id: 30
+  slug: kubeadm-upgrade
+  title: Nâng cấp cluster kubeadm 1.34 → 1.35
+  level: 7
+  minutes: 60
+  env: vm
+  test: false
+  competencies: ["arch:3", "arch:2"]
+  goal: |
+    Nâng một cluster đang chạy lên minor mới mà không làm gián đoạn ứng dụng: control plane trước, từng worker sau, đúng thứ tự drain và uncordon.
+  concepts: |
+    - Mỗi lần chỉ nâng **một** minor. Thứ tự: `kubeadm` trên control plane → `kubeadm upgrade plan` → `kubeadm upgrade apply` → drain → nâng `kubelet` và `kubectl` → restart kubelet → uncordon. Control plane thứ hai trở đi và worker dùng `kubeadm upgrade node`.
+    - Version skew: kubelet được cũ hơn API server tối đa 3 minor, không bao giờ mới hơn. kubectl lệch ±1 minor.
+    - Gói bị `apt-mark hold` để không vô tình nâng; phải `unhold` trước khi cài phiên bản mới. Repo `pkgs.k8s.io` chia theo minor: đổi `/v1.34/` thành `/v1.35/`.
+    - `kubeadm upgrade apply` tự gia hạn chứng chỉ control plane.
+  setup_note: |
+    Cần cluster từ lab 01 (Kubernetes v1.34). Chạy lab từ `cp-1`.
+  tasks:
+    - |
+      Ghi phiên bản đích mà `kubeadm upgrade plan` đề xuất (sau khi nâng kubeadm) vào `~/cka-answers/30-target.txt`.
+    - |
+      Nâng control plane `cp-1` lên v1.35 (kubeadm, control plane, kubelet, kubectl).
+    - |
+      Nâng lần lượt `worker-1` rồi `worker-2`, mỗi node phải được drain trước và uncordon sau.
+    - |
+      Mọi node `Ready`, kubelet v1.35.x, không node nào còn `SchedulingDisabled`.
+  hints:
+    - |
+      Xem phiên bản có trong repo
+      `apt-cache madison kubeadm | head`
+  solution: |
+    ```bash
+    # cp-1
+    sudo sed -i 's#/v1.34/#/v1.35/#' /etc/apt/sources.list.d/kubernetes.list
+    sudo apt-get update && apt-cache madison kubeadm | head -3
+    sudo apt-mark unhold kubeadm && sudo apt-get install -y kubeadm='1.35.*' && sudo apt-mark hold kubeadm
+    sudo kubeadm upgrade plan
+    sudo kubeadm upgrade plan | grep -o 'kubeadm upgrade apply v[0-9.]*' | head -1 | awk '{print $4}' > ~/cka-answers/30-target.txt
+    sudo kubeadm upgrade apply $(cat ~/cka-answers/30-target.txt)
+    kubectl drain cp-1 --ignore-daemonsets
+    sudo apt-mark unhold kubelet kubectl && sudo apt-get install -y kubelet='1.35.*' kubectl='1.35.*' && sudo apt-mark hold kubelet kubectl
+    sudo systemctl daemon-reload && sudo systemctl restart kubelet
+    kubectl uncordon cp-1
+
+    # từng worker (ví dụ worker-1)
+    kubectl drain worker-1 --ignore-daemonsets --delete-emptydir-data
+    ssh worker-1
+      sudo sed -i 's#/v1.34/#/v1.35/#' /etc/apt/sources.list.d/kubernetes.list && sudo apt-get update
+      sudo apt-mark unhold kubeadm kubelet kubectl
+      sudo apt-get install -y kubeadm='1.35.*' && sudo kubeadm upgrade node
+      sudo apt-get install -y kubelet='1.35.*' kubectl='1.35.*' && sudo apt-mark hold kubeadm kubelet kubectl
+      sudo systemctl daemon-reload && sudo systemctl restart kubelet
+      exit
+    kubectl uncordon worker-1
+    kubectl get nodes
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/30-target.txt"
+    v=$(jp node "$CP" '{.status.nodeInfo.kubeletVersion}')
+    case "$v" in v1.34.*) ;; v1.35.*) info "Control plane đã ở $v. Lab vẫn chấm được.";; *) die "Lab cần cluster v1.34 (đang là $v)";; esac
+  verify: |
+    expect_match "30-target.txt là v1.35.x" "$(ans 30-target.txt)" '^v1\.35\.[0-9]+$'
+    for n in $(kubectl get nodes -o name | cut -d/ -f2); do
+      expect_match "$n chạy kubelet v1.35" "$(jp node "$n" '{.status.nodeInfo.kubeletVersion}')" '^v1\.35\.'
+      expect_match "$n không bị cordon" "$(jp node "$n" '{.spec.unschedulable}')" '^(false)?$'
+    done
+    expect_match "kube-apiserver dùng image v1.35" "$(jp pod "kube-apiserver-$CP" -n kube-system '{.spec.containers[0].image}')" ':v1\.35\.'
+    ready=$(kubectl get nodes --no-headers | awk '$2=="Ready"' | wc -l); total=$(kubectl get nodes --no-headers | wc -l)
+    expect "Mọi node Ready" "$ready" "$total"
+  cleanup: |
+    rm -f "$ANS/30-target.txt"
+  docs:
+    - [Upgrading kubeadm clusters, "https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-upgrade/"]
+    - [Version skew policy, "https://kubernetes.io/releases/version-skew-policy/"]
+
+- id: 31
+  slug: control-plane-config
+  title: Chứng chỉ, cấu hình control plane và kubelet
+  level: 7
+  minutes: 35
+  env: kind
+  test: false
+  competencies: ["arch:2", "trouble:1", "arch:6"]
+  goal: |
+    Biết cấu hình của từng thành phần nằm ở đâu, đọc và sửa cờ của static pod an toàn, gia hạn chứng chỉ, và đọc cấu hình kubelet.
+  concepts: |
+    - Control plane kubeadm: manifest ở `/etc/kubernetes/manifests`, chứng chỉ ở `/etc/kubernetes/pki`, kubeconfig ở `/etc/kubernetes/*.conf`. Sửa manifest là kubelet tự tạo lại Pod.
+    - `kubeadm certs check-expiration` xem hạn; `kubeadm certs renew <tên>|all` gia hạn, sau đó phải restart thành phần dùng cert đó (di chuyển manifest ra rồi vào lại, hoặc `crictl stop` container).
+    - kubelet: cấu hình ở `/var/lib/kubelet/config.yaml` (`cgroupDriver`, `clusterDNS`, `staticPodPath`…), cờ thêm ở `/var/lib/kubelet/kubeadm-flags.env`.
+    - Trước khi sửa manifest, luôn sao lưu ra **ngoài** thư mục manifests (kubelet đọc mọi file trong đó).
+  tasks:
+    - |
+      Ghi dải IP của Service (`--service-cluster-ip-range`) vào `~/cka-answers/31-svc-range.txt`.
+    - |
+      Ghi `cgroupDriver` và `clusterDNS` trong cấu hình kubelet của `$NODE1` vào `~/cka-answers/31-kubelet.txt` theo dạng `systemd 10.96.0.10`.
+    - |
+      Gia hạn chứng chỉ `apiserver` bằng kubeadm và cho kube-apiserver dùng chứng chỉ mới.
+    - |
+      Bật thêm admission plugin `AlwaysPullImages` cho kube-apiserver, giữ nguyên các plugin đang bật.
+  hints:
+    - |
+      Restart kube-apiserver
+      `mv /etc/kubernetes/manifests/kube-apiserver.yaml /root/ && sleep 20 && mv /root/kube-apiserver.yaml /etc/kubernetes/manifests/`
+    - |
+      Chứng chỉ apiserver đang dùng
+      `openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -dates`
+  solution: |
+    ```bash
+    ./lab ssh $CP
+    grep service-cluster-ip-range /etc/kubernetes/manifests/kube-apiserver.yaml   # 10.96.0.0/12
+    kubeadm certs check-expiration
+    kubeadm certs renew apiserver
+    cp /etc/kubernetes/manifests/kube-apiserver.yaml /root/kube-apiserver.yaml.bak
+    vi /etc/kubernetes/manifests/kube-apiserver.yaml
+    #   - --enable-admission-plugins=NodeRestriction,AlwaysPullImages
+    # sửa manifest cũng làm kubelet tạo lại Pod, nên chứng chỉ mới được nạp
+    exit
+    echo 10.96.0.0/12 > ~/cka-answers/31-svc-range.txt
+
+    ./lab ssh $NODE1
+    grep -E 'cgroupDriver|clusterDNS' -A1 /var/lib/kubelet/config.yaml
+    exit
+    echo "systemd 10.96.0.10" > ~/cka-answers/31-kubelet.txt
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS"/31-*
+    command -v openssl >/dev/null || die "Cần openssl trên máy chạy lab"
+    node_exec "$CP" 'cp -n /etc/kubernetes/manifests/kube-apiserver.yaml /root/lab31-kube-apiserver.yaml.orig; sha256sum /etc/kubernetes/pki/apiserver.crt | cut -d" " -f1 > /root/lab31-crt.sha'
+  verify: |
+    expect "31-svc-range.txt" "$(ans 31-svc-range.txt)" "$(node_exec "$CP" "grep -o 'service-cluster-ip-range=[^ ]*' /etc/kubernetes/manifests/kube-apiserver.yaml | cut -d= -f2")"
+    want="$(node_exec "$NODE1" "awk '/^cgroupDriver:/{print \$2}' /var/lib/kubelet/config.yaml") $(node_exec "$NODE1" "awk '/^clusterDNS:/{getline; print \$2}' /var/lib/kubelet/config.yaml")"
+    expect "31-kubelet.txt" "$(xargs < "$ANS/31-kubelet.txt" 2>/dev/null)" "$(echo $want)"
+    now_fp=$(node_exec "$CP" 'sha256sum /etc/kubernetes/pki/apiserver.crt' | awk '{print $1}')
+    check "Chứng chỉ apiserver đã được gia hạn (file thay đổi)" test "$now_fp" != "$(node_exec "$CP" 'cat /root/lab31-crt.sha')"
+    srv=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}' | sed 's#https://##')
+    served=$(echo | openssl s_client -connect "$srv" 2>/dev/null | openssl x509 -noout -fingerprint -sha256 2>/dev/null)
+    onfile=$(node_exec "$CP" 'cat /etc/kubernetes/pki/apiserver.crt' | openssl x509 -noout -fingerprint -sha256 2>/dev/null)
+    expect "kube-apiserver đang phục vụ chứng chỉ mới" "$served" "$onfile"
+    plugins=$(node_exec "$CP" "grep -o 'enable-admission-plugins=[^ ]*' /etc/kubernetes/manifests/kube-apiserver.yaml | cut -d= -f2")
+    check "Bật AlwaysPullImages" grep -q AlwaysPullImages <<<"$plugins"
+    check "Vẫn giữ NodeRestriction" grep -q NodeRestriction <<<"$plugins"
+    expect "kube-apiserver Running" "$(jp pod "kube-apiserver-$CP" -n kube-system '{.status.phase}')" "Running"
+  cleanup: |
+    node_exec "$CP" 'if [ -f /root/lab31-kube-apiserver.yaml.orig ]; then cp /root/lab31-kube-apiserver.yaml.orig /etc/kubernetes/manifests/kube-apiserver.yaml; rm -f /root/lab31-kube-apiserver.yaml.orig /root/lab31-crt.sha; fi' >/dev/null 2>&1 || true
+    rm -f "$ANS"/31-*
+  docs:
+    - [Certificate management with kubeadm, "https://kubernetes.io/docs/tasks/administer-cluster/kubeadm/kubeadm-certs/"]
+    - [Admission controllers, "https://kubernetes.io/docs/reference/access-authn-authz/admission-controllers/"]
+    - [Set kubelet parameters via a config file, "https://kubernetes.io/docs/tasks/administer-cluster/kubelet-config-file/"]
+
+- id: 32
+  slug: control-plane-ha
+  title: Thêm control plane cho cluster HA
+  level: 7
+  minutes: 60
+  env: vm
+  test: false
+  competencies: ["arch:4", "arch:2"]
+  goal: |
+    Biến cluster một control plane thành ba control plane với etcd xếp chồng (stacked), hiểu vai trò của endpoint chung và load balancer.
+  concepts: |
+    - HA cần: một **endpoint ổn định** cho API (`--control-plane-endpoint`, thường là load balancer hoặc VIP như kube-vip), **số lẻ** control plane (3 hoặc 5) để etcd giữ quorum.
+    - `kubeadm init --upload-certs` lưu cert control plane (mã hóa) vào Secret `kubeadm-certs`, hết hạn sau 2 giờ; tạo lại bằng `kubeadm init phase upload-certs --upload-certs`, lệnh này in ra **certificate key**.
+    - Join control plane: `kubeadm join <endpoint> --token … --discovery-token-ca-cert-hash … --control-plane --certificate-key …`.
+    - API server chạy song song trên cả 3 node; scheduler và controller-manager chỉ một bản làm việc (leader, giữ Lease trong `kube-system`).
+  setup_note: |
+    Cần cluster từ lab 01. Dựng thêm 2 máy ảo `cp-2` (192.168.56.13) và `cp-3` (192.168.56.14):
+    ```bash
+    cd env/kubeadm && HA=1 vagrant up cp-2 cp-3
+    ```
+    Lab dùng tên `k8s-api` trong `/etc/hosts` trỏ về cp-1 thay cho load balancer. Trong thực tế, đặt HAProxy hoặc kube-vip trước 3 API server.
+  tasks:
+    - |
+      Trên `cp-1`, tạo lại certificate key và lệnh join.
+    - |
+      Join `cp-2` và `cp-3` làm control plane.
+    - |
+      Ghi số member etcd vào `~/cka-answers/32-etcd-members.txt`, và tên node đang giữ Lease `kube-scheduler` vào `~/cka-answers/32-leader.txt`.
+  hints:
+    - |
+      Danh sách member etcd
+      `kubectl -n kube-system exec etcd-cp-1 -- etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key member list -w table`
+  solution: |
+    ```bash
+    # cp-1
+    sudo kubeadm init phase upload-certs --upload-certs        # in ra certificate key
+    kubeadm token create --print-join-command
+    # cp-2 và cp-3:
+    sudo kubeadm join k8s-api:6443 --token <t> --discovery-token-ca-cert-hash sha256:<h> \
+      --control-plane --certificate-key <key> --apiserver-advertise-address <ip của node>
+    kubectl get nodes          # 3 control-plane
+    kubectl -n kube-system exec etcd-cp-1 -- etcdctl … member list | wc -l > ~/cka-answers/32-etcd-members.txt
+    kubectl get lease kube-scheduler -n kube-system -o jsonpath='{.spec.holderIdentity}' | cut -d_ -f1 > ~/cka-answers/32-leader.txt
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS"/32-*
+  verify: |
+    cps=$(kubectl get nodes -l node-role.kubernetes.io/control-plane --no-headers | awk '$2=="Ready"' | wc -l | tr -d ' ')
+    expect "3 control plane Ready" "$cps" "3"
+    for n in $(kubectl get nodes -l node-role.kubernetes.io/control-plane -o name | cut -d/ -f2); do
+      expect "kube-apiserver Running trên $n" "$(jp pod "kube-apiserver-$n" -n kube-system '{.status.phase}')" "Running"
+    done
+    expect "32-etcd-members.txt" "$(ans 32-etcd-members.txt)" "3"
+    expect "32-leader.txt" "$(ans 32-leader.txt)" "$(jp lease kube-scheduler -n kube-system '{.spec.holderIdentity}' | cut -d_ -f1)"
+  cleanup: |
+    rm -f "$ANS"/32-*
+  docs:
+    - [Creating highly available clusters with kubeadm, "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/high-availability/"]
+    - [Options for HA topology, "https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/ha-topology/"]

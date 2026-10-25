@@ -1,0 +1,4 @@
+ID=32
+LEVEL=7
+ENV=vm
+TITLE="Thêm control plane cho cluster HA"

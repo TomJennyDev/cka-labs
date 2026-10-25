@@ -29,24 +29,31 @@
 | 23 | [RBAC với Role, ClusterRole và ServiceAccount](labs/23-rbac/README.md) | 6 · Bảo mật | kind hoặc kubeadm | 35′ |
 | 24 | [User mới bằng chứng chỉ, CSR và kubeconfig](labs/24-users-csr-kubeconfig/README.md) | 6 · Bảo mật | kind hoặc kubeadm | 35′ |
 | 25 | [securityContext và Pod Security Admission](labs/25-security-context-psa/README.md) | 6 · Bảo mật | kind hoặc kubeadm | 30′ |
+| 26 | [Helm từ chart đến rollback](labs/26-helm/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 35′ |
+| 27 | [Kustomize với base và overlay](labs/27-kustomize/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 30′ |
+| 28 | [CustomResourceDefinition và Operator](labs/28-crd-operator/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 30′ |
+| 29 | [Sao lưu và khôi phục etcd](labs/29-etcd-backup-restore/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm (cần vào node) | 40′ |
+| 30 | [Nâng cấp cluster kubeadm 1.34 → 1.35](labs/30-kubeadm-upgrade/README.md) | 7 · Vận hành cluster | kubeadm trên máy ảo | 60′ |
+| 31 | [Chứng chỉ, cấu hình control plane và kubelet](labs/31-control-plane-config/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm (cần vào node) | 35′ |
+| 32 | [Thêm control plane cho cluster HA](labs/32-control-plane-ha/README.md) | 7 · Vận hành cluster | kubeadm trên máy ảo | 60′ |
 <!-- LABS:END -->
 
 <!-- COVERAGE:START -->
 | Domain | Năng lực | Lab |
 |---|---|---|
 | Troubleshooting 30% | Troubleshoot cluster và node | 14 |
-| Troubleshooting 30% | Troubleshoot thành phần control plane | — |
+| Troubleshooting 30% | Troubleshoot thành phần control plane | 31 |
 | Troubleshooting 30% | Theo dõi tài nguyên cluster và ứng dụng | 04, 10, 11 |
 | Troubleshooting 30% | Quản lý và đánh giá output, log của container | 03, 07, 08 |
 | Troubleshooting 30% | Troubleshoot Service và networking | 15, 16 |
 | Cluster Architecture 25% | Quản lý RBAC | 23, 24, 25 |
 | Cluster Architecture 25% | Chuẩn bị hạ tầng để cài cluster | 01 |
-| Cluster Architecture 25% | Tạo và quản lý cluster bằng kubeadm | 01 |
-| Cluster Architecture 25% | Quản lý vòng đời cluster (nâng cấp) | — |
-| Cluster Architecture 25% | Control plane high-availability | — |
-| Cluster Architecture 25% | Cài thành phần bằng Helm và Kustomize | — |
-| Cluster Architecture 25% | Interface mở rộng: CNI, CSI, CRI | 01 |
-| Cluster Architecture 25% | CRD, cài và cấu hình Operator | — |
+| Cluster Architecture 25% | Tạo và quản lý cluster bằng kubeadm | 01, 29, 30, 31, 32 |
+| Cluster Architecture 25% | Quản lý vòng đời cluster (nâng cấp) | 29, 30 |
+| Cluster Architecture 25% | Control plane high-availability | 32 |
+| Cluster Architecture 25% | Cài thành phần bằng Helm và Kustomize | 26, 27 |
+| Cluster Architecture 25% | Interface mở rộng: CNI, CSI, CRI | 01, 28, 31 |
+| Cluster Architecture 25% | CRD, cài và cấu hình Operator | 28 |
 | Services & Networking 20% | Kết nối giữa các Pod | 15, 17 |
 | Services & Networking 20% | NetworkPolicy | 17 |
 | Services & Networking 20% | Service ClusterIP, NodePort, LoadBalancer và endpoints | 15 |

@@ -65,4 +65,4 @@ Lời giải: [SOLUTION.md](SOLUTION.md) (chỉ mở sau khi đã tự làm).
 
 ---
 
-← [Lab 24 · User mới bằng chứng chỉ, CSR và kubeconfig](../24-users-csr-kubeconfig/README.md)
+← [Lab 24 · User mới bằng chứng chỉ, CSR và kubeconfig](../24-users-csr-kubeconfig/README.md) · [Lab 26 · Helm từ chart đến rollback](../26-helm/README.md) →

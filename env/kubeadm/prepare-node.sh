@@ -7,9 +7,11 @@ NODE_IP="${NODE_IP:-$(hostname -I | awk '{print $1}')}"
 
 echo "› /etc/hosts"
 grep -q cp-1 /etc/hosts || cat >> /etc/hosts <<HOSTS
-192.168.56.10 cp-1
+192.168.56.10 cp-1 k8s-api
 192.168.56.11 worker-1
 192.168.56.12 worker-2
+192.168.56.13 cp-2
+192.168.56.14 cp-3
 HOSTS
 
 echo "› Tắt swap"
@@ -58,7 +60,7 @@ if [ -d /vagrant ]; then
   install -d -m 700 -o vagrant -g vagrant /home/vagrant/.ssh
   install -m 600 -o vagrant -g vagrant "$KEY" /home/vagrant/.ssh/id_ed25519
   grep -q "$(cat "$KEY.pub")" /home/vagrant/.ssh/authorized_keys 2>/dev/null || cat "$KEY.pub" >> /home/vagrant/.ssh/authorized_keys
-  printf 'Host cp-1 worker-1 worker-2\n  StrictHostKeyChecking accept-new\n' > /home/vagrant/.ssh/config
+  printf 'Host cp-1 cp-2 cp-3 worker-1 worker-2 k8s-api\n  StrictHostKeyChecking accept-new\n' > /home/vagrant/.ssh/config
   chown vagrant:vagrant /home/vagrant/.ssh/config
 fi
 echo "✔ $(hostname) sẵn sàng: $(kubeadm version -o short)"

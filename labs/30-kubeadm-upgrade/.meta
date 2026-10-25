@@ -1,0 +1,4 @@
+ID=30
+LEVEL=7
+ENV=vm
+TITLE="Nâng cấp cluster kubeadm 1.34 → 1.35"
