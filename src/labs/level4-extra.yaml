@@ -1,0 +1,377 @@
+- id: 43
+  slug: loadbalancer-metallb
+  title: Service LoadBalancer với MetalLB
+  level: 4
+  minutes: 35
+  env: any
+  test: false
+  competencies: ["net:2", "arch:7"]
+  goal: |
+    Hiểu Service `LoadBalancer` thật sự cần gì để có địa chỉ ngoài: một controller cấp IP. Cài MetalLB, cấu hình dải IP bằng CRD của nó, xin IP cố định, và đặt `externalTrafficPolicy`.
+  concepts: |
+    - `LoadBalancer` = `NodePort` + một IP ngoài do **load-balancer controller** cấp. Trên cloud, controller của nhà cung cấp làm việc này. Trên cluster tự dựng không có controller nên `EXTERNAL-IP` đứng `<pending>` mãi.
+    - **MetalLB** là controller cho bare-metal: `IPAddressPool` khai báo dải IP được cấp, `L2Advertisement` cho MetalLB trả lời ARP cho các IP đó trong mạng L2 của node.
+    - Xin một IP cụ thể: annotation `metallb.io/loadBalancerIPs: <ip>` (trường `spec.loadBalancerIP` đã deprecated).
+    - `externalTrafficPolicy: Cluster` (mặc định) cho phép mọi node chuyển tiếp traffic, nhưng mất IP gốc của client. `Local` giữ IP gốc và chỉ node có Pod mới nhận traffic.
+    - Mỗi Service LoadBalancer vẫn có `nodePort` và `clusterIP` bên dưới: ba lớp chồng lên nhau.
+  setup_note: |
+    Cần internet để tải MetalLB. Setup tạo namespace `lab43` với Deployment `web` (2 replica), và chọn một dải IP trống cùng mạng với các node. Dải này in ra màn hình và lưu trong ConfigMap `lab-state` của `lab43` (key `pool` và `last`).
+  tasks:
+    - |
+      Expose Deployment `web` trong `lab43` thành Service `web-lb` kiểu `LoadBalancer`, cổng 80. Quan sát cột `EXTERNAL-IP` trước khi có controller.
+    - |
+      Cài MetalLB **v0.16.1** từ manifest `metallb-native.yaml` chính thức. Chờ `controller` và `speaker` sẵn sàng.
+    - |
+      Trong `metallb-system`, tạo `IPAddressPool` tên `lab-pool` với dải IP trong `lab-state`, và `L2Advertisement` tên `lab-l2` chỉ quảng bá pool này.
+    - |
+      `web-lb` phải nhận IP trong dải đó. Đặt `externalTrafficPolicy: Local` cho `web-lb`. Ghi `nodePort` mà Kubernetes cấp cho `web-lb` vào `~/cka-answers/43-nodeport.txt`.
+    - |
+      Tạo Service `web-fixed` kiểu `LoadBalancer` cho `web`, cổng 80, xin đúng IP `last` trong `lab-state`. Từ một Pod trong cluster gọi được `http://<IP đó>`.
+  hints:
+    - |
+      Vì sao EXTERNAL-IP pending?
+      `kubectl describe svc web-lb -n lab43`: không có event nào từ controller. Không có controller thì không ai cấp IP.
+    - |
+      Lỗi webhook khi tạo IPAddressPool
+      Pod webhook của MetalLB (trong `controller`) chưa sẵn sàng. Chờ rồi tạo lại.
+    - |
+      Khung YAML
+      Trang MetalLB "Configuration" có mẫu `IPAddressPool` và `L2Advertisement` (`spec.ipAddressPools`).
+  solution: |
+    ```bash
+    kubectl expose deploy web -n lab43 --name=web-lb --type=LoadBalancer --port=80
+    kubectl get svc web-lb -n lab43                  # EXTERNAL-IP <pending>
+
+    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml
+    kubectl -n metallb-system wait --for=condition=Available deploy/controller --timeout=300s
+    kubectl -n metallb-system rollout status ds/speaker --timeout=300s
+    kubectl get cm lab-state -n lab43 -o yaml        # pool, last
+    ```
+    ```yaml
+    apiVersion: metallb.io/v1beta1
+    kind: IPAddressPool
+    metadata: {name: lab-pool, namespace: metallb-system}
+    spec:
+      addresses: ["172.18.0.200-172.18.0.210"]     # giá trị pool của bạn
+    ---
+    apiVersion: metallb.io/v1beta1
+    kind: L2Advertisement
+    metadata: {name: lab-l2, namespace: metallb-system}
+    spec:
+      ipAddressPools: [lab-pool]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: web-fixed
+      namespace: lab43
+      annotations: {metallb.io/loadBalancerIPs: "172.18.0.210"}   # giá trị last
+    spec:
+      type: LoadBalancer
+      selector: {app: web}
+      ports: [{port: 80, targetPort: 80}]
+    ```
+    ```bash
+    kubectl patch svc web-lb -n lab43 -p '{"spec":{"externalTrafficPolicy":"Local"}}'
+    kubectl get svc -n lab43
+    kubectl get svc web-lb -n lab43 -o jsonpath='{.spec.ports[0].nodePort}' > ~/cka-answers/43-nodeport.txt
+    kubectl run t -n lab43 --rm -it --image=busybox:1.36 --restart=Never -- wget -qO- -T3 http://172.18.0.210
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/43-nodeport.txt"
+    if kubectl get ns metallb-system >/dev/null 2>&1; then
+      info "Gỡ MetalLB đang có để bạn tự cài"
+      kubectl delete ns metallb-system --wait=true >/dev/null 2>&1 || true
+    fi
+    kubectl get crd -o name 2>/dev/null | grep 'metallb.io' | xargs -r kubectl delete >/dev/null 2>&1 || true
+    kubectl get clusterrole,clusterrolebinding -o name 2>/dev/null | grep 'metallb-system:' | xargs -r kubectl delete >/dev/null 2>&1 || true
+    kubectl delete validatingwebhookconfiguration metallb-webhook-configuration --ignore-not-found >/dev/null 2>&1 || true
+    ns_fresh lab43
+    kubectl create deploy web -n lab43 --image=nginx:1.27 --replicas=2 >/dev/null
+    ip="$(jp node "$CP" '{.status.addresses[?(@.type=="InternalIP")].address}')"
+    base="${ip%.*}"
+    kubectl create cm lab-state -n lab43 --from-literal=pool="$base.200-$base.210" --from-literal=last="$base.210" >/dev/null
+    echo "Dải IP cho MetalLB: $base.200-$base.210 (IP cố định cho web-fixed: $base.210)"
+  verify: |
+    pool="$(jp cm lab-state -n lab43 '{.data.pool}')"; last="$(jp cm lab-state -n lab43 '{.data.last}')"
+    base="${last%.*}"
+    expect "web-lb kiểu LoadBalancer cổng 80" "$(jp svc web-lb -n lab43 '{.spec.type}:{.spec.ports[0].port}')" "LoadBalancer:80"
+    expect "web-lb chọn Pod app=web" "$(jp svc web-lb -n lab43 '{.spec.selector.app}')" "web"
+    expect "MetalLB controller sẵn sàng" "$(jp deploy controller -n metallb-system '{.status.conditions[?(@.type=="Available")].status}')" "True"
+    expect "IPAddressPool lab-pool có dải trong lab-state" "$(jp ipaddresspool lab-pool -n metallb-system '{.spec.addresses[*]}')" "$pool"
+    expect "L2Advertisement lab-l2 quảng bá lab-pool" "$(jp l2advertisement lab-l2 -n metallb-system '{.spec.ipAddressPools[*]}')" "lab-pool"
+    lbip="$(jp svc web-lb -n lab43 '{.status.loadBalancer.ingress[0].ip}')"
+    n="${lbip##*.}"
+    check "web-lb có EXTERNAL-IP trong dải ($lbip)" bash -c "[ '${lbip%.*}' = '$base' ] && [ '${n:-0}' -ge 200 ] 2>/dev/null && [ '${n:-0}' -le 210 ]"
+    expect "web-lb externalTrafficPolicy Local" "$(jp svc web-lb -n lab43 '{.spec.externalTrafficPolicy}')" "Local"
+    np="$(jp svc web-lb -n lab43 '{.spec.ports[0].nodePort}')"
+    expect "43-nodeport.txt" "$(ans 43-nodeport.txt)" "${np:-<web-lb chưa có>}"
+    expect "web-fixed nhận đúng IP $last" "$(jp svc web-fixed -n lab43 '{.status.loadBalancer.ingress[0].ip}')" "$last"
+    check "Gọi được http://$last từ trong cluster" can_reach lab43 "http://$last"
+  cleanup: |
+    kubectl delete ns lab43 --ignore-not-found --wait=false >/dev/null
+    kubectl delete ns metallb-system --ignore-not-found --wait=false >/dev/null 2>&1 || true
+    kubectl get crd -o name 2>/dev/null | grep 'metallb.io' | xargs -r kubectl delete --wait=false >/dev/null 2>&1 || true
+    kubectl get clusterrole,clusterrolebinding -o name 2>/dev/null | grep 'metallb-system:' | xargs -r kubectl delete >/dev/null 2>&1 || true
+    kubectl delete validatingwebhookconfiguration metallb-webhook-configuration --ignore-not-found >/dev/null 2>&1 || true
+    rm -f "$ANS/43-nodeport.txt"
+  solve: |
+    kubectl expose deploy web -n lab43 --name=web-lb --type=LoadBalancer --port=80
+    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.16.1/config/manifests/metallb-native.yaml >/dev/null
+    kubectl -n metallb-system wait --for=condition=Available deploy/controller --timeout=300s
+    kubectl -n metallb-system rollout status ds/speaker --timeout=300s
+    pool="$(kubectl get cm lab-state -n lab43 -o jsonpath='{.data.pool}')"; last="$(kubectl get cm lab-state -n lab43 -o jsonpath='{.data.last}')"
+    for i in $(seq 1 20); do
+      kubectl apply -f - >/dev/null 2>&1 <<EOF && break
+    apiVersion: metallb.io/v1beta1
+    kind: IPAddressPool
+    metadata: {name: lab-pool, namespace: metallb-system}
+    spec:
+      addresses: ["$pool"]
+    ---
+    apiVersion: metallb.io/v1beta1
+    kind: L2Advertisement
+    metadata: {name: lab-l2, namespace: metallb-system}
+    spec:
+      ipAddressPools: [lab-pool]
+    EOF
+      sleep 5
+    done
+    kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: web-fixed
+      namespace: lab43
+      annotations: {metallb.io/loadBalancerIPs: "$last"}
+    spec:
+      type: LoadBalancer
+      selector: {app: web}
+      ports: [{port: 80, targetPort: 80}]
+    EOF
+    kubectl patch svc web-lb -n lab43 -p '{"spec":{"externalTrafficPolicy":"Local"}}'
+    for i in $(seq 1 30); do [ -n "$(kubectl get svc web-lb -n lab43 -o jsonpath='{.status.loadBalancer.ingress[0].ip}')" ] && break; sleep 2; done
+    kubectl get svc web-lb -n lab43 -o jsonpath='{.spec.ports[0].nodePort}' > "$ANS/43-nodeport.txt"
+  docs:
+    - [Service type LoadBalancer, "https://kubernetes.io/docs/concepts/services-networking/service/#loadbalancer"]
+    - [External traffic policy, "https://kubernetes.io/docs/concepts/services-networking/service/#traffic-policies"]
+    - [MetalLB · Installation, "https://metallb.io/installation/"]
+    - [MetalLB · Configuration, "https://metallb.io/configuration/"]
+
+- id: 44
+  slug: gateway-migrate-ingress
+  title: Gateway API với controller thật - HTTPS và chuyển từ Ingress
+  level: 4
+  minutes: 40
+  env: any
+  test: false
+  competencies: ["net:3", "net:4"]
+  goal: |
+    Làm dạng câu Gateway API đề thi gần đây hay hỏi: đọc một Ingress đang chạy, tạo Gateway có listener HTTPS dùng Secret TLS sẵn có, viết HTTPRoute với cùng luật, chuyển HTTP sang HTTPS, kiểm tra bằng request thật, rồi gỡ Ingress cũ.
+  concepts: |
+    - Đổi từ Ingress sang Gateway API: `spec.tls` của Ingress thành **listener HTTPS** trên Gateway (`tls.mode: Terminate`, `certificateRefs`). Mỗi `rules[].host` + `paths` thành `hostnames` + `rules[].matches` của HTTPRoute.
+    - HTTPRoute gắn vào **một listener cụ thể** bằng `parentRefs[].sectionName`. Không ghi `sectionName` thì route gắn vào mọi listener của Gateway.
+    - Chuyển HTTP sang HTTPS: một HTTPRoute riêng gắn vào listener `http`, với filter `RequestRedirect` (`scheme: https`, `statusCode: 301`).
+    - Gateway có điều kiện `Accepted` và `Programmed`. Controller (ở bài này là NGINX Gateway Fabric) tạo Deployment và Service riêng cho từng Gateway trong namespace của Gateway.
+    - Kiểm tra bằng `curl --resolve <host>:<port>:<IP>` để gửi đúng hostname mà không cần DNS.
+  setup_note: |
+    Cần internet. Setup cài CRD Gateway API v1.6.3 và NGINX Gateway Fabric v2.8.0 (GatewayClass `nginx`) nếu chưa có, rồi tạo trong `lab44`: Service `web` (trả về `web`) và `api` (trả về `api` ở `/api/health`), Secret TLS `shop-tls` cho `shop.lab44.local`, và Ingress `shop` cần chuyển đổi.
+  tasks:
+    - |
+      Đọc Ingress `shop` trong `lab44`. Tạo Gateway `shop-gw` (class `nginx`) có hai listener cho hostname `shop.lab44.local`: `http` (HTTP, cổng 80) và `https` (HTTPS, cổng 443, dùng Secret `shop-tls`).
+    - |
+      Tạo HTTPRoute `shop` chỉ gắn vào listener `https`, có cùng luật với Ingress: `/api` (PathPrefix) tới `api:8080`, `/` tới `web:80`.
+    - |
+      Tạo HTTPRoute `shop-redirect` gắn vào listener `http`, chuyển mọi request sang `https` với mã 301.
+    - |
+      Kiểm tra bằng request thật tới Service mà controller tạo cho `shop-gw`: `https://shop.lab44.local/` trả `web`, `https://shop.lab44.local/api/health` trả `api`, `http://shop.lab44.local/` trả 301. Sau đó xóa Ingress `shop`.
+  hints:
+    - |
+      Service của Gateway tên gì?
+      `kubectl get svc -n lab44`, hoặc theo label: `kubectl get svc -n lab44 -l gateway.networking.k8s.io/gateway-name=shop-gw`
+    - |
+      Gửi request kèm hostname
+      `kubectl run t -n lab44 --rm -it --restart=Never --image=curlimages/curl:8.11.1 -- curl -sk --resolve shop.lab44.local:443:<ClusterIP> https://shop.lab44.local/`
+    - |
+      Gateway chưa Programmed?
+      `kubectl describe gateway shop-gw -n lab44`: xem điều kiện của từng listener (Secret có đúng tên, đúng namespace không).
+  solution: |
+    ```bash
+    kubectl get ingress shop -n lab44 -o yaml
+    ```
+    ```yaml
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata: {name: shop-gw, namespace: lab44}
+    spec:
+      gatewayClassName: nginx
+      listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+        hostname: shop.lab44.local
+      - name: https
+        protocol: HTTPS
+        port: 443
+        hostname: shop.lab44.local
+        tls:
+          mode: Terminate
+          certificateRefs: [{kind: Secret, name: shop-tls}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: shop, namespace: lab44}
+    spec:
+      parentRefs: [{name: shop-gw, sectionName: https}]
+      hostnames: [shop.lab44.local]
+      rules:
+      - matches: [{path: {type: PathPrefix, value: /api}}]
+        backendRefs: [{name: api, port: 8080}]
+      - matches: [{path: {type: PathPrefix, value: /}}]
+        backendRefs: [{name: web, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: shop-redirect, namespace: lab44}
+    spec:
+      parentRefs: [{name: shop-gw, sectionName: http}]
+      hostnames: [shop.lab44.local]
+      rules:
+      - filters:
+        - type: RequestRedirect
+          requestRedirect: {scheme: https, statusCode: 301}
+    ```
+    ```bash
+    kubectl wait --for=condition=Programmed gateway/shop-gw -n lab44 --timeout=120s
+    IP=$(kubectl get svc -n lab44 -l gateway.networking.k8s.io/gateway-name=shop-gw -o jsonpath='{.items[0].spec.clusterIP}')
+    kubectl run t -n lab44 --rm -it --restart=Never --image=curlimages/curl:8.11.1 -- \
+      sh -c "curl -sk --resolve shop.lab44.local:443:$IP https://shop.lab44.local/; curl -sk --resolve shop.lab44.local:443:$IP https://shop.lab44.local/api/health; curl -s -o /dev/null -w '%{http_code}\n' --resolve shop.lab44.local:80:$IP http://shop.lab44.local/"
+    kubectl delete ingress shop -n lab44
+    ```
+  setup: |
+    command -v openssl >/dev/null 2>&1 || die "Cần openssl trên máy chạy lab"
+    if ! kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
+      info "Cài CRD Gateway API v1.6.3"
+      kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.3/standard-install.yaml >/dev/null || die "Không tải được CRD Gateway API (cần internet)"
+    fi
+    if ! kubectl get deploy nginx-gateway -n nginx-gateway >/dev/null 2>&1; then
+      info "Cài NGINX Gateway Fabric v2.8.0"
+      kubectl apply --server-side -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.8.0/deploy/crds.yaml >/dev/null || die "Không tải được CRD của NGINX Gateway Fabric"
+      kubectl apply -f https://raw.githubusercontent.com/nginx/nginx-gateway-fabric/v2.8.0/deploy/nodeport/deploy.yaml >/dev/null || die "Không cài được NGINX Gateway Fabric"
+    fi
+    kubectl -n nginx-gateway wait --for=condition=Available deploy/nginx-gateway --timeout=300s >/dev/null || die "NGINX Gateway Fabric chưa sẵn sàng"
+    ns_fresh lab44
+    kubectl apply -n lab44 -f - >/dev/null <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: web}
+    spec:
+      selector: {matchLabels: {app: web}}
+      template:
+        metadata: {labels: {app: web}}
+        spec:
+          containers:
+          - name: web
+            image: busybox:1.36
+            command: ["sh", "-c", "mkdir -p /www && echo web > /www/index.html && exec httpd -f -p 80 -h /www"]
+            ports: [{containerPort: 80}]
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: api}
+    spec:
+      selector: {matchLabels: {app: api}}
+      template:
+        metadata: {labels: {app: api}}
+        spec:
+          containers:
+          - name: api
+            image: busybox:1.36
+            command: ["sh", "-c", "mkdir -p /www/api && echo api > /www/api/health && exec httpd -f -p 8080 -h /www"]
+            ports: [{containerPort: 8080}]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: web}
+    spec: {selector: {app: web}, ports: [{port: 80, targetPort: 80}]}
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: api}
+    spec: {selector: {app: api}, ports: [{port: 8080, targetPort: 8080}]}
+    EOF
+    t="$(mktemp -d)"
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "$t/tls.key" -out "$t/tls.crt" \
+      -subj "/CN=shop.lab44.local" -addext "subjectAltName=DNS:shop.lab44.local" >/dev/null 2>&1
+    kubectl create secret tls shop-tls -n lab44 --cert="$t/tls.crt" --key="$t/tls.key" >/dev/null
+    rm -rf "$t"
+    kubectl create ingress shop -n lab44 --class=nginx-legacy \
+      --rule="shop.lab44.local/api*=api:8080,tls=shop-tls" --rule="shop.lab44.local/*=web:80,tls=shop-tls" >/dev/null
+  verify: |
+    expect "Gateway shop-gw class nginx" "$(jp gateway shop-gw -n lab44 '{.spec.gatewayClassName}')" "nginx"
+    expect "Listener https: HTTPS 443" "$(jp gateway shop-gw -n lab44 '{.spec.listeners[?(@.name=="https")].protocol}:{.spec.listeners[?(@.name=="https")].port}')" "HTTPS:443"
+    expect "Listener https dùng Secret shop-tls" "$(jp gateway shop-gw -n lab44 '{.spec.listeners[?(@.name=="https")].tls.certificateRefs[0].name}')" "shop-tls"
+    expect "Listener http: HTTP 80" "$(jp gateway shop-gw -n lab44 '{.spec.listeners[?(@.name=="http")].protocol}:{.spec.listeners[?(@.name=="http")].port}')" "HTTP:80"
+    expect "Gateway Programmed" "$(jp gateway shop-gw -n lab44 '{.status.conditions[?(@.type=="Programmed")].status}')" "True"
+    expect "HTTPRoute shop chỉ gắn listener https" "$(jp httproute shop -n lab44 '{.spec.parentRefs[*].sectionName}')" "https"
+    expect "HTTPRoute shop Accepted" "$(jp httproute shop -n lab44 '{.status.parents[0].conditions[?(@.type=="Accepted")].status}')" "True"
+    expect "HTTPRoute shop-redirect gắn listener http" "$(jp httproute shop-redirect -n lab44 '{.spec.parentRefs[*].sectionName}')" "http"
+    ip="$(jp svc -n lab44 -l gateway.networking.k8s.io/gateway-name=shop-gw '{.items[0].spec.clusterIP}')"
+    [ -n "$ip" ] || ip="$(kubectl get svc -n lab44 -o name 2>/dev/null | grep shop-gw | head -1 | xargs -r kubectl get -n lab44 -o jsonpath='{.spec.clusterIP}' 2>/dev/null)"
+    check "Tìm thấy Service của Gateway ($ip)" test -n "$ip"
+    out="$(pod_run lab44 "curl -sk -m 5 --resolve shop.lab44.local:443:$ip https://shop.lab44.local/; echo; curl -sk -m 5 --resolve shop.lab44.local:443:$ip https://shop.lab44.local/api/health; echo; curl -s -m 5 -o /dev/null -w '%{http_code}' --resolve shop.lab44.local:80:$ip http://shop.lab44.local/" run=probe curlimages/curl:8.11.1 | tr -s '\n' ' ')"
+    expect "HTTPS / → web, /api/health → api, HTTP → 301" "$out" "web api 301"
+    check_not "Ingress shop đã xóa" exists ingress shop -n lab44
+  cleanup: |
+    kubectl delete ns lab44 --ignore-not-found --wait=false >/dev/null
+  solve: |
+    kubectl apply -f - <<'EOF'
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata: {name: shop-gw, namespace: lab44}
+    spec:
+      gatewayClassName: nginx
+      listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+        hostname: shop.lab44.local
+      - name: https
+        protocol: HTTPS
+        port: 443
+        hostname: shop.lab44.local
+        tls:
+          mode: Terminate
+          certificateRefs: [{kind: Secret, name: shop-tls}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: shop, namespace: lab44}
+    spec:
+      parentRefs: [{name: shop-gw, sectionName: https}]
+      hostnames: [shop.lab44.local]
+      rules:
+      - matches: [{path: {type: PathPrefix, value: /api}}]
+        backendRefs: [{name: api, port: 8080}]
+      - matches: [{path: {type: PathPrefix, value: /}}]
+        backendRefs: [{name: web, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: shop-redirect, namespace: lab44}
+    spec:
+      parentRefs: [{name: shop-gw, sectionName: http}]
+      hostnames: [shop.lab44.local]
+      rules:
+      - filters:
+        - type: RequestRedirect
+          requestRedirect: {scheme: https, statusCode: 301}
+    EOF
+    kubectl wait --for=condition=Programmed gateway/shop-gw -n lab44 --timeout=180s
+    kubectl delete ingress shop -n lab44
+    sleep 10
+  docs:
+    - [Gateway API · Migrating from Ingress, "https://gateway-api.sigs.k8s.io/guides/migrating-from-ingress/"]
+    - [Gateway API · HTTPS (TLS), "https://gateway-api.sigs.k8s.io/guides/tls/"]
+    - [Gateway API · HTTP redirects, "https://gateway-api.sigs.k8s.io/guides/http-redirect-rewrite/"]
+    - [NGINX Gateway Fabric · Install with manifests, "https://docs.nginx.com/nginx-gateway-fabric/install/manifests/"]

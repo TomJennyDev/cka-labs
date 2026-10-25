@@ -1,6 +1,6 @@
 <title>CKA Labs</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="39 bài lab thực hành CKA từ cơ bản tới đề thi thử, có script tự chấm.">
+<meta name="description" content="46 bài lab thực hành CKA v1.37 từ cơ bản tới hai đề thi thử, có script tự chấm.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
@@ -209,7 +209,7 @@ details.hint>div{padding:0 0 12px}
 </style>
 
 <header class="top">
-  <a class="brand" href="#home">CKA Labs <i>v1.35</i></a>
+  <a class="brand" href="#home">CKA Labs <i>v1.37</i></a>
   <nav><a href="#home" data-nav="home">Lộ trình</a><a href="#setup" data-nav="setup">Môi trường</a><a href="#lab-38" data-nav="exam">Thi thử</a><a href="https://github.com/TomJennyDev/cka-labs" target="_blank" rel="noopener">GitHub ↗</a></nav>
   <div class="meta"><span id="progTxt">0/39</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
 </header>
@@ -306,11 +306,11 @@ function home() {
   const total = DATA.labs.length, tested = DATA.labs.filter(l => l.env !== "vm").length;
   const nComp = Object.values(DATA.domains).reduce((a, d) => a + d[2].length, 0);
   let h = '<div class="page wide">';
-  h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.35</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
-  h += '<div class="code"><pre>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh        # cluster 3 node v1.35\n./lab start 7           # dựng tình huống\n./lab check 7           # chấm bài\n./lab reset 7           # dọn dẹp</pre></div></section>';
+  h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.37</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
+  h += '<div class="code"><pre>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh        # cluster 3 node v1.37\n./lab start 7           # dựng tình huống\n./lab check 7           # chấm bài\n./lab reset 7           # dọn dẹp</pre></div></section>';
   h += '<div class="stats"><div><b>' + total + '</b><span>bài lab có script tự chấm</span></div><div><b>' + nComp + '/' + nComp + '</b><span>năng lực của đề thi được phủ</span></div><div><b>' + tested + '</b><span>bài chạy trên kind ngay trên laptop</span></div><div><b>120′</b><span>đề thi thử chấm theo trọng số</span></div></div>';
   h += '<section><h2>Hướng dẫn giảm dần theo cấp độ</h2><p class="muted small">Bài đầu dắt bạn từng lệnh. Càng lên cao, phần hướng dẫn càng ít đi, cho tới khi bạn tự làm như trong phòng thi.</p><div class="fade" aria-hidden="true"></div><div class="fade-l" aria-hidden="true"><span>Nhiều hướng dẫn</span><span>Tự lực</span></div><div class="modes" style="margin-top:14px">' +
-    [["guided", "Cấp 0–2 · lab 00–11"], ["scaffold", "Cấp 3–6 · lab 12–25"], ["solo", "Cấp 7–9 · lab 26–38"]].map(m => '<div class="mode">' + supTag(m[0]) + '<h3>' + esc(DATA.support[m[0]][0]) + '</h3><span class="lv">' + m[1] + "</span><p>" + esc(DATA.support[m[0]][2]) + "</p></div>").join("") + "</div></section>";
+    [["guided", "Cấp 0–2 · lab 00–11"], ["scaffold", "Cấp 3–6 · lab 12–25, 43–44"], ["solo", "Cấp 7–9 · lab 26–42, 45"]].map(m => '<div class="mode">' + supTag(m[0]) + '<h3>' + esc(DATA.support[m[0]][0]) + '</h3><span class="lv">' + m[1] + "</span><p>" + esc(DATA.support[m[0]][2]) + "</p></div>").join("") + "</div></section>";
   h += '<section><h2>Lộ trình 10 cấp</h2><p class="muted small">Màu xanh là bài đã đánh dấu xong, vàng là đang làm. Tiến độ lưu trong trình duyệt này.</p><div class="path">';
   Object.keys(DATA.levels).forEach(lv => {
     const labs = DATA.labs.filter(l => String(l.level) === lv), done = labs.filter(l => state.done[l.id]).length;
@@ -331,10 +331,10 @@ function home() {
 
 function setup() {
   return '<div class="page"><div><p class="eyebrow">Chuẩn bị</p><h1>Môi trường lab</h1><p class="lead">Hầu hết các bài chạy trên một cluster kind 3 node ngay trên laptop. Ba bài về cài đặt, nâng cấp và HA cần máy ảo thật với kubeadm.</p></div>' +
-    '<div class="grid2"><div class="panel"><h3>kind (khuyên dùng)</h3><p class="small">Cần Docker, kind ≥ v0.33, kubectl v1.35; thêm openssl, và Helm cho lab 26. Máy cần khoảng 4 CPU, 6 GB RAM trống, Linux dùng cgroup v2 (Docker Desktop, OrbStack đều đạt).</p><div class="md"><pre><code>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh\n./lab doctor\neval "$(./lab env)"</code></pre></div><p class="small muted" style="margin-top:10px">kind dùng chính kubeadm: control plane là static pod, kubelet chạy bằng systemd. Vào node bằng <code>./lab ssh $NODE1</code>.</p></div>' +
-    '<div class="panel"><h3>kubeadm trên máy ảo</h3><p class="small">Cho lab 01, 30, 32. Vagrant dựng <code>cp-1</code>, <code>worker-1</code>, <code>worker-2</code> (Ubuntu 24.04, Kubernetes v1.34 để có bài nâng cấp).</p><div class="md"><pre><code>cd env/kubeadm\nvagrant up\nvagrant ssh cp-1\n# lab 32 cần thêm 2 control plane:\nHA=1 vagrant up cp-2 cp-3</code></pre></div><p class="small muted" style="margin-top:10px">Không dùng Vagrant: chạy <code>env/kubeadm/prepare-node.sh</code> trên 3 máy Ubuntu.</p></div></div>' +
+    '<div class="grid2"><div class="panel"><h3>kind (khuyên dùng)</h3><p class="small">Cần Docker, kind ≥ v0.33, kubectl v1.37; thêm openssl, và Helm cho lab 26, 41. Lab 40–44 cần internet để tải thành phần. Máy cần khoảng 4 CPU, 6 GB RAM trống, Linux dùng cgroup v2 (Docker Desktop, OrbStack đều đạt).</p><div class="md"><pre><code>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh\n./lab doctor\neval "$(./lab env)"</code></pre></div><p class="small muted" style="margin-top:10px">kind dùng chính kubeadm: control plane là static pod, kubelet chạy bằng systemd. Vào node bằng <code>./lab ssh $NODE1</code>.</p></div>' +
+    '<div class="panel"><h3>kubeadm trên máy ảo</h3><p class="small">Cho lab 01, 30, 32. Vagrant dựng <code>cp-1</code>, <code>worker-1</code>, <code>worker-2</code> (Ubuntu 24.04, Kubernetes v1.36 để có bài nâng cấp).</p><div class="md"><pre><code>cd env/kubeadm\nvagrant up\nvagrant ssh cp-1\n# lab 32 cần thêm 2 control plane:\nHA=1 vagrant up cp-2 cp-3</code></pre></div><p class="small muted" style="margin-top:10px">Không dùng Vagrant: chạy <code>env/kubeadm/prepare-node.sh</code> trên 3 máy Ubuntu.</p></div></div>' +
     '<div class="panel"><h3>Lệnh ./lab</h3><div class="tbl"><table><tbody>' +
-    [["./lab list", "Danh sách bài theo thứ tự"], ["./lab start <id>", "Dựng tình huống của bài"], ["./lab check <id>", "Chấm bài, in ✔/✘ từng tiêu chí"], ["./lab hint <id>", "Xem gợi ý"], ["./lab solution <id>", "Xem lời giải"], ["./lab reset <id>", "Dọn mọi thứ của bài"], ["./lab env", "In CP, NODE1, NODE2 (dùng với eval)"], ["./lab ssh <node>", "Vào shell của node"], ["./lab doctor", "Kiểm tra công cụ và cluster"]].map(r => "<tr><td><code>" + esc(r[0]) + "</code></td><td>" + esc(r[1]) + "</td></tr>").join("") +
+    [["./lab list", "Danh sách bài theo thứ tự"], ["./lab start <id>", "Dựng tình huống của bài"], ["./lab check <id>", "Chấm bài, in ✔/✘ từng tiêu chí"], ["./lab hint <id>", "Xem gợi ý"], ["./lab solution <id>", "Xem lời giải"], ["./lab reset <id>", "Dọn mọi thứ của bài"], ["./lab env", "In CP, NODE1, NODE2 (dùng với eval)"], ["./lab ssh <node>", "Vào shell của node"], ["./lab doctor", "Kiểm tra công cụ và cluster"], ["./lab exam-hosts", "Cài kubectl và alias k lên mọi node, luyện ssh từng host như phòng thi"]].map(r => "<tr><td><code>" + esc(r[0]) + "</code></td><td>" + esc(r[1]) + "</td></tr>").join("") +
     '</tbody></table></div><p class="small muted" style="margin-top:10px">Bài yêu cầu ghi đáp án ra file thì ghi vào <code>~/cka-answers/</code> (đổi bằng biến <code>CKA_ANSWERS</code>).</p></div>' +
     '<div class="panel"><h3>Cấu hình terminal giống phòng thi</h3><div class="md"><pre><code>alias k=kubectl\nsource &lt;(kubectl completion bash)\ncomplete -o default -F __start_kubectl k\nexport do="--dry-run=client -o yaml"\nexport now="--force --grace-period 0"</code></pre></div></div></div>';
 }
@@ -345,7 +345,7 @@ function lab(id) {
   const k = DATA.labs.indexOf(l), prev = DATA.labs[k - 1], next = DATA.labs[k + 1];
   let h = '<article class="page"><header class="labhead"><div><span class="labno">LAB ' + pad(l.id) + "</span><h1>" + esc(l.title) + '</h1></div><div class="pills"><span class="pill">Cấp ' + l.level + " · " + esc(DATA.levels[l.level][0]) + '</span><span class="pill">≈ ' + l.minutes + ' phút</span><span class="pill">' + esc(ENVTXT[l.env]) + "</span>" + supTag(l.support) +
     l.comps.map(c => '<span class="pill"><i class="sw" style="background:' + DCOL[c.split(":")[0]] + '"></i>' + esc(compName(c)) + "</span>").join("") + "</div></header>";
-  if (l.id === 38) h += '<section class="panel timer" id="timer"><b id="tLeft">120:00</b><div class="row"><button class="btn primary" id="tStart" type="button">Bắt đầu tính giờ</button><button class="btn" id="tReset" type="button">Đặt lại</button></div><span class="small muted" id="tNote">Đồng hồ chạy tiếp kể cả khi bạn đóng trang.</span></section>';
+  if (l.id === 38 || l.id === 45) h += '<section class="panel timer" id="timer"><b id="tLeft">120:00</b><div class="row"><button class="btn primary" id="tStart" type="button">Bắt đầu tính giờ</button><button class="btn" id="tReset" type="button">Đặt lại</button></div><span class="small muted" id="tNote">Đồng hồ chạy tiếp kể cả khi bạn đóng trang.</span></section>';
   h += '<section class="sec"><h2>Mục tiêu</h2><div class="md">' + l.goal + "</div>";
   if (l.prereq.length) h += '<div class="prereq"><span class="lbl">Cần làm trước:</span>' + (l.prereq.length > 6 ? '<a class="chip" href="#lab-' + pad(l.prereq[0]) + '">Lab ' + pad(l.prereq[0]) + "–" + pad(l.prereq[l.prereq.length - 1]) + "</a>" : l.prereq.map(p => '<a class="chip ' + labStatus(p) + '" href="#lab-' + pad(p) + '" title="' + esc(byId(p).title) + '">' + pad(p) + " · " + esc(byId(p).title) + "</a>").join("")) + "</div>";
   h += "</section>";
@@ -387,7 +387,7 @@ function wireLab(id) {
   if (gb) gb.onclick = () => { state.guideHidden[id] = !state.guideHidden[id]; save(); $("#steps").hidden = state.guideHidden[id]; gb.textContent = state.guideHidden[id] ? "Hiện hướng dẫn" : "Ẩn hướng dẫn, tự làm"; };
   $("#solBtn").onclick = () => { const b = $("#solBody"), o = b.hidden; b.hidden = !o; $("#sol").dataset.open = o ? "1" : "0"; $("#solBtn").textContent = o ? "Ẩn lời giải" : "Tự làm xong rồi, xem lời giải"; };
   $("#doneBtn").onclick = () => { state.done[id] = !state.done[id]; save(); progress(); render(); };
-  if (id === 38) timer();
+  if (id === 38 || id === 45) timer();
 }
 function timer() {
   clearInterval(timerInt);
@@ -399,7 +399,7 @@ function timer() {
     el.textContent = pad(m) + ":" + pad(s);
     $("#timer").classList.toggle("low", !!end && m < 15);
     $("#tStart").hidden = !!end;
-    if (end && ms === 0) $("#tNote").textContent = "Hết giờ. Chạy ./lab check 38 để xem điểm.";
+    if (end && ms === 0) $("#tNote").textContent = "Hết giờ. Chạy ./lab check để xem điểm.";
   };
   $("#tStart").onclick = () => { store.set("examEnd", Date.now() + 120 * 60000); tick(); };
   $("#tReset").onclick = () => { store.set("examEnd", 0); $("#tNote").textContent = "Đồng hồ chạy tiếp kể cả khi bạn đóng trang."; tick(); };

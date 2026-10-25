@@ -16,7 +16,7 @@ jobs:
       - name: Cài kind và kubectl
         run: |
           curl -fsSLo kind https://github.com/kubernetes-sigs/kind/releases/download/v0.33.0/kind-linux-amd64
-          curl -fsSLo kubectl https://dl.k8s.io/release/v1.35.8/bin/linux/amd64/kubectl
+          curl -fsSLo kubectl https://dl.k8s.io/release/v1.37.0/bin/linux/amd64/kubectl
           sudo install kind kubectl /usr/local/bin/
       - name: Dựng cluster
         run: ./env/kind/up.sh

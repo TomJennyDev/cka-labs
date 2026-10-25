@@ -20,6 +20,7 @@ Mọi lab từ 02 tới 37.
 - Sinh YAML bằng `$do`, tra field bằng `kubectl explain`, chỉ mở tài liệu khi cần ví dụ dài (NetworkPolicy, PV, Ingress).
 - Sau mỗi câu, kiểm tra nhanh bằng `kubectl get`: đề thi chấm trạng thái trong cluster, không chấm file YAML.
 - Chỉ chạy `./lab check 38` khi đã hết giờ hoặc làm xong, để luyện cảm giác tự kiểm tra.
+- **Chế độ phòng thi:** mỗi câu ghi host. Vào host bằng `./lab ssh <host>` (phòng thi thật: `ssh <host>` rồi `sudo -i`), làm trên đó, xong `exit` về máy của bạn. Setup đã cài kubectl, kubeconfig và `alias k` lên mọi node. Đừng làm hết từ máy của bạn: tập thói quen đổi host ngay từ bây giờ.
 
 ## Sơ đồ
 
@@ -69,37 +70,37 @@ Setup tạo sẵn các namespace `mock-a`, `mock-b`, `mock-c` cùng vài workloa
 
 ## Đề bài
 
-1. **(4%)** Tạo namespace `mock-x` có label `env=exam`.
+1. **Host `$CP`** · **(4%)** Tạo namespace `mock-x` có label `env=exam`.
 
-2. **(8%)** Trong `mock-a`, tạo Deployment `frontend`: 3 replica, `nginx:1.27`, request CPU `100m`, rolling update `maxSurge: 1`, `maxUnavailable: 0`. Sau đó nâng lên `nginx:1.28` với change-cause `exam upgrade`.
+2. **Host `$NODE1`** · **(8%)** Trong `mock-a`, tạo Deployment `frontend`: 3 replica, `nginx:1.27`, request CPU `100m`, rolling update `maxSurge: 1`, `maxUnavailable: 0`. Sau đó nâng lên `nginx:1.28` với change-cause `exam upgrade`.
 
-3. **(5%)** Trong `mock-a`, tạo ConfigMap `exam-cfg` (`LEVEL=hard`) và Secret `exam-sec` (`token=abc123`). Tạo Pod `cfg-pod` (`busybox:1.36`, `sleep 3600`) có biến `LEVEL` từ ConfigMap và `TOKEN` từ key `token` của Secret.
+3. **Host `$NODE2`** · **(5%)** Trong `mock-a`, tạo ConfigMap `exam-cfg` (`LEVEL=hard`) và Secret `exam-sec` (`token=abc123`). Tạo Pod `cfg-pod` (`busybox:1.36`, `sleep 3600`) có biến `LEVEL` từ ConfigMap và `TOKEN` từ key `token` của Secret.
 
-4. **(6%)** Tạo HPA cho `frontend`: 3 tới 6 replica, CPU mục tiêu 60%.
+4. **Host `$CP`** · **(6%)** Tạo HPA cho `frontend`: 3 tới 6 replica, CPU mục tiêu 60%.
 
-5. **(6%)** `$NODE2` có label `exam-role=gpu` và taint `exam=true:NoSchedule`. Tạo Pod `gpu-pod` (`nginx:1.27`) trong `mock-a` chạy trên đúng node đó.
+5. **Host `$NODE2`** · **(6%)** `$NODE2` có label `exam-role=gpu` và taint `exam=true:NoSchedule`. Tạo Pod `gpu-pod` (`nginx:1.27`) trong `mock-a` chạy trên đúng node đó.
 
-6. **(5%)** Tạo Pod `logger` trong `mock-a`: container `app` (`busybox:1.36`) ghi `tick` vào `/var/log/app.log` mỗi 2 giây; sidecar kiểu native tên `tail` (`busybox:1.36`) chạy `tail -F /var/log/app.log`. Hai container dùng chung emptyDir.
+6. **Host `$NODE1`** · **(5%)** Tạo Pod `logger` trong `mock-a`: container `app` (`busybox:1.36`) ghi `tick` vào `/var/log/app.log` mỗi 2 giây; sidecar kiểu native tên `tail` (`busybox:1.36`) chạy `tail -F /var/log/app.log`. Hai container dùng chung emptyDir.
 
-7. **(6%)** Tạo Service `frontend-np` kiểu NodePort cho `frontend`, cổng 80, nodePort `30090`.
+7. **Host `$CP`** · **(6%)** Tạo Service `frontend-np` kiểu NodePort cho `frontend`, cổng 80, nodePort `30090`.
 
-8. **(8%)** Trong `mock-b`, tạo NetworkPolicy `db-access`: Pod `app=db` chỉ nhận TCP 80 từ Pod `app=api` **trong namespace `mock-a`**.
+8. **Host `$NODE2`** · **(8%)** Trong `mock-b`, tạo NetworkPolicy `db-access`: Pod `app=db` chỉ nhận TCP 80 từ Pod `app=api` **trong namespace `mock-a`**.
 
-9. **(5%)** Tạo Ingress `frontend` trong `mock-a`: host `exam.local`, path `/` (Prefix) tới `frontend-np:80`.
+9. **Host `$NODE1`** · **(5%)** Tạo Ingress `frontend` trong `mock-a`: host `exam.local`, path `/` (Prefix) tới `frontend-np:80`.
 
-10. **(6%)** Tạo PVC `exam-data` (1Gi, RWO, StorageClass mặc định) trong `mock-a` và Pod `writer` (`busybox:1.36`) gắn nó tại `/data`, ghi file `/data/ok` rồi `sleep 3600`.
+10. **Host `$CP`** · **(6%)** Tạo PVC `exam-data` (1Gi, RWO, StorageClass mặc định) trong `mock-a` và Pod `writer` (`busybox:1.36`) gắn nó tại `/data`, ghi file `/data/ok` rồi `sleep 3600`.
 
-11. **(6%)** Tạo ServiceAccount `ci` trong `mock-a`, chỉ được `create` Deployment và `get, list` Pod trong `mock-a`.
+11. **Host `$NODE2`** · **(6%)** Tạo ServiceAccount `ci` trong `mock-a`, chỉ được `create` Deployment và `get, list` Pod trong `mock-a`.
 
-12. **(6%)** Tạo static pod `exam-static` (`nginx:1.27`) trên `$NODE1`.
+12. **Host `$NODE1`** · **(6%)** Tạo static pod `exam-static` (`nginx:1.27`) trên `$NODE1`.
 
-13. **(10%)** Deployment `broken-api` trong `mock-c` không có Pod nào sẵn sàng. Sửa để 2/2 sẵn sàng, giữ readinessProbe.
+13. **Host `$CP`** · **(10%)** Deployment `broken-api` trong `mock-c` không có Pod nào sẵn sàng. Sửa để 2/2 sẵn sàng, giữ readinessProbe.
 
-14. **(8%)** Service `backend` trong `mock-c` không có endpoint. Sửa để gọi `http://backend.mock-c` được (không sửa Deployment `backend`).
+14. **Host `$NODE1`** · **(8%)** Service `backend` trong `mock-c` không có endpoint. Sửa để gọi `http://backend.mock-c` được (không sửa Deployment `backend`).
 
-15. **(6%)** Ghi vào `~/cka-answers/38-nodes.txt` mỗi node một dòng dạng `<tên> <phiên bản kubelet>`, sắp theo tên.
+15. **Máy của bạn** · **(6%)** Ghi vào `~/cka-answers/38-nodes.txt` mỗi node một dòng dạng `<tên> <phiên bản kubelet>`, sắp theo tên.
 
-16. **(5%)** Tạo PriorityClass `exam-high` (value `100000`) và Pod `vip` (`nginx:1.27`) trong `mock-a` dùng nó.
+16. **Host `$NODE2`** · **(5%)** Tạo PriorityClass `exam-high` (value `100000`) và Pod `vip` (`nginx:1.27`) trong `mock-a` dùng nó.
 
 ## Quy trình tư duy
 
@@ -163,4 +164,4 @@ Lời giải: [SOLUTION.md](SOLUTION.md) (chỉ mở sau khi đã tự làm).
 
 ---
 
-← [Lab 37 · Theo dõi tài nguyên, event và log](../37-monitoring-logs/README.md)
+← [Lab 37 · Theo dõi tài nguyên, event và log](../37-monitoring-logs/README.md) · [Lab 45 · Đề thi thử 2 - chế độ phòng thi (2 giờ, 16 câu)](../45-mock-exam-2/README.md) →

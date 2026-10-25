@@ -1,6 +1,6 @@
 # CKA Labs
 
-Bộ **39 bài lab thực hành** để thi Certified Kubernetes Administrator (CKA), đi từ cơ bản tới nâng cao, phủ đủ **27 năng lực** trong 5 domain của đề thi v1.35. Mỗi bài dựng sẵn tình huống trên cluster của bạn, có đề bài kiểu phòng thi, script **tự chấm**, gợi ý và lời giải. Bài cuối là **đề thi thử 2 giờ** chấm điểm theo trọng số.
+Bộ **46 bài lab thực hành** để thi Certified Kubernetes Administrator (CKA), đi từ cơ bản tới nâng cao, phủ đủ **27 năng lực** trong 5 domain của curriculum CKA v1.37 (đề thi hiện chạy Kubernetes v1.37). Mỗi bài dựng sẵn tình huống trên cluster của bạn, có đề bài kiểu phòng thi, script **tự chấm**, gợi ý và lời giải. Cuối lộ trình là **hai đề thi thử 2 giờ** chấm điểm theo trọng số, ở chế độ phòng thi: mỗi câu ghi host phải `ssh` vào.
 
 **Trang hướng dẫn:** [`docs/index.html`](docs/index.html) (bật GitHub Pages với thư mục `/docs` để xem online). Trang có lộ trình, từng bài, đồng hồ thi thử và lưu tiến độ trong trình duyệt.
 
@@ -13,8 +13,8 @@ Bộ **39 bài lab thực hành** để thi Certified Kubernetes Administrator (
 
 ## Bắt đầu nhanh
 
-1. Cài [Docker](https://docs.docker.com/get-docker/), [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) ≥ v0.33 và [kubectl](https://kubernetes.io/docs/tasks/tools/) v1.35. Thêm `openssl` và (cho lab 26) [Helm](https://helm.sh/docs/intro/install/).
-2. Clone repo và dựng cluster 3 node (1 control plane, 2 worker, Kubernetes v1.35.8):
+1. Cài [Docker](https://docs.docker.com/get-docker/), [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) ≥ v0.33 và [kubectl](https://kubernetes.io/docs/tasks/tools/) v1.37. Thêm `openssl` và (cho lab 26, 41) [Helm](https://helm.sh/docs/intro/install/). Lab 40–44 tải thêm thành phần từ internet (Calico, Argo CD chart, cert-manager, MetalLB, NGINX Gateway Fabric).
+2. Clone repo và dựng cluster 3 node (1 control plane, 2 worker, Kubernetes v1.37.0):
    ```bash
    git clone https://github.com/TomJennyDev/cka-labs && cd cka-labs
    ./env/kind/up.sh
@@ -28,8 +28,8 @@ Máy cần khoảng 4 CPU, 6 GB RAM trống, và Linux dùng cgroup v2 (mọi b�
 
 | Môi trường | Dùng cho | Cách dựng |
 |---|---|---|
-| **kind** (khuyên dùng) | 36/39 bài. kind dùng chính kubeadm: control plane là static pod, kubelet chạy bằng systemd, nên các bài vào node, static pod, etcd, sửa kubelet đều làm được. | `./env/kind/up.sh` |
-| **kubeadm trên máy ảo** | Lab 01 (cài cluster), 30 (nâng cấp 1.34 → 1.35), 32 (control plane HA). | `cd env/kubeadm && vagrant up` rồi `vagrant ssh cp-1` |
+| **kind** (khuyên dùng) | 43/46 bài. kind dùng chính kubeadm: control plane là static pod, kubelet chạy bằng systemd, nên các bài vào node, static pod, etcd, sửa kubelet đều làm được. | `./env/kind/up.sh` |
+| **kubeadm trên máy ảo** | Lab 01 (cài cluster), 30 (nâng cấp 1.36 → 1.37), 32 (control plane HA). | `cd env/kubeadm && vagrant up` rồi `vagrant ssh cp-1` |
 
 Với VM, chạy `./lab` từ `cp-1`; script tự `ssh` sang các node khác (khóa SSH đã được Vagrant cài sẵn). Không dùng Vagrant thì chạy `env/kubeadm/prepare-node.sh` trên 3 máy Ubuntu bất kỳ.
 
@@ -46,6 +46,7 @@ Với VM, chạy `./lab` từ `cp-1`; script tự `ssh` sang các node khác (kh
 | `./lab env` | In `CP`, `NODE1`, `NODE2`; dùng `eval "$(./lab env)"` |
 | `./lab ssh <node>` | Vào shell của node (`docker exec` với kind, `ssh` với VM) |
 | `./lab doctor` | Kiểm tra công cụ và cluster |
+| `./lab exam-hosts` | Cài kubectl, kubeconfig và `alias k` lên mọi node để luyện kiểu `ssh <host>` như phòng thi (đề thi thử tự bật) |
 
 Bài nào yêu cầu ghi đáp án ra file thì ghi vào `~/cka-answers/` (đổi bằng biến `CKA_ANSWERS`).
 
@@ -57,12 +58,20 @@ Bài nào yêu cầu ghi đáp án ra file thì ghi vào `~/cka-answers/` (đổ
 | 1 | Nền tảng kubectl | 02–04 |
 | 2 | Workloads | 05–11 |
 | 3 | Scheduling | 12–14 |
-| 4 | Services & Networking | 15–19 |
+| 4 | Services & Networking | 15–19, 43–44 |
 | 5 | Storage | 20–22 |
 | 6 | Bảo mật | 23–25 |
-| 7 | Vận hành cluster | 26–32 |
+| 7 | Vận hành cluster | 26–32, 39–42 |
 | 8 | Troubleshooting | 33–37 |
-| 9 | Thi thử | 38 |
+| 9 | Thi thử | 38, 45 |
+
+Mã bài là định danh cố định; thứ tự học đi theo **cấp độ**, nên lab 43–44 nằm trong cấp 4 và lab 39–42 nằm trong cấp 7. `./lab list` và trang hướng dẫn đều xếp theo thứ tự học.
+
+### Bám đề thi hiện tại
+
+- Curriculum CKA v1.37 (CNCF, 10/2026) giống hệt v1.35 về domain, trọng số và 27 năng lực; đề thi chạy Kubernetes **v1.37**, nên cluster lab dùng v1.37.0.
+- Phòng thi: mỗi câu làm trên một host, `ssh <host>` rồi `sudo -i`. Hai đề thi thử ghi host cho từng câu và cài sẵn kubectl lên các node (`./lab exam-hosts`).
+- Các dạng câu người thi gần đây kể lại có bài riêng: chuẩn bị node và cài container runtime (39), cài CNI bằng Tigera Operator (40), Helm từ repo/OCI và Argo CD (41), cài operator thật (42), Service LoadBalancer (43), chuyển Ingress sang Gateway API có HTTPS (44).
 
 ### Hướng dẫn giảm dần
 
@@ -71,8 +80,8 @@ Mức hướng dẫn trong mỗi bài giảm dần theo cấp độ, để bạn
 | Cấp | Mức hỗ trợ | Trong mỗi bài có |
 |---|---|---|
 | 0–2 (lab 00–11) | **Cầm tay chỉ việc** | *Hướng dẫn từng bước*: lệnh, giải thích vì sao, kết quả sẽ thấy |
-| 3–6 (lab 12–25) | **Dẫn hướng** | *Cách tiếp cận* cho từng câu: tra ở đâu, khung lệnh, cách tự kiểm, bẫy hay gặp. Không có đáp án |
-| 7–9 (lab 26–38) | **Tự lực** | *Quy trình tư duy*: cách làm việc và cách kiểm chứng, chi tiết tự tra như khi thi |
+| 3–6 (lab 12–25, 43–44) | **Dẫn hướng** | *Cách tiếp cận* cho từng câu: tra ở đâu, khung lệnh, cách tự kiểm, bẫy hay gặp. Không có đáp án |
+| 7–9 (lab 26–42, 45) | **Tự lực** | *Quy trình tư duy*: cách làm việc và cách kiểm chứng, chi tiết tự tra như khi thi |
 
 Mỗi bài có phần **Sơ đồ** (Mermaid): một sơ đồ cho biết lab dựng những gì và chúng nối với nhau ra sao, một sequence diagram cho thấy bên trong Kubernetes xử lý thế nào. Với bài troubleshooting, sơ đồ chỉ vẽ đường đi và các điểm cần kiểm tra, không lộ lỗi.
 
@@ -105,6 +114,8 @@ Gợi ý nhịp học 6 tuần: tuần 1 cấp 0–1, tuần 2 cấp 2, tuần 3
 | 17 | [NetworkPolicy theo mô hình mặc định chặn](labs/17-network-policy/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 40′ |
 | 18 | [Ingress, IngressClass và TLS](labs/18-ingress/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 30′ |
 | 19 | [Gateway API, HTTPRoute và ReferenceGrant](labs/19-gateway-api/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 40′ |
+| 43 | [Service LoadBalancer với MetalLB](labs/43-loadbalancer-metallb/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 35′ |
+| 44 | [Gateway API với controller thật - HTTPS và chuyển từ Ingress](labs/44-gateway-migrate-ingress/README.md) | 4 · Services & Networking | kind hoặc kubeadm | 40′ |
 | 20 | [Volume: emptyDir, hostPath, projected và Downward API](labs/20-volumes/README.md) | 5 · Storage | kind hoặc kubeadm (cần vào node) | 30′ |
 | 21 | [PersistentVolume, PVC và reclaim policy](labs/21-pv-pvc/README.md) | 5 · Storage | kind hoặc kubeadm | 30′ |
 | 22 | [StorageClass, dynamic provisioning và StatefulSet](labs/22-storageclass-statefulset/README.md) | 5 · Storage | kind hoặc kubeadm | 35′ |
@@ -115,51 +126,56 @@ Gợi ý nhịp học 6 tuần: tuần 1 cấp 0–1, tuần 2 cấp 2, tuần 3
 | 27 | [Kustomize với base và overlay](labs/27-kustomize/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 30′ |
 | 28 | [CustomResourceDefinition và Operator](labs/28-crd-operator/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 30′ |
 | 29 | [Sao lưu và khôi phục etcd](labs/29-etcd-backup-restore/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm (cần vào node) | 40′ |
-| 30 | [Nâng cấp cluster kubeadm 1.34 → 1.35](labs/30-kubeadm-upgrade/README.md) | 7 · Vận hành cluster | kubeadm trên máy ảo | 60′ |
+| 30 | [Nâng cấp cluster kubeadm 1.36 → 1.37](labs/30-kubeadm-upgrade/README.md) | 7 · Vận hành cluster | kubeadm trên máy ảo | 60′ |
 | 31 | [Chứng chỉ, cấu hình control plane và kubelet](labs/31-control-plane-config/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm (cần vào node) | 35′ |
 | 32 | [Thêm control plane cho cluster HA](labs/32-control-plane-ha/README.md) | 7 · Vận hành cluster | kubeadm trên máy ảo | 60′ |
+| 39 | [Chuẩn bị node - container runtime, kernel và CRI](labs/39-node-runtime-prep/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm (cần vào node) | 35′ |
+| 40 | [Cài CNI Calico bằng Tigera Operator](labs/40-cni-tigera-operator/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 40′ |
+| 41 | [Helm với repo và OCI - Argo CD, sửa release lỗi](labs/41-helm-repo-oci/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 35′ |
+| 42 | [Cài và dùng một Operator thật - cert-manager](labs/42-operator-cert-manager/README.md) | 7 · Vận hành cluster | kind hoặc kubeadm | 30′ |
 | 33 | [Troubleshooting ứng dụng: sáu Deployment hỏng](labs/33-troubleshoot-apps/README.md) | 8 · Troubleshooting | kind hoặc kubeadm | 40′ |
 | 34 | [Troubleshooting mạng: Service, NetworkPolicy và DNS](labs/34-troubleshoot-network/README.md) | 8 · Troubleshooting | kind hoặc kubeadm | 40′ |
 | 35 | [Troubleshooting control plane: scheduler và controller-manager](labs/35-troubleshoot-control-plane/README.md) | 8 · Troubleshooting | kind hoặc kubeadm (cần vào node) | 40′ |
 | 36 | [Troubleshooting node: worker NotReady](labs/36-troubleshoot-node/README.md) | 8 · Troubleshooting | kind hoặc kubeadm (cần vào node) | 35′ |
 | 37 | [Theo dõi tài nguyên, event và log](labs/37-monitoring-logs/README.md) | 8 · Troubleshooting | kind hoặc kubeadm | 30′ |
 | 38 | [Đề thi thử CKA (2 giờ, 16 câu)](labs/38-mock-exam/README.md) | 9 · Thi thử | kind hoặc kubeadm (cần vào node) | 120′ |
+| 45 | [Đề thi thử 2 - chế độ phòng thi (2 giờ, 16 câu)](labs/45-mock-exam-2/README.md) | 9 · Thi thử | kind hoặc kubeadm (cần vào node) | 120′ |
 <!-- LABS:END -->
 
 ## Phủ năng lực của đề thi
 
-Domain và năng lực theo curriculum CKA (Kubernetes v1.35).
+Domain và năng lực theo curriculum CKA v1.37 (đề thi chạy Kubernetes v1.37).
 
 <!-- COVERAGE:START -->
 | Domain | Năng lực | Lab |
 |---|---|---|
-| Troubleshooting 30% | Troubleshoot cluster và node | 14, 36, 38 |
+| Troubleshooting 30% | Troubleshoot cluster và node | 14, 39, 36, 38 |
 | Troubleshooting 30% | Troubleshoot thành phần control plane | 31, 35 |
-| Troubleshooting 30% | Theo dõi tài nguyên cluster và ứng dụng | 04, 10, 11, 33, 37 |
-| Troubleshooting 30% | Quản lý và đánh giá output, log của container | 03, 07, 08, 33, 37, 38 |
-| Troubleshooting 30% | Troubleshoot Service và networking | 15, 16, 34, 38 |
-| Cluster Architecture 25% | Quản lý RBAC | 23, 24, 25, 38 |
-| Cluster Architecture 25% | Chuẩn bị hạ tầng để cài cluster | 01 |
+| Troubleshooting 30% | Theo dõi tài nguyên cluster và ứng dụng | 04, 10, 11, 33, 37, 45 |
+| Troubleshooting 30% | Quản lý và đánh giá output, log của container | 03, 07, 08, 33, 37, 38, 45 |
+| Troubleshooting 30% | Troubleshoot Service và networking | 15, 16, 34, 38, 45 |
+| Cluster Architecture 25% | Quản lý RBAC | 23, 24, 25, 38, 45 |
+| Cluster Architecture 25% | Chuẩn bị hạ tầng để cài cluster | 01, 39, 40 |
 | Cluster Architecture 25% | Tạo và quản lý cluster bằng kubeadm | 01, 29, 30, 31, 32 |
 | Cluster Architecture 25% | Quản lý vòng đời cluster (nâng cấp) | 29, 30 |
 | Cluster Architecture 25% | Control plane high-availability | 32 |
-| Cluster Architecture 25% | Cài thành phần bằng Helm và Kustomize | 26, 27 |
-| Cluster Architecture 25% | Interface mở rộng: CNI, CSI, CRI | 01, 28, 31 |
-| Cluster Architecture 25% | CRD, cài và cấu hình Operator | 28 |
-| Services & Networking 20% | Kết nối giữa các Pod | 15, 17 |
-| Services & Networking 20% | NetworkPolicy | 17, 34, 38 |
-| Services & Networking 20% | Service ClusterIP, NodePort, LoadBalancer và endpoints | 15, 38 |
-| Services & Networking 20% | Gateway API | 19 |
-| Services & Networking 20% | Ingress controller và Ingress | 18, 38 |
+| Cluster Architecture 25% | Cài thành phần bằng Helm và Kustomize | 26, 27, 41, 42, 45 |
+| Cluster Architecture 25% | Interface mở rộng: CNI, CSI, CRI | 01, 28, 31, 39, 40, 45 |
+| Cluster Architecture 25% | CRD, cài và cấu hình Operator | 43, 28, 41, 42, 45 |
+| Services & Networking 20% | Kết nối giữa các Pod | 15, 17, 40 |
+| Services & Networking 20% | NetworkPolicy | 17, 40, 34, 38, 45 |
+| Services & Networking 20% | Service ClusterIP, NodePort, LoadBalancer và endpoints | 15, 43, 38, 45 |
+| Services & Networking 20% | Gateway API | 19, 44, 45 |
+| Services & Networking 20% | Ingress controller và Ingress | 18, 44, 38 |
 | Services & Networking 20% | CoreDNS | 16, 34 |
-| Workloads & Scheduling 15% | Deployment, rolling update, rollback | 05, 38 |
+| Workloads & Scheduling 15% | Deployment, rolling update, rollback | 05, 38, 45 |
 | Workloads & Scheduling 15% | ConfigMap và Secret | 06, 38 |
 | Workloads & Scheduling 15% | Autoscaling | 11, 38 |
-| Workloads & Scheduling 15% | Primitive cho ứng dụng tự phục hồi | 07, 08, 09, 14, 33, 38 |
-| Workloads & Scheduling 15% | Admission và scheduling của Pod | 10, 12, 13, 14, 25, 38 |
-| Storage 10% | StorageClass và dynamic provisioning | 22, 38 |
-| Storage 10% | Volume type, access mode, reclaim policy | 20, 21 |
-| Storage 10% | PersistentVolume và PersistentVolumeClaim | 21, 22, 38 |
+| Workloads & Scheduling 15% | Primitive cho ứng dụng tự phục hồi | 07, 08, 09, 14, 33, 38, 45 |
+| Workloads & Scheduling 15% | Admission và scheduling của Pod | 10, 12, 13, 14, 25, 38, 45 |
+| Storage 10% | StorageClass và dynamic provisioning | 22, 38, 45 |
+| Storage 10% | Volume type, access mode, reclaim policy | 20, 21, 45 |
+| Storage 10% | PersistentVolume và PersistentVolumeClaim | 21, 22, 38, 45 |
 <!-- COVERAGE:END -->
 
 ## Cấu trúc repo

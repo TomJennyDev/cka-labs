@@ -6,7 +6,7 @@ Mức hỗ trợ: **Cầm tay chỉ việc**. Mỗi bước có lệnh, giải t
 
 ## Mục tiêu
 
-Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.35 để làm mọi bài lab, cấu hình terminal giống phòng thi và biết cách dùng `./lab`.
+Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.37 (phiên bản của đề thi) để làm mọi bài lab, cấu hình terminal giống phòng thi và biết cách dùng `./lab`.
 
 ## Kiến thức cần nắm
 
@@ -58,7 +58,7 @@ sequenceDiagram
   U->>L: ./lab start 0
   L->>A: setup.sh tạo tình huống
   U->>A: kubectl get node ... -o jsonpath
-  A-->>U: v1.35.x
+  A-->>U: v1.37.x
   U->>F: ghi 00-kubelet.txt
   U->>L: ./lab check 0
   L->>A: đọc trạng thái cluster
@@ -75,7 +75,7 @@ Mọi bài đều theo vòng này: `start` dựng tình huống, bạn sửa clu
 
 ## Đề bài
 
-1. Cài Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.33+ và kubectl v1.35, rồi dựng cluster:
+1. Cài Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.33+ và kubectl v1.37, rồi dựng cluster:
    ```bash
    ./env/kind/up.sh
    ```
@@ -91,7 +91,7 @@ Mọi bài đều theo vòng này: `start` dựng tình huống, bạn sửa clu
 
 3. Chạy `./lab doctor` và `eval "$(./lab env)"`. Ghi tên node control plane vào `~/cka-answers/00-cp.txt`.
 
-4. Ghi phiên bản kubelet của `$NODE1` (ví dụ `v1.35.8`) vào `~/cka-answers/00-kubelet.txt`. Lấy từ `kubectl get node`, không gõ tay.
+4. Ghi phiên bản kubelet của `$NODE1` (ví dụ `v1.37.0`) vào `~/cka-answers/00-kubelet.txt`. Lấy từ `kubectl get node`, không gõ tay.
 
 5. Vào shell của `$NODE1` bằng `./lab ssh $NODE1`, chạy `crictl ps` để thấy container trên node, rồi `exit`.
 
@@ -107,7 +107,7 @@ git clone https://github.com/TomJennyDev/cka-labs && cd cka-labs
 kubectl get nodes -o wide
 ```
 
-> **Kết quả:** 3 node `cka-control-plane`, `cka-worker`, `cka-worker2` ở trạng thái `Ready`, cột VERSION là `v1.35.x`.
+> **Kết quả:** 3 node `cka-control-plane`, `cka-worker`, `cka-worker2` ở trạng thái `Ready`, cột VERSION là `v1.37.x`.
 
 Nếu node đứng `NotReady` quá 2 phút: `kubectl describe node <tên>` và đọc phần `Conditions`.
 
@@ -161,7 +161,7 @@ kubectl get node "$NODE1" -o jsonpath='{.status.nodeInfo.kubeletVersion}' > ~/ck
 cat ~/cka-answers/00-kubelet.txt
 ```
 
-> **Kết quả:** một dòng như `v1.35.8`.
+> **Kết quả:** một dòng như `v1.37.0`.
 
 ### Bước 6 · Nhìn vào bên trong một node
 

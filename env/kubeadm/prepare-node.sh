@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Chuẩn bị một node Ubuntu 22.04/24.04 để chạy kubeadm.
-# Dùng được cho máy ảo bất kỳ:  sudo K8S_MINOR=1.34 NODE_IP=<ip> ./prepare-node.sh
+# Dùng được cho máy ảo bất kỳ:  sudo K8S_MINOR=1.36 NODE_IP=<ip> ./prepare-node.sh
 set -euo pipefail
-K8S_MINOR="${K8S_MINOR:-1.34}"
+K8S_MINOR="${K8S_MINOR:-1.36}"
 NODE_IP="${NODE_IP:-$(hostname -I | awk '{print $1}')}"
 
 echo "› /etc/hosts"

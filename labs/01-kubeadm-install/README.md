@@ -74,7 +74,7 @@ sequenceDiagram
 
 Lab này không dùng `./lab start`. Dựng 3 máy ảo trước:
 ```bash
-cd env/kubeadm && vagrant up      # cp-1, worker-1, worker-2 với Kubernetes v1.34
+cd env/kubeadm && vagrant up      # cp-1, worker-1, worker-2 với Kubernetes v1.36
 vagrant ssh cp-1
 ```
 `prepare-node.sh` đã chuẩn bị sẵn từng node (swap, module, sysctl, containerd, các gói kube*). Hãy đọc file đó: đề thi có thể yêu cầu bạn tự làm từng bước.
@@ -87,7 +87,7 @@ vagrant ssh cp-1
 
 3. Cấu hình kubectl cho user `vagrant`.
 
-4. Cài Calico v3.32.2 với pool IP `10.244.0.0/16`.
+4. Cài Calico v3.33.0 với pool IP `10.244.0.0/16`.
 
 5. Join `worker-1` và `worker-2`. Chờ cả 3 node `Ready`.
 
@@ -146,7 +146,7 @@ kubectl get nodes
 CNI cấp IP cho Pod và nối mạng giữa các node. Pool IP của Calico phải trùng `--pod-network-cidr`.
 
 ```bash
-curl -LO https://raw.githubusercontent.com/projectcalico/calico/v3.32.2/manifests/calico.yaml
+curl -LO https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/calico.yaml
 grep -n -A1 CALICO_IPV4POOL_CIDR calico.yaml        # xem 2 dòng đang bị comment
 sed -i 's|# - name: CALICO_IPV4POOL_CIDR|- name: CALICO_IPV4POOL_CIDR|; s|#   value: "192.168.0.0/16"|  value: "10.244.0.0/16"|' calico.yaml
 kubectl apply -f calico.yaml

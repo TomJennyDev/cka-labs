@@ -41,12 +41,12 @@ LEVELS = {
     1: ("Nền tảng kubectl", "Làm chủ kubectl, object, YAML và cách trích xuất dữ liệu."),
     2: ("Workloads", "Deployment, cấu hình, probe, multi-container, Job, tài nguyên và autoscaling."),
     3: ("Scheduling", "Điều khiển Pod chạy ở node nào, static pod, bảo trì node."),
-    4: ("Services & Networking", "Service, DNS, NetworkPolicy, Ingress và Gateway API."),
+    4: ("Services & Networking", "Service, LoadBalancer, DNS, NetworkPolicy, Ingress và Gateway API."),
     5: ("Storage", "Volume, PV/PVC, StorageClass và StatefulSet."),
     6: ("Bảo mật", "RBAC, ServiceAccount, user và chứng chỉ, Pod Security."),
-    7: ("Vận hành cluster", "Helm, Kustomize, CRD, etcd, nâng cấp, chứng chỉ, HA."),
+    7: ("Vận hành cluster", "Helm, Kustomize, CRD, operator, runtime, CNI, etcd, nâng cấp, chứng chỉ, HA."),
     8: ("Troubleshooting", "Chẩn đoán và sửa ứng dụng, mạng, control plane và node."),
-    9: ("Thi thử", "Đề tổng hợp 2 giờ theo trọng số đề thi thật."),
+    9: ("Thi thử", "Hai đề tổng hợp 2 giờ theo trọng số đề thi thật, làm theo từng host."),
 }
 # Scaffolding fades as the learner progresses: full walkthrough → approach per task → method only
 SUPPORT = {
@@ -70,6 +70,8 @@ PREREQ = {
     20: [6, 8], 21: [20], 22: [21], 23: [2], 24: [23], 25: [7, 23],
     26: [5], 27: [6, 26], 28: [4], 29: [14], 30: [1, 14], 31: [29], 32: [30],
     33: [7, 10], 34: [16, 17], 35: [31], 36: [14], 37: [11, 33], 38: list(range(2, 38)),
+    39: [14], 40: [1, 17], 41: [26], 42: [28], 43: [15], 44: [18, 19],
+    45: [38] + list(range(39, 45)),
 }
 
 ENV_TEXT = {"any": "kind hoặc kubeadm", "kind": "kind hoặc kubeadm (cần vào node)", "vm": "kubeadm trên máy ảo"}
@@ -106,7 +108,8 @@ def load():
             for lab in yaml.safe_load(f) or []:
                 lab["_src"] = os.path.relpath(path, ROOT)
                 labs.append(lab)
-    labs.sort(key=lambda x: x["id"])
+    # learning order: by level, then id (ids stay stable when labs are added later)
+    labs.sort(key=lambda x: (x["level"], x["id"]))
     ids = [l["id"] for l in labs]
     if len(ids) != len(set(ids)):
         sys.exit("duplicate lab ids")

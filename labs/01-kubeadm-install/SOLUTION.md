@@ -8,7 +8,7 @@ mkdir -p $HOME/.kube
 sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
-curl -LO https://raw.githubusercontent.com/projectcalico/calico/v3.32.2/manifests/calico.yaml
+curl -LO https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/calico.yaml
 sed -i 's|# - name: CALICO_IPV4POOL_CIDR|- name: CALICO_IPV4POOL_CIDR|; s|#   value: "192.168.0.0/16"|  value: "10.244.0.0/16"|' calico.yaml
 kubectl apply -f calico.yaml
 
