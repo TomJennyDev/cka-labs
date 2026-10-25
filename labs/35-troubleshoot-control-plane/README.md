@@ -4,9 +4,15 @@
 
 Năng lực CKA: Troubleshooting › Troubleshoot thành phần control plane
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Nhận ra thành phần control plane nào hỏng chỉ từ triệu chứng, đọc log khi kubectl không giúp được, và sửa static pod manifest.
+
+## Cần làm trước
+
+- [Lab 31 · Chứng chỉ, cấu hình control plane và kubelet](../31-control-plane-config/README.md)
 
 ## Kiến thức cần nắm
 
@@ -27,6 +33,28 @@ Nhận ra thành phần control plane nào hỏng chỉ từ triệu chứng, đ
 2. Sau đó Pod của `probe` vẫn không chạy. Tìm và sửa thành phần thứ hai.
 
 3. Ghi tên hai thành phần đã sửa (ví dụ `kube-apiserver`), mỗi tên một dòng, vào `~/cka-answers/35-components.txt`.
+
+## Quy trình tư duy
+
+### Quy trình chẩn đoán control plane
+
+Biết thành phần nào làm việc gì thì triệu chứng chỉ thẳng vào nó:
+
+| Triệu chứng | Thành phần |
+|---|---|
+| kubectl không kết nối được | kube-apiserver (hoặc etcd phía sau) |
+| Deployment có nhưng không có ReplicaSet/Pod | kube-controller-manager |
+| Pod có nhưng `Pending` mãi, không có event scheduler | kube-scheduler |
+| Pod đã có node nhưng không chạy | kubelet trên node đó |
+
+1. `kubectl get pods -n kube-system`: thành phần nào không `Running`?
+2. `kubectl -n kube-system logs <pod>` hoặc `describe`. Nếu Pod không hiện, vào node: `crictl ps -a | grep <thành phần>`, rồi `crictl logs <id>`.
+3. Lỗi thường ở manifest `/etc/kubernetes/manifests/<thành phần>.yaml`: cờ sai tên, đường dẫn file sai, image sai.
+4. Sửa manifest, chờ kubelet tạo lại, xác nhận bằng triệu chứng ban đầu.
+
+### Kiểm chứng
+
+Deployment `probe` có 2/2 Pod Running.
 
 ## Gợi ý
 

@@ -4,9 +4,16 @@
 
 Năng lực CKA: Cluster Architecture › Quản lý vòng đời cluster (nâng cấp); Cluster Architecture › Tạo và quản lý cluster bằng kubeadm
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Nâng một cluster đang chạy lên minor mới mà không làm gián đoạn ứng dụng: control plane trước, từng worker sau, đúng thứ tự drain và uncordon.
+
+## Cần làm trước
+
+- [Lab 01 · Cài cluster bằng kubeadm trên máy ảo](../01-kubeadm-install/README.md)
+- [Lab 14 · Static pod, lập lịch thủ công và bảo trì node](../14-static-pod-maintenance/README.md)
 
 ## Kiến thức cần nắm
 
@@ -32,6 +39,25 @@ Cần cluster từ lab 01 (Kubernetes v1.34). Chạy lab từ `cp-1`.
 3. Nâng lần lượt `worker-1` rồi `worker-2`, mỗi node phải được drain trước và uncordon sau.
 
 4. Mọi node `Ready`, kubelet v1.35.x, không node nào còn `SchedulingDisabled`.
+
+## Quy trình tư duy
+
+### Quy trình
+
+Mở trang *Upgrading kubeadm clusters* và làm theo đúng thứ tự của nó. Đề thi chấm kết quả, nhưng sai thứ tự là cluster hỏng.
+
+1. **Repo gói** trỏ sang minor mới (`/etc/apt/sources.list.d/kubernetes.list`), `apt update`, xem các phiên bản có sẵn.
+2. **Control plane**: nâng `kubeadm`, chạy `kubeadm upgrade plan`, rồi `kubeadm upgrade apply`; sau đó drain, nâng `kubelet`/`kubectl`, `daemon-reload`, restart kubelet, uncordon.
+3. **Từng worker**: nâng `kubeadm`, `kubeadm upgrade node`, drain (chạy từ cp-1), nâng `kubelet`/`kubectl`, restart, uncordon.
+
+### Kiểm chứng sau mỗi node
+
+- `kubectl get nodes` cho thấy node vừa làm có VERSION mới và không còn `SchedulingDisabled`.
+- Mọi Pod hệ thống `Running`.
+
+### Bẫy
+
+Gói bị `apt-mark hold`. Phải `unhold` rồi `hold` lại (hoặc dùng `--allow-change-held-packages`).
 
 ## Gợi ý
 

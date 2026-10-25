@@ -4,9 +4,16 @@
 
 Năng lực CKA: Troubleshooting › Quản lý và đánh giá output, log của container; Troubleshooting › Theo dõi tài nguyên cluster và ứng dụng; Workloads & Scheduling › Primitive cho ứng dụng tự phục hồi
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Chẩn đoán nhanh và sửa đúng sáu lỗi ứng dụng hay gặp nhất trong đề: image sai, lệnh sai, OOM, không xếp được node, thiếu cấu hình, probe sai.
+
+## Cần làm trước
+
+- [Lab 07 · Liveness, readiness và startup probe](../07-probes/README.md)
+- [Lab 10 · Requests, limits, LimitRange và ResourceQuota](../10-resources-quota/README.md)
 
 ## Kiến thức cần nắm
 
@@ -27,6 +34,33 @@ Chẩn đoán nhanh và sửa đúng sáu lỗi ứng dụng hay gặp nhất tr
 2. Ràng buộc khi sửa: `img` dùng `nginx:1.27`; `cmd` vẫn chạy `sleep 3600`; `oom` giữ nguyên lệnh và chỉ đổi memory limit thành `256Mi`; `cfg` phải đọc biến từ ConfigMap `app-settings` với `MODE=prod`; `notready` giữ readinessProbe nhưng kiểm tra đúng đường dẫn.
 
 3. Ghi lý do container của `oom` bị dừng (giá trị `reason` trong `lastState`) vào `~/cka-answers/33-oom.txt`.
+
+## Quy trình tư duy
+
+### Quy trình chẩn đoán ứng dụng
+
+Làm cùng một vòng cho mọi Deployment, từ ngoài vào trong:
+
+**Bước 1 · Toàn cảnh.** `kubectl get deploy,rs,pods -n lab33`. Ghi lại STATUS của từng Pod.
+
+**Bước 2 · STATUS nói lên loại lỗi.**
+
+| STATUS | Nhìn vào đâu |
+|---|---|
+| `ImagePullBackOff`, `ErrImagePull` | Events: tên image, tag, registry |
+| `CrashLoopBackOff`, `Error` | `logs --previous`, `lastState.terminated` (reason, exitCode) |
+| `OOMKilled` | limits memory so với nhu cầu thật |
+| `Pending` | Events của Pod: scheduler nói thiếu gì |
+| `CreateContainerConfigError` | ConfigMap/Secret được tham chiếu có tồn tại không, đúng key không |
+| `Running` nhưng `0/1` | readinessProbe: path, port, lệnh |
+
+**Bước 3 · Sửa ở Deployment, không sửa ở Pod.** Pod sẽ bị thay ngay, nên sửa template của Deployment.
+
+**Bước 4 · Xác nhận từng cái** trước khi sang cái tiếp: `kubectl rollout status`.
+
+### Kiểm chứng
+
+`kubectl get deploy -n lab33`: cả 6 dòng có READY bằng DESIRED.
 
 ## Gợi ý
 

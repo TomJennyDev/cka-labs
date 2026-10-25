@@ -4,9 +4,16 @@
 
 Năng lực CKA: Workloads & Scheduling › Admission và scheduling của Pod
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Đặt Pod lên đúng node: chọn node bằng label, giữ riêng một node cho workload đặc biệt bằng taint, và cho đúng workload đó vào bằng toleration cộng affinity.
+
+## Cần làm trước
+
+- [Lab 05 · Deployment: scale, rolling update, rollback](../05-deployment-rollout/README.md)
+- [Lab 09 · DaemonSet, Job và CronJob](../09-daemonset-job-cronjob/README.md)
 
 ## Kiến thức cần nắm
 
@@ -31,6 +38,49 @@ Năng lực CKA: Workloads & Scheduling › Admission và scheduling của Pod
 4. Tạo Deployment `gpu-job` (2 replica, image `busybox:1.36`, lệnh `sleep 3600`) chạy **chỉ** trên `$NODE2`: tolerate taint ở trên và dùng `requiredDuringSchedulingIgnoredDuringExecution` với label `accelerator=nvidia`.
 
 5. Tạo Pod `flex` (image `nginx:1.27`) **ưu tiên** (không bắt buộc) node có `disktype=hdd`, weight 80.
+
+## Cách tiếp cận
+
+### Câu 1 · Gắn label cho node
+
+**Khung:** `kubectl label node <node> <key>=<value>`. Hai node, hai lệnh.
+
+**Tự kiểm:** `kubectl get nodes -L disktype` thêm cột `DISKTYPE`.
+
+### Câu 2 · nodeSelector
+
+**Tra:** `kubectl explain pod.spec.nodeSelector`. Đây là một map, đặt ngang hàng `containers`.
+
+**Khung:** `kubectl run fast … $do > fast.yaml`, thêm `nodeSelector:` vào `spec`, rồi apply.
+
+**Tự kiểm:** `kubectl get pod fast -n lab12 -o wide`. Cột NODE phải là `$NODE1`.
+
+### Câu 3 · Taint
+
+**Khung:** `kubectl taint node <node> <key>=<value>:<effect>`. Label `accelerator` gắn như câu 1.
+
+**Tự kiểm:** `kubectl describe node $NODE2 | grep Taints`.
+
+### Câu 4 · Toleration + node affinity bắt buộc
+
+Hai cơ chế giải quyết hai việc khác nhau:
+
+- **Toleration** chỉ *cho phép* Pod chạy trên node có taint, không *kéo* Pod về đó.
+- **Affinity bắt buộc** mới *giới hạn* Pod chỉ chạy ở node có label.
+
+Bài này cần cả hai.
+
+**Tra:** trang *Assigning Pods to Nodes*, mục *Node affinity*, có sẵn YAML mẫu để chép. `kubectl explain pod.spec.affinity.nodeAffinity` cho cấu trúc.
+
+**Khung:** `kubectl create deploy gpu-job --replicas=2 … $do -- sleep 3600 > gpu.yaml`. Trong `template.spec` thêm `tolerations:` (key, operator `Equal`, value, effect) và `affinity.nodeAffinity.requiredDuringSchedulingIgnoredDuringExecution.nodeSelectorTerms[].matchExpressions[]`.
+
+**Tự kiểm:** `kubectl get pods -n lab12 -l app=gpu-job -o wide`. Cả hai Pod nằm trên `$NODE2`.
+
+### Câu 5 · Affinity ưu tiên
+
+**Tra:** cùng trang, ví dụ `preferredDuringSchedulingIgnoredDuringExecution`. Cấu trúc khác bản required: mỗi phần tử có `weight` và `preference.matchExpressions`.
+
+**Bẫy:** `$NODE2` có taint, mà `flex` không tolerate. Vì vậy dù ưu tiên `hdd`, Pod vẫn phải chạy ở node khác. Đó là hành vi đúng: preferred không bao giờ thắng taint.
 
 ## Gợi ý
 

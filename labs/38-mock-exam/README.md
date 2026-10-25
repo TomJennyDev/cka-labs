@@ -4,9 +4,15 @@
 
 Năng lực CKA: Troubleshooting › Troubleshoot cluster và node; Troubleshooting › Quản lý và đánh giá output, log của container; Troubleshooting › Troubleshoot Service và networking; Cluster Architecture › Quản lý RBAC; Services & Networking › NetworkPolicy; Services & Networking › Service ClusterIP, NodePort, LoadBalancer và endpoints; Services & Networking › Ingress controller và Ingress; Workloads & Scheduling › Deployment, rolling update, rollback; Workloads & Scheduling › ConfigMap và Secret; Workloads & Scheduling › Autoscaling; Workloads & Scheduling › Primitive cho ứng dụng tự phục hồi; Workloads & Scheduling › Admission và scheduling của Pod; Storage › StorageClass và dynamic provisioning; Storage › PersistentVolume và PersistentVolumeClaim
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Làm một đề tổng hợp trong 120 phút như phòng thi thật. Mỗi câu có trọng số; câu chỉ được điểm khi đúng **toàn bộ**. Cần **66%** để đậu.
+
+## Cần làm trước
+
+Mọi lab từ 02 tới 37.
 
 ## Kiến thức cần nắm
 
@@ -56,6 +62,32 @@ Setup tạo sẵn các namespace `mock-a`, `mock-b`, `mock-c` cùng vài workloa
 15. **(6%)** Ghi vào `~/cka-answers/38-nodes.txt` mỗi node một dòng dạng `<tên> <phiên bản kubelet>`, sắp theo tên.
 
 16. **(5%)** Tạo PriorityClass `exam-high` (value `100000`) và Pod `vip` (`nginx:1.27`) trong `mock-a` dùng nó.
+
+## Quy trình tư duy
+
+### Chiến lược 120 phút
+
+1. **Lượt 1 (khoảng 70 phút):** làm theo thứ tự, mỗi câu tối đa 6–7 phút. Câu nào kẹt thì ghi số câu ra giấy rồi bỏ qua.
+2. **Lượt 2 (khoảng 35 phút):** quay lại các câu đã bỏ, ưu tiên câu trọng số cao.
+3. **10 phút cuối:** rà lại các câu chỉ cần sửa nhỏ. Không bắt đầu câu lớn mới.
+
+### Thói quen mỗi câu
+
+- Chạy lệnh `use-context` của đề bài (trong lab này cùng một cluster, nhưng hãy giữ thói quen).
+- Đọc **hết** đề, gạch chân namespace, tên object, cổng và phiên bản.
+- Sinh YAML bằng `$do`, đừng gõ tay; tra trang tài liệu khi cần YAML mẫu.
+- Tự kiểm ngay: `get`, `describe`, `exec … wget`, `auth can-i`.
+
+### Phân bổ theo domain
+
+Troubleshooting chiếm 30% của đề thật. Nếu điểm thi thử thấp ở câu 13–14, quay lại lab 33–37 trước khi thi thử lần nữa.
+
+### Chấm và ôn
+
+```bash
+./lab check 38      # bảng điểm theo câu, cần ≥ 66%
+./lab reset 38 && ./lab start 38    # làm lại từ đầu
+```
 
 ## Gợi ý
 

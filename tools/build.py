@@ -48,6 +48,30 @@ LEVELS = {
     8: ("Troubleshooting", "Chẩn đoán và sửa ứng dụng, mạng, control plane và node."),
     9: ("Thi thử", "Đề tổng hợp 2 giờ theo trọng số đề thi thật."),
 }
+# Scaffolding fades as the learner progresses: full walkthrough → approach per task → method only
+SUPPORT = {
+    "guided": ("Hướng dẫn từng bước", "Cầm tay chỉ việc",
+               "Mỗi bước có lệnh, giải thích vì sao và kết quả bạn sẽ thấy. Lần đầu làm theo từng bước; lần hai đóng phần hướng dẫn lại và tự làm đề bài."),
+    "scaffold": ("Cách tiếp cận", "Dẫn hướng",
+                 "Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở."),
+    "solo": ("Quy trình tư duy", "Tự lực",
+             "Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi."),
+}
+
+
+def support_of(level):
+    return "guided" if level <= 2 else "scaffold" if level <= 6 else "solo"
+
+
+# Labs to finish first (what each lab builds on)
+PREREQ = {
+    1: [0], 2: [0], 3: [2], 4: [3], 5: [4], 6: [5], 7: [5], 8: [3, 7], 9: [5], 10: [5], 11: [10],
+    12: [5, 9], 13: [12], 14: [12], 15: [5], 16: [15], 17: [15, 16], 18: [15], 19: [18],
+    20: [6, 8], 21: [20], 22: [21], 23: [2], 24: [23], 25: [7, 23],
+    26: [5], 27: [6, 26], 28: [4], 29: [14], 30: [1, 14], 31: [29], 32: [30],
+    33: [7, 10], 34: [16, 17], 35: [31], 36: [14], 37: [11, 33], 38: list(range(2, 38)),
+}
+
 ENV_TEXT = {"any": "kind hoặc kubeadm", "kind": "kind hoặc kubeadm (cần vào node)", "vm": "kubeadm trên máy ảo"}
 
 HEADER = """#!/usr/bin/env bash
@@ -79,6 +103,16 @@ def load():
         l.setdefault("docs", [])
         l["docs"] = [[", ".join(str(p) for p in d[:-1]), d[-1]] for d in l["docs"]]
         l.setdefault("tasks", [])
+        l["support"] = support_of(l["level"])
+        l["prereq"] = PREREQ.get(l["id"], [])
+        gp = os.path.join(ROOT, "src", "guides", "%02d.md" % l["id"])
+        l["guide"] = []
+        if os.path.exists(gp):
+            with open(gp, encoding="utf-8") as f:
+                text = f.read()
+            for chunk in re.split(r"^### ", text, flags=re.M)[1:]:
+                title, _, body = chunk.partition("\n")
+                l["guide"].append((title.strip(), body.strip()))
         l["dir"] = "%02d-%s" % (l["id"], l["slug"])
         for c in l.get("competencies", []):
             d, i = c.split(":")
@@ -102,6 +136,9 @@ def comp_names(l):
     return out
 
 
+by_id = {}
+
+
 def lab_readme(l, prev, nxt):
     lines = ["# Lab %02d · %s" % (l["id"], l["title"]), ""]
     lines.append("**Cấp độ %d · %s** · khoảng %d phút · môi trường: %s" % (
@@ -109,7 +146,18 @@ def lab_readme(l, prev, nxt):
     if l.get("competencies"):
         lines.append("")
         lines.append("Năng lực CKA: " + "; ".join(comp_names(l)))
+    sup = SUPPORT[l["support"]]
+    lines += ["", "Mức hỗ trợ: **%s**. %s" % (sup[1], sup[2])]
     lines += ["", "## Mục tiêu", "", l["goal"].strip(), ""]
+    if l["prereq"]:
+        lines += ["## Cần làm trước", ""]
+        if len(l["prereq"]) > 6:
+            lines += ["Mọi lab từ %02d tới %02d." % (l["prereq"][0], l["prereq"][-1]), ""]
+        else:
+            for pid in l["prereq"]:
+                p = by_id[pid]
+                lines.append("- [Lab %02d · %s](../%s/README.md)" % (p["id"], p["title"], p["dir"]))
+            lines.append("")
     if l.get("concepts"):
         lines += ["## Kiến thức cần nắm", "", l["concepts"].strip(), ""]
     lines += ["## Chuẩn bị", "", "```bash", "./lab start %d" % l["id"], "```", ""]
@@ -120,6 +168,11 @@ def lab_readme(l, prev, nxt):
         body = t.strip().replace("\n", "\n   ")
         lines.append("%d. %s" % (i, body))
         lines.append("")
+    if l["guide"]:
+        lines += ["## " + sup[0], ""]
+        for k, (t, b) in enumerate(l["guide"], 1):
+            head = "### Bước %d · %s" % (k, t) if l["support"] == "guided" else "### " + t
+            lines += [head, "", b, ""]
     if l["hints"]:
         lines += ["## Gợi ý", ""]
         for h in l["hints"]:
@@ -147,6 +200,7 @@ def lab_readme(l, prev, nxt):
 
 def main():
     labs = load()
+    by_id.update({l["id"]: l for l in labs})
     # clean generated dirs
     for d in glob.glob(os.path.join(ROOT, "labs", "*")):
         shutil.rmtree(d)
@@ -192,6 +246,7 @@ def main():
     # HTML guide
     data = {
         "levels": {str(k): v for k, v in LEVELS.items()},
+        "support": SUPPORT,
         "domains": {k: [v[0], v[1], v[2]] for k, v in DOMAINS.items()},
         "env": ENV_TEXT,
         "labs": [{
@@ -202,6 +257,8 @@ def main():
             "tasks": [md(t) for t in l["tasks"]],
             "hints": [[h.split("\n")[0].strip(), md("\n".join(h.split("\n")[1:]))] for h in l["hints"]],
             "solution": md(l["solution"]), "docs": l["docs"],
+            "support": l["support"], "prereq": l["prereq"],
+            "guide": [[t, md(b)] for t, b in l["guide"]],
         } for l in labs],
     }
     with open(os.path.join(ROOT, "tools", "guide.html"), encoding="utf-8") as f:

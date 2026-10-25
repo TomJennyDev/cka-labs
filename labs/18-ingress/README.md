@@ -4,9 +4,15 @@
 
 Năng lực CKA: Services & Networking › Ingress controller và Ingress
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Viết Ingress định tuyến theo host và path tới nhiều Service, gắn chứng chỉ TLS, và chọn IngressClass mặc định.
+
+## Cần làm trước
+
+- [Lab 15 · Service, EndpointSlice và kết nối giữa các Pod](../15-services/README.md)
 
 ## Kiến thức cần nắm
 
@@ -33,6 +39,30 @@ Lab chấm theo nội dung object, không cần controller. Muốn thấy traffi
 3. Tạo Ingress `docs` không ghi `ingressClassName`, host `docs.lab.local`, path `/guide` kiểu **Exact** tới `web:80`.
 
 4. Đặt IngressClass `lab-ingress` làm mặc định của cluster.
+
+## Cách tiếp cận
+
+### Câu 1 · Chứng chỉ và Secret TLS
+
+**Khung:** `openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout … -out … -subj "/CN=<host>"`, rồi `kubectl create secret tls --help`.
+
+**Tự kiểm:** `kubectl get secret shop-tls -n lab18` có TYPE `kubernetes.io/tls`.
+
+### Câu 2 · Ingress nhiều path + TLS
+
+**Khung:** `kubectl create ingress --help` có ví dụ cú pháp `--rule="host/path=service:port,tls=secret"`. Path kết thúc bằng `*` là kiểu Prefix.
+
+**Tự kiểm:** `kubectl describe ingress shop -n lab18` liệt kê 2 path, backend, và TLS. Backend `<error: endpoints not found>` nghĩa là Service hoặc cổng sai.
+
+### Câu 3 · Path kiểu Exact, không ghi class
+
+**Khung:** cùng lệnh, path không có `*` là Exact; bỏ cờ `--class`.
+
+### Câu 4 · IngressClass mặc định
+
+**Tra:** trang *Ingress*, mục *Default IngressClass*, nêu tên annotation.
+
+**Tự kiểm:** `kubectl get ingressclass` hiện `(default)`. Ingress `docs` không có class sẽ được controller mặc định nhận.
 
 ## Gợi ý
 

@@ -124,18 +124,33 @@ end_verify() {
     exit 1
   fi
 }
-# from inside a throwaway pod: can it reach url? (busybox wget, 3 s timeout)
-can_reach() { # can_reach <namespace> <url> [pod-labels]
-  local ns="$1" url="$2" labels="${3:-run=probe}" name="probe-$RANDOM"
+# retry <times> <command...>   re-run a flaky command (DNS reload, policy sync) a few times
+retry() { local n="$1" i; shift; for i in $(seq 1 "$n"); do "$@" && return 0; [ "$i" -lt "$n" ] && sleep 3; done; return 1; }
+
+# pod_run <namespace> <shell command> [pod-labels]
+# Runs the command in a throwaway busybox pod, waits for it to finish, prints its
+# output and returns its exit status. More reliable than `kubectl run --rm -i`,
+# which can lose output when the pod finishes before kubectl attaches.
+pod_run() {
+  local ns="$1" cmd="$2" labels="${3:-run=probe}" name="probe-$RANDOM" phase=""
   kubectl run "$name" -n "$ns" --image=busybox:1.36 --restart=Never --labels="$labels" \
-    --command -- sh -c "wget -qO- -T 3 '$url' >/dev/null" >/dev/null 2>&1 || return 1
-  local phase=""
-  for _ in $(seq 1 30); do
+    --command -- sh -c "$cmd" >/dev/null 2>&1 || return 1
+  for _ in $(seq 1 60); do
     phase="$(kubectl get pod "$name" -n "$ns" -o jsonpath='{.status.phase}' 2>/dev/null)"
-    [ "$phase" = Succeeded ] || [ "$phase" = Failed ] && break; sleep 1
+    { [ "$phase" = Succeeded ] || [ "$phase" = Failed ]; } && break; sleep 1
   done
+  kubectl logs "$name" -n "$ns" 2>/dev/null
   kubectl delete pod "$name" -n "$ns" --now >/dev/null 2>&1 || true
   [ "$phase" = Succeeded ]
+}
+# resolves <namespace> <dns name> <regex expected in nslookup output>
+resolves() { pod_run "$1" "nslookup '$2'" | grep -Eq "$3"; }
+
+# can_reach <namespace> <url> [pod-labels]   can a pod with these labels open url?
+# Tries 3 times inside the same pod: network policy agents need a moment to
+# learn a brand-new pod's IP.
+can_reach() {
+  pod_run "$1" "sleep 2; for i in 1 2 3; do wget -qO- -T 3 '$2' >/dev/null && exit 0; sleep 2; done; exit 1" "${3:-run=probe}" >/dev/null
 }
 
 # ---------- weighted exam scoring (mock exam) ----------

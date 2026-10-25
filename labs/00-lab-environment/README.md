@@ -2,6 +2,8 @@
 
 **Cấp độ 0 · Chuẩn bị môi trường** · khoảng 30 phút · môi trường: kind hoặc kubeadm
 
+Mức hỗ trợ: **Cầm tay chỉ việc**. Mỗi bước có lệnh, giải thích vì sao và kết quả bạn sẽ thấy. Lần đầu làm theo từng bước; lần hai đóng phần hướng dẫn lại và tự làm đề bài.
+
 ## Mục tiêu
 
 Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.35 để làm mọi bài lab, cấu hình terminal giống phòng thi và biết cách dùng `./lab`.
@@ -41,6 +43,94 @@ Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.35 đ�
 4. Ghi phiên bản kubelet của `$NODE1` (ví dụ `v1.35.8`) vào `~/cka-answers/00-kubelet.txt`. Lấy từ `kubectl get node`, không gõ tay.
 
 5. Vào shell của `$NODE1` bằng `./lab ssh $NODE1`, chạy `crictl ps` để thấy container trên node, rồi `exit`.
+
+## Hướng dẫn từng bước
+
+### Bước 1 · Dựng cluster 3 node
+
+`up.sh` gọi `kind create cluster` với file `env/kind/cluster.yaml` (1 control plane + 2 worker), rồi cài metrics-server cho `kubectl top` và HPA. Thành phần riêng của từng bài (ingress controller, Gateway API…) do `./lab start` của bài đó cài.
+
+```bash
+git clone https://github.com/TomJennyDev/cka-labs && cd cka-labs
+./env/kind/up.sh
+kubectl get nodes -o wide
+```
+
+> **Kết quả:** 3 node `cka-control-plane`, `cka-worker`, `cka-worker2` ở trạng thái `Ready`, cột VERSION là `v1.35.x`.
+
+Nếu node đứng `NotReady` quá 2 phút: `kubectl describe node <tên>` và đọc phần `Conditions`.
+
+### Bước 2 · Cấu hình terminal như phòng thi
+
+Phòng thi có sẵn `alias k=kubectl` và bash completion. Hai biến `$do` và `$now` giúp bạn gõ nhanh hơn rất nhiều ở các bài sau.
+
+```bash
+cat >> ~/.bashrc <<'EOF'
+alias k=kubectl
+source <(kubectl completion bash)
+complete -o default -F __start_kubectl k
+export do="--dry-run=client -o yaml"
+export now="--force --grace-period 0"
+EOF
+source ~/.bashrc
+k get no          # thử: gõ "k get no" rồi bấm Tab
+```
+
+> **Kết quả:** `k get nodes` chạy được; gõ `k get po -n kube-` rồi bấm Tab thì bash tự điền namespace.
+
+### Bước 3 · Kiểm tra công cụ và nạp tên node
+
+`./lab doctor` kiểm tra kubectl, docker, kind, helm và kết nối cluster. `./lab env` in ra 3 biến `CP`, `NODE1`, `NODE2`; `eval` biến chúng thành biến shell để dùng trong lệnh.
+
+```bash
+./lab doctor
+eval "$(./lab env)"
+echo "$CP $NODE1 $NODE2"
+```
+
+> **Kết quả:** `cka-control-plane cka-worker cka-worker2`.
+
+### Bước 4 · Ghi file đáp án đầu tiên
+
+Nhiều bài yêu cầu ghi kết quả ra file. Luôn để lệnh tự sinh nội dung thay vì gõ tay, tránh sai chính tả.
+
+```bash
+./lab start 0
+mkdir -p ~/cka-answers
+echo "$CP" > ~/cka-answers/00-cp.txt
+```
+
+### Bước 5 · Lấy một trường bằng jsonpath
+
+`kubectl get -o jsonpath` đọc thẳng một trường trong object. Muốn biết đường dẫn trường, xem `kubectl get node $NODE1 -o yaml` trước.
+
+```bash
+kubectl get node "$NODE1" -o yaml | grep -n kubeletVersion       # thấy nó nằm dưới status.nodeInfo
+kubectl get node "$NODE1" -o jsonpath='{.status.nodeInfo.kubeletVersion}' > ~/cka-answers/00-kubelet.txt
+cat ~/cka-answers/00-kubelet.txt
+```
+
+> **Kết quả:** một dòng như `v1.35.8`.
+
+### Bước 6 · Nhìn vào bên trong một node
+
+Mỗi node kind là một container. Bên trong có kubelet và containerd thật. `crictl` là công cụ nói chuyện với container runtime: đề thi hay dùng nó khi kubectl không dùng được.
+
+```bash
+./lab ssh "$NODE1"
+crictl ps               # các container đang chạy trên node này
+systemctl status kubelet --no-pager | head -5
+exit
+```
+
+> **Kết quả:** thấy container `kube-proxy`, `kindnet-cni`… và kubelet `active (running)`.
+
+### Bước 7 · Chấm bài
+
+```bash
+./lab check 0
+```
+Mọi dòng phải là ✔. Dòng nào ✘ có kèm giá trị hiện tại và giá trị cần có.
 
 ## Gợi ý
 

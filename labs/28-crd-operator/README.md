@@ -4,9 +4,15 @@
 
 Năng lực CKA: Cluster Architecture › CRD, cài và cấu hình Operator; Cluster Architecture › Interface mở rộng: CNI, CSI, CRI
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Mở rộng Kubernetes API bằng loại object của riêng bạn, có kiểm tra dữ liệu, tên viết tắt và cột hiển thị; hiểu Operator dùng CRD thế nào.
+
+## Cần làm trước
+
+- [Lab 04 · Sinh YAML nhanh và trích xuất bằng jsonpath](../04-yaml-jsonpath/README.md)
 
 ## Kiến thức cần nắm
 
@@ -30,6 +36,24 @@ Mở rộng Kubernetes API bằng loại object của riêng bạn, có kiểm t
 3. Thử tạo Backup `bad` với retention `100`. API phải từ chối; không được có object `bad`.
 
 4. Ghi các tên ngắn của resource thuộc group `ops.example.com` (theo `kubectl api-resources`) vào `~/cka-answers/28-short.txt`.
+
+## Quy trình tư duy
+
+### Quy trình
+
+1. Chép CRD mẫu từ trang *Extend the Kubernetes API with CustomResourceDefinitions*, rồi sửa từng phần: `group`, `names` (plural, singular, kind, shortNames), `scope`, `versions[]`.
+2. Schema OpenAPI nằm ở `versions[].schema.openAPIV3Schema`. Ràng buộc bắt buộc (`required`) và khoảng giá trị (`minimum`/`maximum`) viết ở đây.
+3. Cột hiển thị là `versions[].additionalPrinterColumns` với `jsonPath`.
+
+### Kiểm chứng
+
+- `kubectl get crd backups.ops.example.com`, rồi `kubectl api-resources --api-group=ops.example.com`.
+- Tạo một object hợp lệ và một object sai: API phải trả lỗi validation **ngay lúc tạo**.
+- `kubectl get bk -n lab28` có cột Schedule và Retention.
+
+### Liên hệ thực tế
+
+Operator = CRD + controller theo dõi object đó. Khi cài operator (cert-manager, Prometheus Operator…), bạn sẽ thấy CRD của nó trong `kubectl get crd`.
 
 ## Gợi ý
 

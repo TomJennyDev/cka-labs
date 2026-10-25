@@ -4,9 +4,15 @@
 
 Năng lực CKA: Workloads & Scheduling › Autoscaling; Troubleshooting › Theo dõi tài nguyên cluster và ứng dụng
 
+Mức hỗ trợ: **Cầm tay chỉ việc**. Mỗi bước có lệnh, giải thích vì sao và kết quả bạn sẽ thấy. Lần đầu làm theo từng bước; lần hai đóng phần hướng dẫn lại và tự làm đề bài.
+
 ## Mục tiêu
 
 Theo dõi CPU/RAM bằng `kubectl top`, tạo HPA có behavior, và sửa HPA hiện `<unknown>` vì Pod không khai báo requests.
+
+## Cần làm trước
+
+- [Lab 10 · Requests, limits, LimitRange và ResourceQuota](../10-resources-quota/README.md)
 
 ## Kiến thức cần nắm
 
@@ -29,6 +35,77 @@ Theo dõi CPU/RAM bằng `kubectl top`, tạo HPA có behavior, và sửa HPA hi
 3. HPA `api` đã có sẵn nhưng hiển thị `<unknown>`. Sửa Deployment `api` để HPA đọc được metric (CPU request `100m`).
 
 4. (Không chấm) Tạo tải để thấy HPA scale up: `kubectl run load -n lab11 --image=busybox:1.36 -- sh -c 'while true; do wget -qO- http://web >/dev/null; done'` rồi `kubectl get hpa -n lab11 -w`.
+
+## Hướng dẫn từng bước
+
+### Bước 1 · metrics-server là gì
+
+metrics-server thu CPU và memory từ kubelet của mỗi node 15 giây một lần, rồi phục vụ qua API `metrics.k8s.io`. Cả `kubectl top` và HPA đọc từ API này. Nó **không** lưu lịch sử; muốn có lịch sử thì cần Prometheus.
+
+```bash
+./lab start 11
+kubectl get apiservice v1beta1.metrics.k8s.io       # AVAILABLE True
+kubectl top nodes
+```
+
+### Bước 2 · Tìm Pod tốn memory nhất
+
+```bash
+kubectl top pod -n kube-system --sort-by=memory
+kubectl top pod -n kube-system --sort-by=memory --no-headers | head -1 | awk '{print $1}' > ~/cka-answers/11-top-pod.txt
+cat ~/cka-answers/11-top-pod.txt
+```
+
+> **Kết quả:** thường là `kube-apiserver-…` hoặc `etcd-…`. Thêm `--containers` để xem theo từng container.
+
+### Bước 3 · Tạo HPA
+
+HPA tính `số replica mong muốn = ceil(replica hiện tại × mức dùng hiện tại / mục tiêu)`. Mức dùng tính theo **phần trăm của CPU request**, nên Pod không có request thì HPA không tính được.
+
+```bash
+kubectl autoscale deploy web -n lab11 --min=2 --max=6 --cpu=50% $do > hpa.yaml
+cat hpa.yaml
+```
+
+Cờ cũ `--cpu-percent=50` vẫn chạy nhưng đã bị đánh dấu deprecated từ kubectl v1.34.
+
+### Bước 4 · Thêm behavior
+
+`kubectl autoscale` không có cờ cho `behavior`, phải sửa YAML. `stabilizationWindowSeconds` của scaleDown là số giây HPA chờ, sau khi tải giảm, trước khi giảm replica. Nó chống việc scale lên xuống liên tục.
+
+```bash
+vi hpa.yaml        # thêm vào spec:
+```
+```yaml
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 60
+```
+```bash
+kubectl apply -f hpa.yaml
+kubectl get hpa -n lab11
+```
+
+> **Kết quả:** `web` có MINPODS 2, MAXPODS 6; Deployment `web` lên 2 replica.
+
+### Bước 5 · Sửa HPA hiển thị unknown
+
+```bash
+kubectl get hpa api -n lab11                         # TARGETS cpu: <unknown>/70%
+kubectl describe hpa api -n lab11 | grep -i -A3 warning
+kubectl set resources deploy api -n lab11 --requests=cpu=100m
+```
+
+> **Kết quả:** event `missing request for cpu`. Sau khi thêm request và chờ khoảng 1 phút, TARGETS hiện dạng `0%/70%`.
+
+### Bước 6 · Xem HPA scale (không chấm)
+
+```bash
+kubectl run load -n lab11 --image=busybox:1.36 -- sh -c 'while true; do wget -qO- http://web >/dev/null; done'
+kubectl get hpa web -n lab11 -w          # chờ 1–2 phút
+kubectl delete pod load -n lab11
+./lab check 11
+```
 
 ## Gợi ý
 

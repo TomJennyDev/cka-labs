@@ -4,9 +4,15 @@
 
 Năng lực CKA: Services & Networking › CoreDNS; Troubleshooting › Troubleshoot Service và networking
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Hiểu tên DNS của Service và Pod, đọc cấu hình DNS của Pod, tùy chỉnh `dnsPolicy`, và sửa Corefile của CoreDNS để phân giải tên nội bộ của công ty.
+
+## Cần làm trước
+
+- [Lab 15 · Service, EndpointSlice và kết nối giữa các Pod](../15-services/README.md)
 
 ## Kiến thức cần nắm
 
@@ -29,6 +35,36 @@ Hiểu tên DNS của Service và Pod, đọc cấu hình DNS của Pod, tùy ch
 3. Tạo Pod `custom-dns` (image `busybox:1.36`, lệnh `sleep 3600`) **chỉ** dùng nameserver `1.1.1.1`, search domain `lab16.svc.cluster.local`, option `ndots: 2`.
 
 4. Công ty có máy `legacy.corp.internal` ở `10.10.10.10` mà DNS công cộng không biết. Sửa CoreDNS để mọi Pod phân giải được tên này, không làm hỏng DNS của cluster.
+
+## Cách tiếp cận
+
+### Câu 1 · DNS Service và cluster domain
+
+**Khung:** Service DNS nằm trong `kube-system`, tên lịch sử là `kube-dns`. Cluster domain nằm ở hai chỗ: Corefile (`kubernetes <domain> …`) và cấu hình kubelet (`clusterDomain`). Có thể xem nhanh trong `/etc/resolv.conf` của một Pod bất kỳ.
+
+### Câu 2 · Pod không phân giải được tên Service
+
+**Tra:** trang *DNS for Services and Pods*, mục *Pod's DNS Policy*. Đọc kỹ ý nghĩa của `Default`: nó **không** phải giá trị mặc định.
+
+**Khung:** `kubectl exec client -n lab16 -- cat /etc/resolv.conf`, so với Pod khác. Trường này không sửa được trên Pod đang chạy: xuất YAML, sửa, `kubectl replace --force -f`.
+
+**Tự kiểm:** `kubectl exec client -n lab16 -- nslookup web.lab16`.
+
+### Câu 3 · dnsPolicy None + dnsConfig
+
+**Tra:** cùng trang, mục *Pod's DNS Config*, có YAML mẫu.
+
+**Tự kiểm:** `kubectl exec custom-dns -n lab16 -- cat /etc/resolv.conf` có đúng 3 dòng `nameserver`, `search`, `options`.
+
+### Câu 4 · Thêm zone vào CoreDNS
+
+**Tra:** trang *Customizing DNS Service*, có ví dụ server block cho một domain riêng. Plugin `hosts` của CoreDNS khai báo tên → IP tĩnh.
+
+**Khung:** `kubectl -n kube-system edit cm coredns`, thêm một server block `corp.internal:53 { … }` **ở ngoài** block `.:53`, rồi `rollout restart` CoreDNS.
+
+**Tự kiểm:** `kubectl -n kube-system logs deploy/coredns` không có lỗi; `nslookup legacy.corp.internal` từ một Pod mới.
+
+**Bẫy:** sai một dấu ngoặc là CoreDNS CrashLoop và **cả cluster** mất DNS. Luôn sao lưu ConfigMap trước khi sửa: `kubectl get cm coredns -n kube-system -o yaml > coredns.bak.yaml`.
 
 ## Gợi ý
 

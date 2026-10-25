@@ -4,9 +4,15 @@
 
 Năng lực CKA: Cluster Architecture › Control plane high-availability; Cluster Architecture › Tạo và quản lý cluster bằng kubeadm
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Biến cluster một control plane thành ba control plane với etcd xếp chồng (stacked), hiểu vai trò của endpoint chung và load balancer.
+
+## Cần làm trước
+
+- [Lab 30 · Nâng cấp cluster kubeadm 1.34 → 1.35](../30-kubeadm-upgrade/README.md)
 
 ## Kiến thức cần nắm
 
@@ -34,6 +40,25 @@ Lab dùng tên `k8s-api` trong `/etc/hosts` trỏ về cp-1 thay cho load balanc
 2. Join `cp-2` và `cp-3` làm control plane.
 
 3. Ghi số member etcd vào `~/cka-answers/32-etcd-members.txt`, và tên node đang giữ Lease `kube-scheduler` vào `~/cka-answers/32-leader.txt`.
+
+## Quy trình tư duy
+
+### Quy trình
+
+1. **Điều kiện tiên quyết.** Cluster được init với `--control-plane-endpoint` (lab 01), và node mới đã chuẩn bị như worker (runtime, gói kube*).
+2. **Chứng chỉ dùng chung.** Control plane mới cần CA và khóa của cluster. `--upload-certs` đẩy chúng lên Secret tạm (hết hạn sau 2 giờ) và trả về certificate key.
+3. **Lệnh join** cho control plane = lệnh join của worker + `--control-plane --certificate-key <key>` + địa chỉ quảng bá của node mới.
+4. Join **lần lượt** từng node, chờ node trước Ready rồi mới làm node sau. etcd thêm member từng cái một.
+
+### Kiểm chứng
+
+- `kubectl get nodes` có 3 node `control-plane`.
+- `etcdctl member list` (chạy trong Pod etcd, với các cờ TLS) có 3 member `started`.
+- Leader election: `kubectl get lease -n kube-system`. Trường `holderIdentity` cho biết node nào đang giữ.
+
+### Liên hệ thực tế
+
+Ba control plane chịu được mất **một** node: etcd cần quá bán số member (2/3). Hai control plane không tốt hơn một: mất một node là etcd mất quorum.
 
 ## Gợi ý
 

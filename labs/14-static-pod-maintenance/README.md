@@ -4,9 +4,15 @@
 
 Năng lực CKA: Workloads & Scheduling › Admission và scheduling của Pod; Workloads & Scheduling › Primitive cho ứng dụng tự phục hồi; Troubleshooting › Troubleshoot cluster và node
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Chạy Pod không qua scheduler (static pod, `nodeName`), và đưa một node vào bảo trì an toàn với PodDisruptionBudget, `cordon` và `drain`.
+
+## Cần làm trước
+
+- [Lab 12 · nodeSelector, node affinity, taint và toleration](../12-node-selection/README.md)
 
 ## Kiến thức cần nắm
 
@@ -29,6 +35,44 @@ Chạy Pod không qua scheduler (static pod, `nodeName`), và đưa một node v
 3. Deployment `web` trong `lab14` có 3 replica. Tạo PodDisruptionBudget `web-pdb` đảm bảo luôn còn ít nhất 2 Pod `app=web`.
 
 4. Đưa `$NODE1` vào bảo trì: không nhận Pod mới và mọi Pod thường đã dời đi. Để nguyên trạng thái này khi chấm; `./lab reset 14` sẽ đưa node trở lại.
+
+## Cách tiếp cận
+
+### Câu 1 · Static pod
+
+Static pod do **kubelet** đọc từ một thư mục trên node, không qua API server. API server chỉ thấy một "mirror pod" tên `<tên>-<node>`.
+
+**Tra:** cấu hình kubelet ở `/var/lib/kubelet/config.yaml`, trường `staticPodPath`. Nếu không có file đó, xem cờ kubelet: `ps aux | grep kubelet`.
+
+**Khung:** sinh YAML bằng `kubectl run … $do` ở máy bạn, `./lab ssh $NODE1`, rồi ghi file vào thư mục tìm được.
+
+**Tự kiểm:** `kubectl get pods -A | grep static-web`.
+
+**Bẫy:** xóa mirror pod bằng kubectl thì nó sống lại ngay. Muốn xóa static pod thì xóa file trên node.
+
+### Câu 2 · Lập lịch thủ công
+
+Scheduler chỉ làm một việc: điền trường `spec.nodeName`. Tự điền trường này thì Pod bỏ qua scheduler.
+
+**Khung:** YAML Pod + `nodeName: <tên node>` trong `spec`.
+
+**Bẫy:** `nodeName` phải có **khi tạo** Pod. Pod đã Pending thì không sửa được, phải xóa đi tạo lại.
+
+### Câu 3 · PodDisruptionBudget
+
+**Khung:** `kubectl create pdb --help` (`--selector`, `--min-available`).
+
+**Tự kiểm:** `kubectl get pdb -n lab14`. Cột `ALLOWED DISRUPTIONS` là 1 (3 Pod − 2 tối thiểu).
+
+### Câu 4 · Bảo trì node
+
+`cordon` chỉ chặn Pod mới. `drain` = cordon + đuổi Pod đang chạy (có tôn trọng PDB).
+
+**Khung:** `kubectl drain <node>` cùng các cờ cho DaemonSet và emptyDir. Đọc thông báo lỗi: nó nói đúng cờ còn thiếu.
+
+**Tự kiểm:** `kubectl get nodes` thấy `SchedulingDisabled`; `kubectl get pods -A -o wide | grep $NODE1` chỉ còn Pod của DaemonSet và static pod.
+
+**Bẫy:** Pod không có controller (Pod trần) chặn drain. Đọc kỹ thông báo trước khi thêm `--force`, vì Pod đó sẽ mất hẳn.
 
 ## Gợi ý
 

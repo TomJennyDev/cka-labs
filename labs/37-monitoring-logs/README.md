@@ -4,9 +4,16 @@
 
 Năng lực CKA: Troubleshooting › Theo dõi tài nguyên cluster và ứng dụng; Troubleshooting › Quản lý và đánh giá output, log của container
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Trả lời nhanh các câu hỏi "cái gì đang ngốn CPU", "vì sao nó chết", "log lần trước nói gì" bằng `kubectl top`, event và log, và ghi đáp án ra file đúng định dạng.
+
+## Cần làm trước
+
+- [Lab 11 · metrics-server và HorizontalPodAutoscaler](../11-hpa-metrics/README.md)
+- [Lab 33 · Troubleshooting ứng dụng: sáu Deployment hỏng](../33-troubleshoot-apps/README.md)
 
 ## Kiến thức cần nắm
 
@@ -30,6 +37,24 @@ Trả lời nhanh các câu hỏi "cái gì đang ngốn CPU", "vì sao nó ch�
 3. Pod `multi` có hai container. Đếm số dòng chứa `upstream timeout` trong log của container `proxy`, ghi vào `~/cka-answers/37-timeouts.txt`.
 
 4. Ghi `reason` của event cảnh báo mới nhất liên quan tới `crashy` vào `~/cka-answers/37-event.txt`.
+
+## Quy trình tư duy
+
+### Quy trình
+
+Mỗi câu hỏi ứng với một nguồn dữ liệu. Chọn đúng nguồn trước, rồi lọc bằng cờ có sẵn của kubectl trước khi dùng `grep`/`awk`.
+
+| Câu hỏi | Nguồn |
+|---|---|
+| Ai dùng nhiều CPU/memory | `kubectl top` (`--sort-by`, `--containers`) |
+| Container chết vì sao | `lastState.terminated` của `containerStatuses` (reason, exitCode) |
+| Log trước khi restart | `kubectl logs --previous` |
+| Log của một container trong nhiều | `kubectl logs -c` |
+| Chuyện gì đã xảy ra với object | `kubectl events --for` hoặc `get events --field-selector`, sắp theo thời gian |
+
+### Kiểm chứng
+
+Mọi đáp án phải lấy bằng lệnh, đừng đếm bằng mắt. Chạy lại lệnh lần hai để chắc kết quả ổn định (số dòng log tăng theo thời gian).
 
 ## Gợi ý
 

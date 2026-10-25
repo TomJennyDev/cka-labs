@@ -4,9 +4,16 @@
 
 Năng lực CKA: Workloads & Scheduling › Admission và scheduling của Pod; Cluster Architecture › Quản lý RBAC
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Bắt một namespace tuân thủ chuẩn bảo mật `restricted`, sửa workload cũ cho đạt chuẩn, và chạy container với filesystem chỉ đọc.
+
+## Cần làm trước
+
+- [Lab 07 · Liveness, readiness và startup probe](../07-probes/README.md)
+- [Lab 23 · RBAC với Role, ClusterRole và ServiceAccount](../23-rbac/README.md)
 
 ## Kiến thức cần nắm
 
@@ -28,6 +35,38 @@ Bắt một namespace tuân thủ chuẩn bảo mật `restricted`, sửa worklo
 2. Deployment `api` trong `lab25` đang chạy với root. Sau khi bật enforce, nó không tạo được Pod mới. Sửa `api` đạt chuẩn `restricted`, chạy với UID `1000`, rồi rollout lại để Pod mới được tạo.
 
 3. Tạo Pod `secure` (`busybox:1.36`, `sleep 3600`) đạt chuẩn `restricted`, root filesystem **chỉ đọc**, và ghi được vào `/tmp` nhờ một emptyDir.
+
+## Cách tiếp cận
+
+### Câu 1 · Bật Pod Security Admission
+
+PSA đọc label của namespace: `pod-security.kubernetes.io/<mode>=<level>`. Có ba mode:
+
+- `enforce`: từ chối Pod vi phạm.
+- `warn`: in cảnh báo.
+- `audit`: ghi vào audit log.
+
+**Tra:** trang *Enforce Pod Security Standards with Namespace Labels*.
+
+**Tự kiểm:** `kubectl get ns lab25 --show-labels`.
+
+### Câu 2 · Đưa Deployment đạt chuẩn restricted
+
+Enforce chỉ chặn Pod **mới**. Pod đang chạy không bị đuổi, nên Deployment trông vẫn ổn cho tới lần rollout kế tiếp.
+
+**Khung:** `kubectl rollout restart deploy api -n lab25`, rồi xem lý do bị từ chối ở `kubectl describe rs -n lab25` hoặc `kubectl get events -n lab25`. Thông báo liệt kê **từng** trường còn thiếu.
+
+**Tra:** trang *Pod Security Standards*, bảng mức *Restricted*. Bốn trường gần như luôn cần là `runAsNonRoot`, `seccompProfile`, `allowPrivilegeEscalation: false`, `capabilities.drop: [ALL]`.
+
+**Tự kiểm:** thử nhanh mà không tạo gì: `kubectl apply -f api.yaml --dry-run=server`. Server áp dụng PSA và in cảnh báo nếu còn thiếu.
+
+### Câu 3 · Root filesystem chỉ đọc
+
+**Khung:** `securityContext.readOnlyRootFilesystem: true` ở cấp container, và một emptyDir gắn vào `/tmp`.
+
+**Tự kiểm:** `kubectl exec secure -n lab25 -- touch /x` phải lỗi; `touch /tmp/x` phải được.
+
+**Bẫy:** có trường chỉ đặt được ở cấp **Pod** (`fsGroup`), có trường chỉ đặt được ở cấp **container** (`capabilities`, `readOnlyRootFilesystem`). Xem bằng `kubectl explain pod.spec.securityContext` và `kubectl explain pod.spec.containers.securityContext`.
 
 ## Gợi ý
 

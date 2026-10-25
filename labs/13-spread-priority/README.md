@@ -4,9 +4,15 @@
 
 Năng lực CKA: Workloads & Scheduling › Admission và scheduling của Pod
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Tách replica ra các node khác nhau để chịu lỗi, chia đều Pod theo topology, và gán độ ưu tiên cho workload quan trọng.
+
+## Cần làm trước
+
+- [Lab 12 · nodeSelector, node affinity, taint và toleration](../12-node-selection/README.md)
 
 ## Kiến thức cần nắm
 
@@ -29,6 +35,34 @@ Tách replica ra các node khác nhau để chịu lỗi, chia đều Pod theo t
 3. Cluster có một PriorityClass là mặc định toàn cục. Ghi tên của nó vào `~/cka-answers/13-default-pc.txt`.
 
 4. Tạo PriorityClass `critical-app` với value `1000000`, không phải mặc định, mô tả `payment`. Tạo Pod `vip` (`nginx:1.27`) dùng nó.
+
+## Cách tiếp cận
+
+### Câu 1 · Pod anti-affinity bắt buộc
+
+**Tra:** trang *Assigning Pods to Nodes*, mục *Inter-pod affinity and anti-affinity*.
+
+**Khung:** trong `template.spec.affinity.podAntiAffinity.requiredDuringSchedulingIgnoredDuringExecution[]` cần hai trường: `topologyKey` (miền: mỗi node là một miền) và `labelSelector` (tránh Pod nào: chính các Pod `app=web`).
+
+**Tự kiểm:** `kubectl get pods -n lab13 -l app=web -o wide`. Hai Pod nằm ở hai NODE khác nhau. Thử `kubectl scale … --replicas=3`: Pod thứ 3 phải Pending, rồi scale lại về 2.
+
+### Câu 2 · Topology spread
+
+**Tra:** trang *Pod Topology Spread Constraints*. Các trường cần có: `maxSkew`, `topologyKey`, `whenUnsatisfiable`, `labelSelector`.
+
+**Tự kiểm:** `kubectl get pods -n lab13 -l app=spread -o wide`. Phải có 4 Pod Running, 2 + 2.
+
+**Bẫy:** nếu chỉ 2 Pod chạy và 2 Pending, đọc `kubectl describe pod` của Pod Pending, rồi xem lại trong trang tài liệu trường nào quyết định node **có taint** có được tính là một miền không.
+
+### Câu 3 · PriorityClass mặc định
+
+**Khung:** `kubectl get priorityclass`, rồi xem cột `GLOBAL-DEFAULT`.
+
+### Câu 4 · Tạo và dùng PriorityClass
+
+**Khung:** `kubectl create priorityclass --help` có đủ cờ: value, description, global-default. Pod dùng nó qua trường `spec.priorityClassName`.
+
+**Tự kiểm:** `kubectl get pod vip -n lab13 -o jsonpath='{.spec.priority}'`. Admission controller đã điền số `1000000` vào Pod.
 
 ## Gợi ý
 

@@ -64,6 +64,18 @@ Bài nào yêu cầu ghi đáp án ra file thì ghi vào `~/cka-answers/` (đổ
 | 8 | Troubleshooting | 33–37 |
 | 9 | Thi thử | 38 |
 
+### Hướng dẫn giảm dần
+
+Mức hướng dẫn trong mỗi bài giảm dần theo cấp độ, để bạn đi từ làm theo tới tự làm như trong phòng thi:
+
+| Cấp | Mức hỗ trợ | Trong mỗi bài có |
+|---|---|---|
+| 0–2 (lab 00–11) | **Cầm tay chỉ việc** | *Hướng dẫn từng bước*: lệnh, giải thích vì sao, kết quả sẽ thấy |
+| 3–6 (lab 12–25) | **Dẫn hướng** | *Cách tiếp cận* cho từng câu: tra ở đâu, khung lệnh, cách tự kiểm, bẫy hay gặp. Không có đáp án |
+| 7–9 (lab 26–38) | **Tự lực** | *Quy trình tư duy*: cách làm việc và cách kiểm chứng, chi tiết tự tra như khi thi |
+
+Mỗi bài cũng ghi **Cần làm trước** để bạn biết nên học bài nào trước. Gợi ý (`./lab hint`) và lời giải (`./lab solution`) luôn có cho mọi bài.
+
 Gợi ý nhịp học 6 tuần: tuần 1 cấp 0–1, tuần 2 cấp 2, tuần 3 cấp 3–4, tuần 4 cấp 5–6, tuần 5 cấp 7–8, tuần 6 làm lại các bài sai và thi thử 2 lần.
 
 ## Danh sách bài

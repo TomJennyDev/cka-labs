@@ -6,6 +6,8 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../lib/common.sh"
 detect_nodes
 kubectl delete ns lab16 --ignore-not-found --wait=false >/dev/null
 if [ -s "$ANS/.16-coredns-backup.yaml" ]; then
-  kubectl replace -f "$ANS/.16-coredns-backup.yaml" >/dev/null 2>&1 && kubectl -n kube-system rollout restart deploy coredns >/dev/null 2>&1
+  kubectl replace -f "$ANS/.16-coredns-backup.yaml" >/dev/null 2>&1 \
+    && kubectl -n kube-system rollout restart deploy coredns >/dev/null 2>&1 \
+    && kubectl -n kube-system rollout status deploy coredns --timeout=120s >/dev/null 2>&1
 fi
 rm -f "$ANS"/16-* "$ANS/.16-coredns-backup.yaml"

@@ -23,7 +23,7 @@ spec:
   - {name: c, image: busybox:1.36, command: ["sleep", "3600"]}
 EOF
 kubectl -n kube-system get cm coredns -o jsonpath='{.data.Corefile}' > /tmp/Corefile
-printf 'corp.internal:53 {\n    errors\n    hosts {\n        10.10.10.10 legacy.corp.internal\n    }\n}\n' >> /tmp/Corefile
+grep -q '^corp.internal:53' /tmp/Corefile || printf 'corp.internal:53 {\n    errors\n    hosts {\n        10.10.10.10 legacy.corp.internal\n    }\n}\n' >> /tmp/Corefile
 kubectl -n kube-system create cm coredns --from-file=Corefile=/tmp/Corefile --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n kube-system rollout restart deploy coredns
 kubectl -n kube-system rollout status deploy coredns --timeout=120s

@@ -4,9 +4,15 @@
 
 Năng lực CKA: Cluster Architecture › Quản lý RBAC
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Cấp đúng và đủ quyền theo nguyên tắc tối thiểu cho ServiceAccount, user và group; kiểm tra bằng `kubectl auth can-i`; tìm và gỡ một quyền thừa.
+
+## Cần làm trước
+
+- [Lab 02 · kubectl, namespace, context và Kubernetes API](../02-kubectl-api/README.md)
 
 ## Kiến thức cần nắm
 
@@ -32,6 +38,47 @@ Cấp đúng và đủ quyền theo nguyên tắc tối thiểu cho ServiceAccou
 4. ServiceAccount `auditor` (tạo mới trong `lab23`) được quyền của ClusterRole có sẵn `view`, nhưng **chỉ trong** namespace `lab23`.
 
 5. ServiceAccount `legacy-bot` trong `lab23` đang xóa được Secret, việc này không được phép. Tìm binding cấp quyền đó, ghi tên binding vào `~/cka-answers/23-binding.txt`, rồi xóa binding.
+
+## Cách tiếp cận
+
+### Cách đọc RBAC
+
+Mọi quyền đều trả lời câu hỏi: **ai** (subject: User, Group, ServiceAccount) được làm **gì** (verb) trên **cái gì** (resource, apiGroup), **ở đâu** (namespace hay toàn cluster).
+
+- **Role/ClusterRole** định nghĩa "gì trên cái gì".
+- **RoleBinding/ClusterRoleBinding** gắn nó cho "ai" và quyết định "ở đâu".
+
+Một RoleBinding có thể trỏ tới một ClusterRole: khi đó quyền chỉ có hiệu lực trong namespace của binding.
+
+### Câu 1 · Role nhiều rule
+
+**Khung:** `kubectl create role --help`. Một lệnh chỉ tạo một bộ verb cho mọi resource, nên rule thứ hai thêm bằng `edit` hoặc tạo YAML.
+
+**Tra:** `kubectl api-resources | grep -E 'deployments|pods'` để biết apiGroup: `apps` cho Deployment, `""` cho Pod.
+
+**Tự kiểm:** `kubectl auth can-i delete deployments -n lab23 --as=system:serviceaccount:lab23:deployer` trả về yes; với `delete pods` trả về no.
+
+### Câu 2 · ClusterRole cho group
+
+**Tự kiểm:** `kubectl auth can-i list nodes --as=someone --as-group=ops-team`.
+
+### Câu 3 · Log của Pod là subresource
+
+**Khung:** quyền đọc log là resource `pods/log`.
+
+**Tự kiểm:** `kubectl auth can-i get pods/log -n lab23 --as=jane`.
+
+### Câu 4 · ClusterRole dùng trong một namespace
+
+**Khung:** RoleBinding (không phải ClusterRoleBinding) + `--clusterrole=view`.
+
+**Tự kiểm:** `can-i list pods -n lab23` trả về yes; `-n default` trả về no.
+
+### Câu 5 · Tìm binding thừa
+
+**Khung:** liệt kê `rolebinding,clusterrolebinding -A -o wide` rồi `grep` tên ServiceAccount. Cột SERVICEACCOUNTS cho biết binding gắn cho ai.
+
+**Tự kiểm:** `kubectl auth can-i delete secrets -n lab23 --as=system:serviceaccount:lab23:legacy-bot` trả về no.
 
 ## Gợi ý
 

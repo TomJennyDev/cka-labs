@@ -4,9 +4,15 @@
 
 Năng lực CKA: Cluster Architecture › Tạo và quản lý cluster bằng kubeadm; Troubleshooting › Troubleshoot thành phần control plane; Cluster Architecture › Interface mở rộng: CNI, CSI, CRI
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Biết cấu hình của từng thành phần nằm ở đâu, đọc và sửa cờ của static pod an toàn, gia hạn chứng chỉ, và đọc cấu hình kubelet.
+
+## Cần làm trước
+
+- [Lab 29 · Sao lưu và khôi phục etcd](../29-etcd-backup-restore/README.md)
 
 ## Kiến thức cần nắm
 
@@ -30,6 +36,21 @@ Biết cấu hình của từng thành phần nằm ở đâu, đọc và sửa 
 3. Gia hạn chứng chỉ `apiserver` bằng kubeadm và cho kube-apiserver dùng chứng chỉ mới.
 
 4. Bật thêm admission plugin `AlwaysPullImages` cho kube-apiserver, giữ nguyên các plugin đang bật.
+
+## Quy trình tư duy
+
+### Quy trình
+
+1. **Biết cấu hình nằm ở đâu.** Control plane nằm trong `/etc/kubernetes/manifests/*.yaml` (cờ dòng lệnh). Kubelet nằm trong `/var/lib/kubelet/config.yaml` và `/var/lib/kubelet/kubeadm-flags.env`. Chứng chỉ nằm trong `/etc/kubernetes/pki`.
+2. **Đọc trước khi sửa.** `grep -- '--<cờ>' <manifest>` để biết giá trị hiện tại; với danh sách như admission plugin thì **thêm vào**, đừng thay thế.
+3. **Sao lưu ra ngoài thư mục manifests** trước khi sửa: `cp kube-apiserver.yaml /root/`. Kubelet đọc **mọi** file trong thư mục manifests, kể cả bản sao lưu.
+4. **Áp dụng thay đổi.** Sửa static pod manifest thì kubelet tự tạo lại Pod. Chứng chỉ mới không làm manifest đổi, nên phải tự buộc kube-apiserver khởi động lại.
+
+### Kiểm chứng
+
+- `kubeadm certs check-expiration` thấy ngày hết hạn mới.
+- So sánh chứng chỉ API server **đang phục vụ** với file trên đĩa (`openssl s_client` lấy chứng chỉ từ cổng 6443).
+- `kubectl -n kube-system get pod kube-apiserver-<node> -o yaml | grep admission` thấy plugin mới.
 
 ## Gợi ý
 

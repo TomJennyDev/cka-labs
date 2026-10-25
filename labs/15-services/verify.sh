@@ -14,7 +14,7 @@ expect "api-svc có 2 endpoint" "$(jp endpointslices -n lab15 -l kubernetes.io/s
 check "Gọi được http://api-svc.lab15" can_reach lab15 http://api-svc.lab15
 expect "Deployment api không bị sửa (vẫn 2 replica nginx:1.27)" "$(jp deploy api -n lab15 '{.spec.replicas}:{.spec.template.spec.containers[0].image}')" "2:nginx:1.27"
 expect "db là headless" "$(jp svc db -n lab15 '{.spec.clusterIP}')" "None"
-check "db-0.db.lab15.svc.cluster.local phân giải được" bash -c "kubectl run dns-\$RANDOM -n lab15 --image=busybox:1.36 --rm -i --restart=Never --command -- nslookup db-0.db.lab15.svc.cluster.local 2>/dev/null | grep -q 'Address.*10\.'"
+check "db-0.db.lab15.svc.cluster.local phân giải được" retry 3 resolves lab15 db-0.db.lab15.svc.cluster.local 'Address.*10\.'
 check "legacy-db không có selector" test -z "$(jp svc legacy-db -n lab15 '{.spec.selector}')"
 expect "EndpointSlice legacy-db-1 trỏ 10.0.5.20:5432" "$(jp endpointslice legacy-db-1 -n lab15 '{.endpoints[0].addresses[0]}:{.ports[0].port}')" "10.0.5.20:5432"
 expect "legacy-db-1 gắn với Service legacy-db" "$(jp endpointslice legacy-db-1 -n lab15 '{.metadata.labels.kubernetes\.io/service-name}')" "legacy-db"

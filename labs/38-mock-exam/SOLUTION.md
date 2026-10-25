@@ -15,7 +15,7 @@ kubectl create cm exam-cfg -n mock-a --from-literal=LEVEL=hard
 kubectl create secret generic exam-sec -n mock-a --from-literal=token=abc123
 #   cfg-pod: env LEVEL ← configMapKeyRef exam-cfg/LEVEL, TOKEN ← secretKeyRef exam-sec/token
 # 4
-kubectl autoscale deploy frontend -n mock-a --min=3 --max=6 --cpu-percent=60
+kubectl autoscale deploy frontend -n mock-a --min=3 --max=6 --cpu=60%
 # 5  gpu-pod: tolerations exam=true:NoSchedule + nodeSelector exam-role: gpu
 # 6  logger: initContainers[tail] restartPolicy: Always, emptyDir chung tại /var/log
 # 7

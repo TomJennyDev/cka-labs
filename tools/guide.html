@@ -105,7 +105,7 @@ p{margin:0 0 10px}
 .labno{font:800 15px var(--f-mono);color:var(--accent)}
 .sec{display:flex;flex-direction:column;gap:10px}
 .sec>h2{display:flex;align-items:baseline;gap:10px}
-.sec>h2 small{font:600 12px var(--f-mono);color:var(--muted);letter-spacing:.04em}
+.sec h2 small{font:600 12px var(--f-mono);color:var(--muted);letter-spacing:.04em}
 .tasks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;counter-reset:t}
 .task{display:grid;grid-template-columns:30px minmax(0,1fr);gap:12px;align-items:start;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;counter-increment:t}
 .task label{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer}
@@ -159,6 +159,40 @@ details.hint>div{padding:0 0 12px}
 .tbl td,.tbl th{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
 .tbl th{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .empty{color:var(--muted);font-size:14px;padding:8px}
+
+/* guided learning: support fades from walkthrough → approach → method */
+.md blockquote{margin:10px 0;padding:9px 13px;border-left:3px solid var(--ok);background:var(--ok-soft);border-radius:0 7px 7px 0}
+.md blockquote p{margin:0}
+.md h3{font-size:16px;margin:14px 0 6px}
+.sup{display:inline-flex;align-items:center;gap:6px;font:600 11.5px/1 var(--f-mono);padding:5px 9px;border-radius:999px;border:1px solid}
+.sup::before{content:"";width:22px;height:6px;border-radius:3px;background:linear-gradient(90deg,currentColor var(--f),transparent var(--f)),var(--line)}
+.sup.guided{--f:100%;color:var(--ok);border-color:var(--ok);background:var(--ok-soft)}
+.sup.scaffold{--f:60%;color:var(--accent);border-color:var(--accent);background:var(--accent-soft)}
+.sup.solo{--f:25%;color:var(--warn);border-color:var(--warn);background:var(--warn-soft)}
+.prereq{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.prereq .lbl{font-size:13px;color:var(--muted);margin-right:4px}
+.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:12px;counter-reset:s}
+.step{background:var(--paper);border:1px solid var(--line);border-radius:10px;counter-increment:s;min-width:0}
+.step>header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--line)}
+.step>header::before{content:counter(s);flex:none;width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 12.5px var(--f-mono);background:var(--accent-soft);color:var(--accent)}
+.step>header h3{margin:0;font-size:16px;flex:1;min-width:0}
+.step>header label{display:flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer;white-space:nowrap}
+.step>header input{width:17px;height:17px;accent-color:var(--ok)}
+.step>.md{padding:14px 16px}
+.step.done{border-color:var(--ok)}
+.step.done>header::before{content:"✓";background:var(--ok);color:var(--paper)}
+.method{display:flex;flex-direction:column;gap:14px}
+.method>div{border-left:3px solid var(--warn);padding-left:14px}
+.method h3{margin:0 0 6px}
+.modes{display:grid;gap:12px;grid-template-columns:minmax(0,1fr)}
+@media (min-width:760px){.modes{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.mode{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:8px}
+.mode h3{margin:0}
+.mode .sup{align-self:flex-start}
+.mode p{margin:0;font-size:13.5px;color:var(--muted)}
+.mode .lv{font:600 12px var(--f-mono);color:var(--ink)}
+.fade{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--ok) 0%,var(--accent) 45%,var(--warn) 80%,var(--line) 100%)}
+.fade-l{display:flex;justify-content:space-between;font:600 11px var(--f-mono);color:var(--muted);margin-top:6px}
 @media (prefers-reduced-motion: reduce){*{transition:none !important}}
 </style>
 
@@ -192,8 +226,10 @@ const store = {
 };
 let state = store.get("state", { done: {}, tasks: {} });
 const save = () => store.set("state", state);
+state.steps = state.steps || {}; state.guideHidden = state.guideHidden || {};
 const labStatus = id => state.done[id] ? "done" : Object.keys(state.tasks).some(k => k.startsWith(id + ":") && state.tasks[k]) ? "wip" : "";
 const byId = id => DATA.labs.find(l => l.id === id);
+const supTag = k => '<span class="sup ' + k + '">' + esc(DATA.support[k][1]) + "</span>";
 const compName = c => { const [d, i] = c.split(":"); return DATA.domains[d][2][+i]; };
 
 function copyBtn(wrap, getText) {
@@ -241,10 +277,12 @@ function home() {
   h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.35</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
   h += '<div class="code"><pre>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh        # cluster 3 node v1.35\n./lab start 7           # dựng tình huống\n./lab check 7           # chấm bài\n./lab reset 7           # dọn dẹp</pre></div></section>';
   h += '<div class="stats"><div><b>' + total + '</b><span>bài lab có script tự chấm</span></div><div><b>' + nComp + '/' + nComp + '</b><span>năng lực của đề thi được phủ</span></div><div><b>' + tested + '</b><span>bài chạy trên kind ngay trên laptop</span></div><div><b>120′</b><span>đề thi thử chấm theo trọng số</span></div></div>';
+  h += '<section><h2>Hướng dẫn giảm dần theo cấp độ</h2><p class="muted small">Bài đầu dắt bạn từng lệnh. Càng lên cao, phần hướng dẫn càng ít đi, cho tới khi bạn tự làm như trong phòng thi.</p><div class="fade" aria-hidden="true"></div><div class="fade-l" aria-hidden="true"><span>Nhiều hướng dẫn</span><span>Tự lực</span></div><div class="modes" style="margin-top:14px">' +
+    [["guided", "Cấp 0–2 · lab 00–11"], ["scaffold", "Cấp 3–6 · lab 12–25"], ["solo", "Cấp 7–9 · lab 26–38"]].map(m => '<div class="mode">' + supTag(m[0]) + '<h3>' + esc(DATA.support[m[0]][0]) + '</h3><span class="lv">' + m[1] + "</span><p>" + esc(DATA.support[m[0]][2]) + "</p></div>").join("") + "</div></section>";
   h += '<section><h2>Lộ trình 10 cấp</h2><p class="muted small">Màu xanh là bài đã đánh dấu xong, vàng là đang làm. Tiến độ lưu trong trình duyệt này.</p><div class="path">';
   Object.keys(DATA.levels).forEach(lv => {
     const labs = DATA.labs.filter(l => String(l.level) === lv), done = labs.filter(l => state.done[l.id]).length;
-    h += '<div class="stage"><span class="lv">CẤP ' + lv + "</span><h3>" + esc(DATA.levels[lv][0]) + "</h3><p>" + esc(DATA.levels[lv][1]) + '</p><div class="stagebar"><i style="width:' + (done / labs.length * 100) + '%"></i></div><div class="chips">' + labs.map(l => '<a class="chip ' + labStatus(l.id) + '" href="#lab-' + pad(l.id) + '" title="' + esc(l.title) + '">' + pad(l.id) + "</a>").join("") + "</div></div>";
+    h += '<div class="stage"><div class="row" style="justify-content:space-between"><span class="lv">CẤP ' + lv + "</span>" + supTag(labs[0].support) + "</div><h3>" + esc(DATA.levels[lv][0]) + "</h3><p>" + esc(DATA.levels[lv][1]) + '</p><div class="stagebar"><i style="width:' + (done / labs.length * 100) + '%"></i></div><div class="chips">' + labs.map(l => '<a class="chip ' + labStatus(l.id) + '" href="#lab-' + pad(l.id) + '" title="' + esc(l.title) + '">' + pad(l.id) + "</a>").join("") + "</div></div>";
   });
   h += "</div></section>";
   h += '<section class="panel"><h2>Phủ năng lực của đề thi</h2><p class="muted small">Mỗi năng lực trong curriculum CKA và các bài luyện nó. Bấm mã bài để mở.</p><div class="covwrap"><table class="cov"><thead><tr><th>Năng lực</th><th>Bài lab</th></tr></thead><tbody>';
@@ -273,13 +311,16 @@ let timerInt = null;
 function lab(id) {
   const l = byId(id); if (!l) return home();
   const k = DATA.labs.indexOf(l), prev = DATA.labs[k - 1], next = DATA.labs[k + 1];
-  let h = '<article class="page"><header class="labhead"><div><span class="labno">LAB ' + pad(l.id) + "</span><h1>" + esc(l.title) + '</h1></div><div class="pills"><span class="pill">Cấp ' + l.level + " · " + esc(DATA.levels[l.level][0]) + '</span><span class="pill">≈ ' + l.minutes + ' phút</span><span class="pill">' + esc(ENVTXT[l.env]) + "</span>" +
+  let h = '<article class="page"><header class="labhead"><div><span class="labno">LAB ' + pad(l.id) + "</span><h1>" + esc(l.title) + '</h1></div><div class="pills"><span class="pill">Cấp ' + l.level + " · " + esc(DATA.levels[l.level][0]) + '</span><span class="pill">≈ ' + l.minutes + ' phút</span><span class="pill">' + esc(ENVTXT[l.env]) + "</span>" + supTag(l.support) +
     l.comps.map(c => '<span class="pill"><i class="sw" style="background:' + DCOL[c.split(":")[0]] + '"></i>' + esc(compName(c)) + "</span>").join("") + "</div></header>";
   if (l.id === 38) h += '<section class="panel timer" id="timer"><b id="tLeft">120:00</b><div class="row"><button class="btn primary" id="tStart" type="button">Bắt đầu tính giờ</button><button class="btn" id="tReset" type="button">Đặt lại</button></div><span class="small muted" id="tNote">Đồng hồ chạy tiếp kể cả khi bạn đóng trang.</span></section>';
-  h += '<section class="sec"><h2>Mục tiêu</h2><div class="md">' + l.goal + "</div></section>";
+  h += '<section class="sec"><h2>Mục tiêu</h2><div class="md">' + l.goal + "</div>";
+  if (l.prereq.length) h += '<div class="prereq"><span class="lbl">Cần làm trước:</span>' + (l.prereq.length > 6 ? '<a class="chip" href="#lab-' + pad(l.prereq[0]) + '">Lab ' + pad(l.prereq[0]) + "–" + pad(l.prereq[l.prereq.length - 1]) + "</a>" : l.prereq.map(p => '<a class="chip ' + labStatus(p) + '" href="#lab-' + pad(p) + '" title="' + esc(byId(p).title) + '">' + pad(p) + " · " + esc(byId(p).title) + "</a>").join("")) + "</div>";
+  h += "</section>";
   if (l.concepts) h += '<section class="sec panel"><h2>Kiến thức cần nắm</h2><div class="md">' + l.concepts + "</div></section>";
   h += '<section class="sec"><h2>Chuẩn bị</h2>' + (l.id === 1 ? "" : cmd("./lab start " + l.id)) + (l.setup_note ? '<div class="md">' + l.setup_note + "</div>" : "") + "</section>";
   h += '<section class="sec"><h2>Đề bài <small id="tcount"></small></h2><ol class="tasks">' + l.tasks.map((t, i) => { const key = l.id + ":" + i; return '<li class="task' + (state.tasks[key] ? " done" : "") + '"><label><input type="checkbox" data-task="' + key + '"' + (state.tasks[key] ? " checked" : "") + ' aria-label="Đánh dấu câu ' + (i + 1) + '"></label><div class="md">' + t + "</div></li>"; }).join("") + "</ol></section>";
+  h += guideHtml(l);
   if (l.hints.length) h += '<section class="sec"><h2>Gợi ý</h2>' + l.hints.map(x => '<details class="hint"><summary>' + esc(x[0]) + "</summary><div class=\"md\">" + x[1] + "</div></details>").join("") + "</section>";
   h += '<section class="sec"><h2>Chấm bài</h2>' + cmd("./lab check " + l.id) + '<p class="small muted">Chấm theo trạng thái trong cluster và file đáp án. Mục nào ✘ thì sửa rồi chạy lại.</p></section>';
   h += '<section class="sec solution" id="sol"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Lời giải</h2><button class="btn" id="solBtn" type="button">Tự làm xong rồi, xem lời giải</button></div><div class="md" id="solBody" hidden>' + l.solution + "</div></section>";
@@ -289,11 +330,28 @@ function lab(id) {
   h += '<nav class="navnext">' + (prev ? '<a href="#lab-' + pad(prev.id) + '"><small>← LAB ' + pad(prev.id) + "</small>" + esc(prev.title) + "</a>" : "") + (next ? '<a class="next" href="#lab-' + pad(next.id) + '"><small>LAB ' + pad(next.id) + " →</small>" + esc(next.title) + "</a>" : "") + "</nav></article>";
   return h;
 }
+function guideHtml(l) {
+  if (!l.guide.length) return "";
+  const S = DATA.support[l.support];
+  if (l.support === "guided") {
+    const hid = !!state.guideHidden[l.id];
+    return '<section class="sec" id="guide"><div class="row" style="justify-content:space-between"><h2 style="margin:0">' + esc(S[0]) + ' <small id="scount"></small></h2><button class="btn" id="guideBtn" type="button">' + (hid ? "Hiện hướng dẫn" : "Ẩn hướng dẫn, tự làm") + '</button></div><p class="small muted">' + esc(S[2]) + '</p><ol class="steps" id="steps"' + (hid ? " hidden" : "") + ">" +
+      l.guide.map((g, i) => { const key = l.id + ":" + i, d = state.steps[key]; return '<li class="step' + (d ? " done" : "") + '"><header><h3>' + esc(g[0]) + '</h3><label><input type="checkbox" data-step="' + key + '"' + (d ? " checked" : "") + '>Xong</label></header><div class="md">' + g[1] + "</div></li>"; }).join("") + "</ol></section>";
+  }
+  if (l.support === "scaffold")
+    return '<section class="sec"><h2>' + esc(S[0]) + '</h2><p class="small muted">' + esc(S[2]) + "</p>" + l.guide.map(g => '<details class="hint"><summary>' + esc(g[0]) + '</summary><div class="md">' + g[1] + "</div></details>").join("") + "</section>";
+  return '<section class="sec panel"><h2>' + esc(S[0]) + '</h2><p class="small muted">' + esc(S[2]) + '</p><div class="method">' + l.guide.map(g => '<div><h3>' + esc(g[0]) + '</h3><div class="md">' + g[1] + "</div></div>").join("") + "</div></section>";
+}
 function wireLab(id) {
   const l = byId(id);
   const count = () => { const n = l.tasks.filter((_, i) => state.tasks[id + ":" + i]).length; $("#tcount").textContent = n + "/" + l.tasks.length + " đã làm"; };
   count();
   $$("[data-task]").forEach(c => c.onchange = () => { state.tasks[c.dataset.task] = c.checked; c.closest(".task").classList.toggle("done", c.checked); save(); count(); renderSide($("#q").value); });
+  const sc = () => { const e = $("#scount"); if (e) e.textContent = l.guide.filter((_, i) => state.steps[id + ":" + i]).length + "/" + l.guide.length + " bước"; };
+  sc();
+  $$("[data-step]").forEach(c => c.onchange = () => { state.steps[c.dataset.step] = c.checked; c.closest(".step").classList.toggle("done", c.checked); save(); sc(); });
+  const gb = $("#guideBtn");
+  if (gb) gb.onclick = () => { state.guideHidden[id] = !state.guideHidden[id]; save(); $("#steps").hidden = state.guideHidden[id]; gb.textContent = state.guideHidden[id] ? "Hiện hướng dẫn" : "Ẩn hướng dẫn, tự làm"; };
   $("#solBtn").onclick = () => { const b = $("#solBody"), o = b.hidden; b.hidden = !o; $("#sol").dataset.open = o ? "1" : "0"; $("#solBtn").textContent = o ? "Ẩn lời giải" : "Tự làm xong rồi, xem lời giải"; };
   $("#doneBtn").onclick = () => { state.done[id] = !state.done[id]; save(); progress(); render(); };
   if (id === 38) timer();

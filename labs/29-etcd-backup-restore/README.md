@@ -4,9 +4,15 @@
 
 Năng lực CKA: Cluster Architecture › Quản lý vòng đời cluster (nâng cấp); Cluster Architecture › Tạo và quản lý cluster bằng kubeadm
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Chụp snapshot etcd đúng cách, và khôi phục cluster về thời điểm chụp khi dữ liệu bị thay đổi sau đó.
+
+## Cần làm trước
+
+- [Lab 14 · Static pod, lập lịch thủ công và bảo trì node](../14-static-pod-maintenance/README.md)
 
 ## Kiến thức cần nắm
 
@@ -32,6 +38,25 @@ Setup cài `etcdctl` và `etcdutl` v3.6.16 vào node control plane nếu chưa c
 3. **Sau** khi chụp, tạo namespace `lab29-after` (giả lập thay đổi xảy ra sau lần sao lưu).
 
 4. Khôi phục snapshot ra `/var/lib/etcd-restore` và cho etcd chạy trên dữ liệu đó. Kết quả: `lab29-before` còn, `lab29-after` không còn.
+
+## Quy trình tư duy
+
+### Quy trình
+
+1. **Thu thập trước khi gõ lệnh.** Mọi tham số kết nối etcd (endpoint, cacert, cert, key, data-dir) đều có trong `/etc/kubernetes/manifests/etcd.yaml`. Đọc file đó, đặt biến shell, đừng gõ đường dẫn từ trí nhớ.
+2. **Snapshot** bằng `etcdctl snapshot save` (cần TLS), **kiểm tra** bằng `etcdutl snapshot status`.
+3. **Restore** bằng `etcdutl snapshot restore` ra thư mục **mới**. Không ghi đè thư mục đang chạy.
+4. **Trỏ etcd sang dữ liệu mới**: sửa static pod manifest ở **mọi** chỗ nhắc tới data dir cũ.
+5. **Chờ**: kubelet tạo lại etcd và API server. Trong 1–2 phút kubectl sẽ báo lỗi kết nối, đó là bình thường.
+
+### Kiểm chứng
+
+- `crictl ps | grep -E 'etcd|apiserver'` trên node thấy container mới.
+- `kubectl get ns` có `lab29-before`, không có `lab29-after`.
+
+### Bẫy
+
+Một manifest có hai chỗ dùng data dir: cờ `--data-dir` và `hostPath` của volume. Sửa thiếu một chỗ là etcd không lên, hoặc lên nhưng dùng dữ liệu cũ.
 
 ## Gợi ý
 

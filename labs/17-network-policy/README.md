@@ -4,9 +4,16 @@
 
 Năng lực CKA: Services & Networking › NetworkPolicy; Services & Networking › Kết nối giữa các Pod
 
+Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu, khung lệnh và cách tự kiểm, nhưng không đưa đáp án. Hãy thử tự làm trước, kẹt mới mở.
+
 ## Mục tiêu
 
 Khóa một ứng dụng ba tầng web → api → db: chặn mặc định, chỉ mở đúng các đường cần thiết, kể cả theo namespace và chiều đi ra (egress).
+
+## Cần làm trước
+
+- [Lab 15 · Service, EndpointSlice và kết nối giữa các Pod](../15-services/README.md)
+- [Lab 16 · DNS trong cluster và CoreDNS](../16-dns-coredns/README.md)
 
 ## Kiến thức cần nắm
 
@@ -33,6 +40,41 @@ Khóa một ứng dụng ba tầng web → api → db: chặn mặc định, ch�
 4. Tạo policy `monitoring-to-api`: Pod trong các namespace có label `purpose=monitoring` được gọi `app=api` cổng 80. Namespace `lab17-mon` đã có label đó; namespace `lab17-other` thì không và phải bị chặn.
 
 5. Tạo policy `api-egress`: Pod `app=api` chỉ được gọi ra Pod `app=db` cổng 80 và DNS (cổng 53 UDP và TCP).
+
+## Cách tiếp cận
+
+### Cách nghĩ về NetworkPolicy
+
+- Khi Pod chưa bị policy nào chọn, mọi traffic tới nó đều được phép.
+- Khi một policy chọn Pod theo chiều Ingress, chỉ những gì policy cho phép mới được vào. Chiều Egress cũng vậy.
+- Các policy **cộng dồn** (OR): không có rule "deny" riêng.
+
+Vẽ ra giấy: Pod nào nhận từ ai, cổng nào, rồi mới viết YAML.
+
+### Câu 1 · default-deny
+
+**Tra:** trang *Network Policies*, mục *Default policies*, có YAML chép được.
+
+### Câu 2–3 · Cho phép theo label Pod
+
+**Khung:** `podSelector` (Pod được bảo vệ) + `ingress[].from[].podSelector` (ai được gọi) + `ingress[].ports`.
+
+**Tự kiểm:** giả lập Pod nguồn bằng label:
+`kubectl run t -n lab17 --rm -it --image=busybox:1.36 --labels=app=web --restart=Never -- wget -qO- -T3 api`.
+
+### Câu 4 · Cho phép theo namespace
+
+**Khung:** `from[].namespaceSelector.matchLabels`.
+
+**Bẫy:** trong `from`, `namespaceSelector` và `podSelector` **cùng một phần tử** nghĩa là AND, còn **hai phần tử** nghĩa là OR. Một dấu `-` thừa làm đổi nghĩa cả policy.
+
+### Câu 5 · Egress
+
+Khi bật Egress, Pod mất luôn DNS: gọi bằng tên sẽ hỏng dù đã cho phép tới `db`.
+
+**Khung:** một rule tới `app=db` cổng 80, một rule tới DNS cổng 53 cả UDP và TCP. Để chọn Pod CoreDNS ở namespace khác, xem label của nó: `kubectl get pods -n kube-system --show-labels | grep dns`.
+
+**Tự kiểm:** từ Pod label `app=api`, `wget db` được và `wget web` bị chặn.
 
 ## Gợi ý
 

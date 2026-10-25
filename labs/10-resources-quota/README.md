@@ -4,9 +4,15 @@
 
 Năng lực CKA: Workloads & Scheduling › Admission và scheduling của Pod; Troubleshooting › Theo dõi tài nguyên cluster và ứng dụng
 
+Mức hỗ trợ: **Cầm tay chỉ việc**. Mỗi bước có lệnh, giải thích vì sao và kết quả bạn sẽ thấy. Lần đầu làm theo từng bước; lần hai đóng phần hướng dẫn lại và tự làm đề bài.
+
 ## Mục tiêu
 
 Hiểu requests/limits tác động thế nào tới scheduling và QoS, tìm vì sao Deployment không đủ Pod khi namespace có quota, và đặt giá trị mặc định bằng LimitRange.
+
+## Cần làm trước
+
+- [Lab 05 · Deployment: scale, rolling update, rollback](../05-deployment-rollout/README.md)
 
 ## Kiến thức cần nắm
 
@@ -34,6 +40,93 @@ Hiểu requests/limits tác động thế nào tới scheduling và QoS, tìm v�
 4. Tạo Pod `plain` (image `nginx:1.27`, không khai báo resources). Nó phải chạy được nhờ LimitRange.
 
 5. Tạo Pod `gold` (image `nginx:1.27`) thuộc QoS class `Guaranteed` với CPU 100m và memory 64Mi.
+
+## Hướng dẫn từng bước
+
+### Bước 1 · Requests và limits khác nhau thế nào
+
+- **requests**: lượng tài nguyên scheduler **giữ chỗ** trên node; Pod chỉ được đặt lên node còn đủ.
+- **limits**: mức trần lúc chạy. Vượt limit CPU thì bị bóp (throttle). Vượt limit memory thì bị kill (`OOMKilled`).
+
+ResourceQuota giới hạn **tổng** requests và limits của cả namespace.
+
+### Bước 2 · Tìm vì sao thiếu Pod
+
+Khi Deployment thiếu Pod mà không thấy Pod lỗi nào, lỗi nằm ở **ReplicaSet**: nó không tạo được Pod. Xem event của nó.
+
+```bash
+./lab start 10
+kubectl get deploy heavy -n lab10                  # READY 2/3
+kubectl describe rs -n lab10 -l app=heavy | grep -i -A2 FailedCreate
+kubectl describe quota team-quota -n lab10
+```
+
+> **Kết quả:** `exceeded quota: team-quota, requested: requests.cpu=800m, used: requests.cpu=1600m, limited: requests.cpu=2`.
+
+```bash
+echo requests.cpu > ~/cka-answers/10-quota.txt
+```
+
+### Bước 3 · Giảm requests
+
+```bash
+kubectl set resources deploy heavy -n lab10 --requests=cpu=200m,memory=128Mi --limits=memory=256Mi
+kubectl rollout status deploy heavy -n lab10
+kubectl describe quota team-quota -n lab10
+```
+
+> **Kết quả:** 3/3 Pod, cột Used của `requests.cpu` là `600m`.
+
+Rolling update cần chỗ cho Pod mới **trước khi** xóa Pod cũ. Nếu quota đã kín, Pod mới không được tạo và rollout đứng im. Khi gặp tình huống này, tạm scale về ít replica hơn hoặc nới quota.
+
+### Bước 4 · LimitRange: giá trị mặc định cho container
+
+Khi namespace có quota cho `requests.cpu`, Pod **không** khai báo requests sẽ bị từ chối. LimitRange điền sẵn giá trị mặc định:
+
+- `defaultRequest`: request mặc định.
+- `default`: limit mặc định.
+
+```bash
+cat <<'EOF' | kubectl apply -f -
+apiVersion: v1
+kind: LimitRange
+metadata: {name: defaults, namespace: lab10}
+spec:
+  limits:
+  - type: Container
+    defaultRequest: {cpu: 100m, memory: 64Mi}
+    default: {cpu: 200m, memory: 128Mi}
+EOF
+kubectl run plain -n lab10 --image=nginx:1.27
+kubectl get pod plain -n lab10 -o jsonpath='{.spec.containers[0].resources}'; echo
+```
+
+> **Kết quả:** Pod `plain` có requests và limits do LimitRange điền vào.
+
+### Bước 5 · QoS class
+
+- **Guaranteed**: mọi container có requests **bằng** limits cho cả CPU lẫn memory.
+- **Burstable**: có requests nhưng không đạt Guaranteed.
+- **BestEffort**: không có gì.
+
+Khi node thiếu memory, kubelet đuổi BestEffort trước, Guaranteed sau cùng.
+
+```bash
+kubectl run gold -n lab10 --image=nginx:1.27 $do > gold.yaml
+vi gold.yaml       # trong container:
+```
+```yaml
+    resources:
+      requests: {cpu: 100m, memory: 64Mi}
+      limits: {cpu: 100m, memory: 64Mi}
+```
+```bash
+kubectl apply -f gold.yaml
+kubectl get pod gold plain -n lab10 -o custom-columns=NAME:.metadata.name,QOS:.status.qosClass
+./lab check 10
+```
+
+> **Kết quả:** `gold Guaranteed`, `plain Burstable`.
 
 ## Gợi ý
 

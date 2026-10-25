@@ -4,9 +4,15 @@
 
 Năng lực CKA: Cluster Architecture › Cài thành phần bằng Helm và Kustomize
 
+Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này chỉ đưa quy trình làm việc và cách kiểm chứng; chi tiết bạn tự tra như trong phòng thi.
+
 ## Mục tiêu
 
 Dùng Helm như trong công việc thật: tạo chart, cài release với values, nâng cấp giữ values cũ, quay lại revision tốt, render YAML để kiểm tra trước, và gỡ release.
+
+## Cần làm trước
+
+- [Lab 05 · Deployment: scale, rolling update, rollback](../05-deployment-rollout/README.md)
 
 ## Kiến thức cần nắm
 
@@ -36,6 +42,27 @@ Cần Helm v3 trên máy chạy lab (`helm version`). Lab dùng chart tạo tạ
 5. Không cài, chỉ render chart với release tên `preview` và 3 replica, lưu vào `~/cka-answers/26-rendered.yaml`.
 
 6. Cài thử release `tmp` vào `lab26` rồi gỡ nó.
+
+## Quy trình tư duy
+
+### Quy trình
+
+1. Đọc `values.yaml` của chart trước khi đặt giá trị: `helm show values <chart>` cho biết tên khóa chính xác (`replicaCount`, `image.tag`, `service.type`).
+2. Mọi lệnh thay đổi đều có `-n <ns>`. Quên namespace là lỗi phổ biến nhất với Helm.
+3. Sau mỗi lần `install`/`upgrade`, kiểm tra bằng `helm list -n …`, `helm get values …` và `kubectl get` các object thật.
+
+### Tự tra cứu
+
+`helm <lệnh> --help` có ví dụ cho mọi tình huống của bài. Hãy chú ý các cờ:
+
+- giữ giá trị cũ khi nâng cấp;
+- chọn revision để quay lại;
+- render mà không cài.
+
+### Kiểm chứng
+
+- `helm history web -n lab26` thể hiện đúng câu chuyện: install → NodePort → 1.99 → rollback.
+- `helm get values web -n lab26` của revision cuối có đủ replica, tag và loại Service.
 
 ## Gợi ý
 
