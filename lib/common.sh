@@ -98,6 +98,26 @@ ans() { { tr -d '[:space:]' < "$ANS/$1"; } 2>/dev/null; }
 # ansraw <file> → answer file content as is
 ansraw() { { cat "$ANS/$1"; } 2>/dev/null; }
 
+# exam_hosts: make every node look like an exam host. In the real exam each task
+# names a host; you `ssh <host>`, `sudo -i`, and kubectl is ready there. This copies
+# the current kubeconfig (server rewritten to the control plane node) to root on
+# every node and adds the usual alias/completion.
+exam_hosts() {
+  detect_nodes
+  local tmp n
+  tmp="$(mktemp)"
+  kubectl config view --raw --minify --flatten > "$tmp" 2>/dev/null || { rm -f "$tmp"; return 1; }
+  sed -i -E "s#(server: )https://[^[:space:]]+#\1https://$CP:6443#" "$tmp"
+  for n in "$CP" "$NODE1" "$NODE2"; do
+    [ -n "$n" ] || continue
+    node_exec "$n" 'mkdir -p /root/.kube' >/dev/null 2>&1 || continue
+    node_put "$n" "$tmp" /root/.kube/config >/dev/null 2>&1
+    node_exec "$n" 'chmod 600 /root/.kube/config
+      grep -q "alias k=kubectl" /root/.bashrc 2>/dev/null || printf "%s\n" "alias k=kubectl" "source <(kubectl completion bash) 2>/dev/null" "complete -o default -F __start_kubectl k" "export do=\"--dry-run=client -o yaml\"" "export now=\"--force --grace-period 0\"" >> /root/.bashrc' >/dev/null 2>&1
+  done
+  rm -f "$tmp"
+}
+
 # ---------- verify ----------
 _PASS=0; _FAIL=0
 begin_verify() { _PASS=0; _FAIL=0; echo "${C_B}Lab $1 · $2${C_0}"; }
@@ -127,13 +147,13 @@ end_verify() {
 # retry <times> <command...>   re-run a flaky command (DNS reload, policy sync) a few times
 retry() { local n="$1" i; shift; for i in $(seq 1 "$n"); do "$@" && return 0; [ "$i" -lt "$n" ] && sleep 3; done; return 1; }
 
-# pod_run <namespace> <shell command> [pod-labels]
+# pod_run <namespace> <shell command> [pod-labels] [image]
 # Runs the command in a throwaway busybox pod, waits for it to finish, prints its
 # output and returns its exit status. More reliable than `kubectl run --rm -i`,
 # which can lose output when the pod finishes before kubectl attaches.
 pod_run() {
-  local ns="$1" cmd="$2" labels="${3:-run=probe}" name="probe-$RANDOM" phase=""
-  kubectl run "$name" -n "$ns" --image=busybox:1.36 --restart=Never --labels="$labels" \
+  local ns="$1" cmd="$2" labels="${3:-run=probe}" image="${4:-busybox:1.36}" name="probe-$RANDOM" phase=""
+  kubectl run "$name" -n "$ns" --image="$image" --restart=Never --labels="$labels" \
     --command -- sh -c "$cmd" >/dev/null 2>&1 || return 1
   for _ in $(seq 1 60); do
     phase="$(kubectl get pod "$name" -n "$ns" -o jsonpath='{.status.phase}' 2>/dev/null)"

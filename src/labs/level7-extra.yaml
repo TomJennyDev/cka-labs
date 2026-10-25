@@ -1,0 +1,543 @@
+- id: 39
+  slug: node-runtime-prep
+  title: Chuẩn bị node - container runtime, kernel và CRI
+  level: 7
+  minutes: 35
+  env: kind
+  test: false
+  competencies: ["arch:1", "arch:6", "trouble:0"]
+  goal: |
+    Tự tay làm phần "chuẩn bị hạ tầng" mà đề thi hay hỏi: cài gói container runtime bằng `dpkg`, bật service bằng systemd, nạp module và sysctl cho Kubernetes, sửa `crictl`, và đọc ra node đang dùng CRI, CNI, CSI nào.
+  concepts: |
+    - **CRI** (Container Runtime Interface): kubelet nói chuyện với runtime (containerd, CRI-O, cri-dockerd) qua một Unix socket. Đường dẫn socket nằm ở `containerRuntimeEndpoint` trong `/var/lib/kubelet/config.yaml` hoặc cờ `--container-runtime-endpoint` trong `/var/lib/kubelet/kubeadm-flags.env`.
+    - **cri-dockerd** là lớp CRI cho Docker Engine. Gói `.deb` cài bằng `dpkg -i`, rồi `systemctl enable --now cri-docker.service` (bật ngay và tự chạy khi khởi động máy).
+    - Kubernetes cần module `overlay` và `br_netfilter`, và sysctl `net.ipv4.ip_forward = 1`, `net.bridge.bridge-nf-call-iptables = 1` (IPv6: `net.ipv6.conf.all.forwarding = 1`). Ghi vào file trong `/etc/modules-load.d/` và `/etc/sysctl.d/` để còn sau khi khởi động lại, rồi `sysctl --system` để áp dụng ngay.
+    - **CNI**: cấu hình ở `/etc/cni/net.d/`, binary ở `/opt/cni/bin/`. **CSI**: driver đăng ký object `CSIDriver`; provisioner của StorageClass cho biết ai tạo volume.
+    - `crictl` đọc `/etc/crictl.yaml` để biết socket. Sai socket thì mọi lệnh `crictl` báo lỗi kết nối.
+  setup_note: |
+    Bài làm trên `$NODE1` (`./lab ssh $NODE1`). Setup đặt sẵn file `/root/pkgs/cri-dockerd_0.4.9-lab_<arch>.deb` trên node.
+
+    Gói này là **gói mô phỏng** do setup tự đóng: nó có đúng tên, unit systemd `cri-docker.service` và `cri-docker.socket` như gói thật, nhưng chỉ giữ một tiến trình chạy, vì node kind không có Docker Engine. Thao tác `dpkg` và `systemctl` giống hệt khi cài gói thật trong phòng thi.
+  tasks:
+    - |
+      Trên `$NODE1`, cài gói `cri-dockerd` từ file `.deb` trong `/root/pkgs/`. Bật `cri-docker.service` ngay bây giờ và tự chạy khi khởi động máy.
+    - |
+      Đảm bảo module `overlay` và `br_netfilter` được nạp mỗi lần khởi động, bằng file `/etc/modules-load.d/k8s.conf`.
+    - |
+      Tạo `/etc/sysctl.d/k8s.conf` đặt `net.bridge.bridge-nf-call-iptables = 1`, `net.ipv6.conf.all.forwarding = 1`, `net.ipv4.ip_forward = 1`, và áp dụng ngay không cần khởi động lại.
+    - |
+      `crictl ps` trên `$NODE1` đang báo lỗi. Sửa cấu hình của `crictl` để nó dùng containerd.
+    - |
+      Trên máy của bạn, ghi vào `~/cka-answers/`: socket CRI mà kubelet của `$NODE1` đang dùng (dạng `unix:///…`) vào `39-endpoint.txt`; tên file cấu hình CNI trong `/etc/cni/net.d/` của `$NODE1` vào `39-cni.txt`; provisioner của StorageClass mặc định vào `39-provisioner.txt`.
+  hints:
+    - |
+      Cài và bật service
+      `dpkg -i <file>.deb`, rồi `systemctl daemon-reload` và `systemctl enable --now cri-docker.service`. Kiểm tra: `systemctl is-enabled` và `systemctl is-active`.
+    - |
+      crictl dùng socket nào?
+      `cat /etc/crictl.yaml`. Socket của containerd thường là `unix:///run/containerd/containerd.sock`; xem nó có tồn tại không bằng `ls -l /run/containerd/`.
+    - |
+      Tìm socket CRI của kubelet
+      `grep -i endpoint /var/lib/kubelet/config.yaml /var/lib/kubelet/kubeadm-flags.env`
+  solution: |
+    ```bash
+    ./lab ssh $NODE1
+    dpkg -i /root/pkgs/cri-dockerd_*.deb
+    systemctl daemon-reload
+    systemctl enable --now cri-docker.service
+    systemctl is-enabled cri-docker.service; systemctl is-active cri-docker.service
+
+    cat > /etc/modules-load.d/k8s.conf <<'EOF'
+    overlay
+    br_netfilter
+    EOF
+    modprobe overlay; modprobe br_netfilter      # trên node kind có thể báo lỗi vì dùng kernel của máy host: bỏ qua
+
+    cat > /etc/sysctl.d/k8s.conf <<'EOF'
+    net.bridge.bridge-nf-call-iptables = 1
+    net.ipv6.conf.all.forwarding = 1
+    net.ipv4.ip_forward = 1
+    EOF
+    sysctl --system
+
+    cat /etc/crictl.yaml                        # đang trỏ tới socket không tồn tại
+    cat > /etc/crictl.yaml <<'EOF'
+    runtime-endpoint: unix:///run/containerd/containerd.sock
+    image-endpoint: unix:///run/containerd/containerd.sock
+    EOF
+    crictl ps
+
+    grep -i endpoint /var/lib/kubelet/config.yaml /var/lib/kubelet/kubeadm-flags.env
+    ls /etc/cni/net.d/
+    exit
+    ```
+    ```bash
+    echo unix:///run/containerd/containerd.sock > ~/cka-answers/39-endpoint.txt
+    ./lab ssh $NODE1   # ls /etc/cni/net.d  → ví dụ 10-kindnet.conflist
+    echo 10-kindnet.conflist > ~/cka-answers/39-cni.txt
+    kubectl get sc       # cột PROVISIONER của dòng (default)
+    kubectl get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].provisioner}' > ~/cka-answers/39-provisioner.txt
+    kubectl get csidriver   # kind không có CSI driver nào: local-path không phải CSI
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS"/39-*.txt
+    node_exec "$NODE1" 'command -v dpkg-deb >/dev/null && command -v systemctl >/dev/null' || die "Node $NODE1 cần dpkg và systemd (node kind hoặc máy ảo Debian/Ubuntu)"
+    node_exec "$NODE1" "$(cat <<'NODE'
+    set -e
+    systemctl disable --now cri-docker.service cri-docker.socket >/dev/null 2>&1 || true
+    dpkg --purge cri-dockerd >/dev/null 2>&1 || true
+    rm -f /etc/modules-load.d/k8s.conf /etc/sysctl.d/k8s.conf
+    sysctl -qw net.ipv6.conf.all.forwarding=0 2>/dev/null || true
+    [ -f /root/lab39-crictl.yaml.orig ] || { if [ -f /etc/crictl.yaml ]; then cp /etc/crictl.yaml /root/lab39-crictl.yaml.orig; else echo none > /root/lab39-crictl.yaml.orig; fi; }
+    printf 'runtime-endpoint: unix:///run/cri-dockerd.sock\nimage-endpoint: unix:///run/cri-dockerd.sock\ntimeout: 2\n' > /etc/crictl.yaml
+    A=$(dpkg --print-architecture); D=$(mktemp -d)
+    mkdir -p "$D/DEBIAN" "$D/usr/bin" "$D/usr/lib/systemd/system" /root/pkgs; chmod 755 "$D"
+    cat > "$D/DEBIAN/control" <<EOF
+    Package: cri-dockerd
+    Version: 0.4.9-lab
+    Architecture: $A
+    Maintainer: CKA Labs <labs@example.invalid>
+    Description: Goi mo phong cri-dockerd cho bai lab (khong phai ban that)
+    EOF
+    printf '#!/bin/sh\n# cri-dockerd mo phong cho bai lab\necho "cri-dockerd (lab) $*"\nexec sleep infinity\n' > "$D/usr/bin/cri-dockerd"
+    chmod 755 "$D/usr/bin/cri-dockerd"
+    cat > "$D/usr/lib/systemd/system/cri-docker.service" <<'EOF'
+    [Unit]
+    Description=CRI Interface for Docker Application Container Engine (lab)
+    Requires=cri-docker.socket
+    After=network-online.target cri-docker.socket
+    [Service]
+    ExecStart=/usr/bin/cri-dockerd --container-runtime-endpoint fd://
+    Restart=always
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+    cat > "$D/usr/lib/systemd/system/cri-docker.socket" <<'EOF'
+    [Unit]
+    Description=CRI Docker Socket for the API (lab)
+    PartOf=cri-docker.service
+    [Socket]
+    ListenStream=%t/cri-dockerd.sock
+    SocketMode=0660
+    [Install]
+    WantedBy=sockets.target
+    EOF
+    rm -f /root/pkgs/cri-dockerd_*.deb
+    dpkg-deb --build --root-owner-group "$D" "/root/pkgs/cri-dockerd_0.4.9-lab_$A.deb" >/dev/null
+    rm -rf "$D"
+    NODE
+    )" || die "Không chuẩn bị được $NODE1"
+  verify: |
+    on1() { node_exec "$NODE1" "$1" 2>/dev/null; }
+    check "Gói cri-dockerd đã cài" on1 'dpkg -s cri-dockerd 2>/dev/null | grep -q "^Status: install ok installed"'
+    expect "cri-docker.service tự chạy khi khởi động" "$(on1 'systemctl is-enabled cri-docker.service')" "enabled"
+    expect "cri-docker.service đang chạy" "$(on1 'systemctl is-active cri-docker.service')" "active"
+    expect "modules-load: overlay và br_netfilter" "$(on1 'grep -Ex "[[:space:]]*(overlay|br_netfilter)[[:space:]]*" /etc/modules-load.d/k8s.conf | tr -d " " | sort | tr "\n" " "')" "br_netfilter overlay "
+    for k in net.bridge.bridge-nf-call-iptables net.ipv6.conf.all.forwarding net.ipv4.ip_forward; do
+      kre="$(echo "$k" | sed 's/\./\\./g')"
+      expect "sysctl.d/k8s.conf có $k = 1" "$(on1 "grep -Ec '^[[:space:]]*$kre[[:space:]]*=[[:space:]]*1[[:space:]]*\$' /etc/sysctl.d/k8s.conf")" "1"
+    done
+    expect "Đã áp dụng ngay: net.ipv6.conf.all.forwarding" "$(on1 'sysctl -n net.ipv6.conf.all.forwarding')" "1"
+    expect "Đã áp dụng ngay: net.ipv4.ip_forward" "$(on1 'sysctl -n net.ipv4.ip_forward')" "1"
+    check "crictl ps chạy được trên NODE1" on1 'crictl ps >/dev/null 2>&1'
+    ep="$(on1 "awk '/^containerRuntimeEndpoint:/{print \$2}' /var/lib/kubelet/config.yaml")"
+    [ -n "$ep" ] || ep="$(on1 "grep -o 'container-runtime-endpoint=[^\" ]*' /var/lib/kubelet/kubeadm-flags.env | cut -d= -f2")"
+    expect "39-endpoint.txt" "$(ans 39-endpoint.txt)" "${ep:-<không đọc được từ node>}"
+    cni="$(on1 'ls /etc/cni/net.d | head -1')"
+    expect "39-cni.txt" "$(ans 39-cni.txt)" "${cni:-<không đọc được từ node>}"
+    prov="$(jp sc '{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].provisioner}')"
+    expect "39-provisioner.txt" "$(ans 39-provisioner.txt)" "${prov:-<không có StorageClass mặc định>}"
+  cleanup: |
+    node_exec "$NODE1" "$(cat <<'NODE'
+    systemctl disable --now cri-docker.service cri-docker.socket >/dev/null 2>&1
+    dpkg --purge cri-dockerd >/dev/null 2>&1
+    systemctl daemon-reload >/dev/null 2>&1
+    rm -rf /root/pkgs /etc/modules-load.d/k8s.conf /etc/sysctl.d/k8s.conf
+    if [ -f /root/lab39-crictl.yaml.orig ]; then
+      if [ "$(cat /root/lab39-crictl.yaml.orig)" = none ]; then rm -f /etc/crictl.yaml; else cp /root/lab39-crictl.yaml.orig /etc/crictl.yaml; fi
+      rm -f /root/lab39-crictl.yaml.orig
+    fi
+    true
+    NODE
+    )" >/dev/null 2>&1
+    rm -f "$ANS"/39-*.txt
+  solve: |
+    node_exec "$NODE1" "$(cat <<'NODE'
+    set -e
+    dpkg -i /root/pkgs/cri-dockerd_*.deb >/dev/null
+    systemctl daemon-reload
+    systemctl enable --now cri-docker.service
+    printf 'overlay\nbr_netfilter\n' > /etc/modules-load.d/k8s.conf
+    printf 'net.bridge.bridge-nf-call-iptables = 1\nnet.ipv6.conf.all.forwarding = 1\nnet.ipv4.ip_forward = 1\n' > /etc/sysctl.d/k8s.conf
+    sysctl --system >/dev/null 2>&1 || true
+    printf 'runtime-endpoint: unix:///run/containerd/containerd.sock\nimage-endpoint: unix:///run/containerd/containerd.sock\n' > /etc/crictl.yaml
+    NODE
+    )"
+    ep="$(node_exec "$NODE1" "awk '/^containerRuntimeEndpoint:/{print \$2}' /var/lib/kubelet/config.yaml")"
+    [ -n "$ep" ] || ep="$(node_exec "$NODE1" "grep -o 'container-runtime-endpoint=[^\" ]*' /var/lib/kubelet/kubeadm-flags.env | cut -d= -f2")"
+    echo "$ep" > "$ANS/39-endpoint.txt"
+    node_exec "$NODE1" 'ls /etc/cni/net.d | head -1' > "$ANS/39-cni.txt"
+    kubectl get sc -o jsonpath='{.items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")].provisioner}' > "$ANS/39-provisioner.txt"
+  docs:
+    - [Container Runtimes (cài đặt và sysctl), "https://kubernetes.io/docs/setup/production-environment/container-runtimes/"]
+    - [Debugging Kubernetes nodes with crictl, "https://kubernetes.io/docs/tasks/debug/debug-cluster/crictl/"]
+    - [Network Plugins, "https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/"]
+    - [CSI Volumes, "https://kubernetes.io/docs/concepts/storage/volumes/#csi"]
+
+- id: 40
+  slug: cni-tigera-operator
+  title: Cài CNI Calico bằng Tigera Operator
+  level: 7
+  minutes: 40
+  env: any
+  test: false
+  competencies: ["arch:6", "arch:1", "net:0", "net:1"]
+  goal: |
+    Cài một CNI cho cluster mới hoàn toàn chưa có mạng Pod, theo đúng cách đề thi gần đây hỏi: cài Tigera Operator rồi khai báo resource `Installation` khớp Pod CIDR của cluster. Làm quen việc làm trên một cluster khác bằng `--context`.
+  concepts: |
+    - Cluster vừa `kubeadm init` không có CNI: node `NotReady`, CoreDNS `Pending`. Kubelet báo `container runtime network not ready: cni plugin not initialized`.
+    - **Tigera Operator** là cách cài Calico được khuyên dùng: (1) `kubectl create -f operator-crds.yaml`, (2) `kubectl create -f tigera-operator.yaml`, (3) tạo resource `Installation` (và `APIServer`) mô tả cấu hình. Operator đọc `Installation` rồi tự tạo DaemonSet `calico-node` trong namespace `calico-system`.
+    - `Installation.spec.calicoNetwork.ipPools[].cidr` phải nằm trong Pod CIDR của cluster (`networking.podSubnet` trong ConfigMap `kubeadm-config` của `kube-system`).
+    - Dùng `kubectl create` cho manifest CRD lớn của Calico: `kubectl apply` lưu cả object vào annotation và có thể vượt giới hạn kích thước.
+    - Kiểm tra: `kubectl get tigerastatus` (cột AVAILABLE), node `Ready`, Pod ở hai node gọi được nhau.
+  setup_note: |
+    Setup dùng kind tạo thêm cluster `cka-cni` (1 control plane, 1 worker) **không có CNI**, Pod CIDR khác mặc định. Cluster `cka` của bạn không bị đụng tới, context hiện tại cũng được giữ nguyên. Cần `kind`, Docker, và internet để tải Calico.
+
+    Làm bài trên context `kind-cka-cni`: hoặc `kubectl config use-context kind-cka-cni` (giống dòng đầu mỗi câu trong phòng thi, nhớ đổi lại sau), hoặc thêm `--context kind-cka-cni` vào mọi lệnh.
+  tasks:
+    - |
+      Trên context `kind-cka-cni`, xác nhận node đang `NotReady` vì thiếu CNI. Tìm Pod CIDR của cluster và ghi vào `~/cka-answers/40-pod-cidr.txt`.
+    - |
+      Cài Tigera Operator của Calico **v3.33.0** từ manifest chính thức (`operator-crds.yaml` và `tigera-operator.yaml`).
+    - |
+      Tạo resource `Installation` tên `default` để operator cài Calico với một IP pool đúng bằng Pod CIDR của cluster, encapsulation `VXLANCrossSubnet`.
+    - |
+      Chờ cả hai node `Ready` và `tigerastatus` báo `calico` sẵn sàng.
+    - |
+      Kiểm tra mạng: Pod chạy trên node control plane gọi được HTTP tới Pod chạy trên worker. (Bài tự kiểm tra bằng Pod tạm.)
+  hints:
+    - |
+      Pod CIDR ở đâu?
+      `kubectl --context kind-cka-cni -n kube-system get cm kubeadm-config -o yaml | grep podSubnet`
+    - |
+      Khung Installation
+      Lấy `custom-resources.yaml` cùng phiên bản, sửa `cidr`, giữ lại khối `Installation` (và `APIServer` nếu muốn).
+    - |
+      Operator chưa làm gì?
+      `kubectl --context kind-cka-cni -n tigera-operator logs deploy/tigera-operator` và `kubectl --context kind-cka-cni get tigerastatus`.
+  solution: |
+    ```bash
+    K="kubectl --context kind-cka-cni"
+    $K get nodes                                           # NotReady
+    $K -n kube-system get cm kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' | grep podSubnet
+    CIDR=$($K -n kube-system get cm kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' | awk '/podSubnet:/{print $2}')
+    echo "$CIDR" > ~/cka-answers/40-pod-cidr.txt
+
+    $K create -f https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/operator-crds.yaml
+    $K create -f https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/tigera-operator.yaml
+    $K wait --for=condition=Established crd/installations.operator.tigera.io --timeout=60s
+
+    cat <<EOF | $K create -f -
+    apiVersion: operator.tigera.io/v1
+    kind: Installation
+    metadata: {name: default}
+    spec:
+      calicoNetwork:
+        ipPools:
+        - name: default-ipv4-ippool
+          blockSize: 26
+          cidr: $CIDR
+          encapsulation: VXLANCrossSubnet
+          natOutgoing: Enabled
+          nodeSelector: all()
+    EOF
+    $K get tigerastatus -w            # chờ calico AVAILABLE True
+    $K wait --for=condition=Ready node --all --timeout=300s
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/40-pod-cidr.txt"
+    command -v kind >/dev/null 2>&1 || die "Lab cần kind (https://kind.sigs.k8s.io)"
+    command -v docker >/dev/null 2>&1 || die "Lab cần Docker"
+    prev="$(kubectl config current-context 2>/dev/null)"
+    kind delete cluster --name cka-cni >/dev/null 2>&1 || true
+    info "Tạo cluster cka-cni không có CNI (khoảng 1–2 phút)"
+    kind create cluster --name cka-cni --config - >/dev/null <<'EOF' || die "Không tạo được cluster cka-cni"
+    kind: Cluster
+    apiVersion: kind.x-k8s.io/v1alpha4
+    networking:
+      disableDefaultCNI: true
+      podSubnet: 10.250.0.0/16
+    nodes:
+    - role: control-plane
+      image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+    - role: worker
+      image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
+    EOF
+    [ -n "$prev" ] && kubectl config use-context "$prev" >/dev/null
+    echo "Context mới: kind-cka-cni. Context hiện tại vẫn là: ${prev:-<trống>}"
+  verify: |
+    K="kubectl --context kind-cka-cni"
+    if ! kubectl config get-contexts kind-cka-cni >/dev/null 2>&1; then bad "Có context kind-cka-cni" "chạy lại ./lab start 40"; end_verify; fi
+    cidr="$($K -n kube-system get cm kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' 2>/dev/null | awk '/podSubnet:/{print $2}')"
+    expect "40-pod-cidr.txt" "$(ans 40-pod-cidr.txt)" "${cidr:-<không đọc được kubeadm-config>}"
+    expect "Tigera Operator sẵn sàng" "$($K -n tigera-operator get deploy tigera-operator -o jsonpath='{.status.availableReplicas}' 2>/dev/null)" "1"
+    expect "Installation default có IP pool đúng Pod CIDR" "$($K get installation default -o jsonpath='{.spec.calicoNetwork.ipPools[0].cidr}' 2>/dev/null)" "$cidr"
+    expect "Encapsulation VXLANCrossSubnet" "$($K get installation default -o jsonpath='{.spec.calicoNetwork.ipPools[0].encapsulation}' 2>/dev/null)" "VXLANCrossSubnet"
+    expect "tigerastatus calico Available" "$($K get tigerastatus calico -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)" "True"
+    expect "Cả 2 node Ready" "$($K get nodes --no-headers 2>/dev/null | awk '$2=="Ready"' | wc -l | tr -d ' ')" "2"
+    # pod-to-pod across nodes
+    $K delete pod lab40-srv lab40-cli --now --ignore-not-found >/dev/null 2>&1
+    $K run lab40-srv --image=nginx:1.27 --restart=Never >/dev/null 2>&1
+    $K wait --for=condition=Ready pod/lab40-srv --timeout=90s >/dev/null 2>&1
+    ip="$($K get pod lab40-srv -o jsonpath='{.status.podIP}' 2>/dev/null)"
+    $K run lab40-cli --image=busybox:1.36 --restart=Never --overrides='{"spec":{"tolerations":[{"operator":"Exists"}],"nodeSelector":{"node-role.kubernetes.io/control-plane":""}}}' --command -- sh -c "wget -qO- -T 5 http://$ip >/dev/null" >/dev/null 2>&1
+    for _ in $(seq 1 45); do ph="$($K get pod lab40-cli -o jsonpath='{.status.phase}' 2>/dev/null)"; case "$ph" in Succeeded|Failed) break;; esac; sleep 2; done
+    expect "Pod trên control plane gọi được Pod trên worker" "${ph:-}" "Succeeded"
+    $K delete pod lab40-srv lab40-cli --now --ignore-not-found >/dev/null 2>&1
+  cleanup: |
+    cur="$(kubectl config current-context 2>/dev/null)"
+    kind delete cluster --name cka-cni >/dev/null 2>&1 || true
+    if [ -z "$cur" ] || [ "$cur" = kind-cka-cni ]; then kubectl config use-context kind-cka >/dev/null 2>&1 || true; fi
+    rm -f "$ANS/40-pod-cidr.txt"
+  solve: |
+    K="kubectl --context kind-cka-cni"
+    CIDR=$($K -n kube-system get cm kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' | awk '/podSubnet:/{print $2}')
+    echo "$CIDR" > "$ANS/40-pod-cidr.txt"
+    $K create -f https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/operator-crds.yaml >/dev/null
+    $K create -f https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/tigera-operator.yaml >/dev/null
+    $K wait --for=condition=Established crd/installations.operator.tigera.io --timeout=60s
+    cat <<EOF | $K create -f -
+    apiVersion: operator.tigera.io/v1
+    kind: Installation
+    metadata: {name: default}
+    spec:
+      calicoNetwork:
+        ipPools:
+        - name: default-ipv4-ippool
+          blockSize: 26
+          cidr: $CIDR
+          encapsulation: VXLANCrossSubnet
+          natOutgoing: Enabled
+          nodeSelector: all()
+    EOF
+    $K wait --for=condition=Ready node --all --timeout=600s
+    for _ in $(seq 1 60); do [ "$($K get tigerastatus calico -o jsonpath='{.status.conditions[?(@.type=="Available")].status}' 2>/dev/null)" = True ] && break; sleep 5; done
+  docs:
+    - [Calico · Quickstart với operator, "https://docs.tigera.io/calico/latest/getting-started/kubernetes/quickstart"]
+    - [Network Plugins, "https://kubernetes.io/docs/concepts/extend-kubernetes/compute-storage-net/network-plugins/"]
+    - [kind · disableDefaultCNI, "https://kind.sigs.k8s.io/docs/user/configuration/#disable-default-cni"]
+
+- id: 41
+  slug: helm-repo-oci
+  title: Helm với repo và OCI - Argo CD, sửa release lỗi
+  level: 7
+  minutes: 35
+  env: any
+  test: false
+  competencies: ["arch:5", "arch:7"]
+  goal: |
+    Làm các dạng câu Helm mà người thi gần đây kể lại: thêm repo, render chart của Argo CD ra file mà **không** kèm CRD, cài chart từ OCI registry đúng phiên bản và giá trị, và cứu một release đang `failed`.
+  concepts: |
+    - Chart lấy từ **repo HTTP**: `helm repo add <tên> <url>`, `helm repo update`, `helm search repo <tên>/<chart> --versions`. Từ **OCI registry**: dùng thẳng `oci://…` trong `helm install/template/show`, không cần `repo add`.
+    - `helm template` render ra YAML mà không cài; thêm `-n <ns>` để namespace trong YAML đúng. `--version` ghim phiên bản chart.
+    - Chart có thể cài CRD theo hai cách: thư mục `crds/` (bỏ bằng `--skip-crds`) hoặc template có điều kiện (bỏ bằng giá trị riêng của chart, như `crds.install=false` của Argo CD). Đọc `helm show values` để biết.
+    - Release `failed` vẫn còn trong `helm list -a`. Sửa bằng `helm upgrade` với giá trị đúng; `--reuse-values` giữ các giá trị cũ, chỉ đè cái bạn đặt.
+    - Mỗi revision lưu trong Secret `sh.helm.release.v1.<release>.v<N>` của namespace.
+  setup_note: |
+    Cần `helm` v3 hoặc v4 và internet. Setup tạo namespace `lab41` và cài release `shop` (chart `podinfo`) với một giá trị sai để nó ở trạng thái `failed`.
+  tasks:
+    - |
+      Thêm repo Helm tên `argo` với URL `https://argoproj.github.io/argo-helm`. Render chart `argo/argo-cd` phiên bản **10.11.1**, release `argocd`, namespace `argocd`, **không kèm CRD**, ra file `~/cka-answers/41-argocd.yaml`. Không cài vào cluster.
+    - |
+      Cài release `podinfo` vào `lab41` từ OCI registry `oci://ghcr.io/stefanprodan/charts/podinfo` phiên bản **6.15.0**, với 2 replica và `ui.message` là `CKA`. Release phải ở trạng thái `deployed` và cả 2 Pod sẵn sàng.
+    - |
+      Release `shop` trong `lab41` đang `failed`. Tìm nguyên nhân và sửa để nó `deployed`, Service kiểu `ClusterIP`, **giữ** số replica đã đặt khi cài.
+  hints:
+    - |
+      Tìm cách bỏ CRD
+      `helm show values argo/argo-cd --version 10.11.1 | grep -n -A3 '^crds'`
+    - |
+      Kiểm tra file render
+      `grep -c 'kind: CustomResourceDefinition' ~/cka-answers/41-argocd.yaml` phải là 0; `grep 'helm.sh/chart' … | sort -u` cho thấy phiên bản chart.
+    - |
+      Vì sao shop failed?
+      `helm list -n lab41 -a`, `helm history shop -n lab41`, `helm get values shop -n lab41`. Lỗi nằm ở giá trị nào?
+  solution: |
+    ```bash
+    helm repo add argo https://argoproj.github.io/argo-helm
+    helm repo update
+    helm show values argo/argo-cd --version 10.11.1 | grep -A3 '^crds'
+    helm template argocd argo/argo-cd --version 10.11.1 -n argocd \
+      --set crds.install=false > ~/cka-answers/41-argocd.yaml
+    grep -c 'kind: CustomResourceDefinition' ~/cka-answers/41-argocd.yaml     # 0
+
+    helm install podinfo oci://ghcr.io/stefanprodan/charts/podinfo --version 6.15.0 \
+      -n lab41 --set replicaCount=2 --set ui.message=CKA --wait
+
+    helm list -n lab41 -a                 # shop: failed
+    helm history shop -n lab41            # revision 2 failed
+    helm get values shop -n lab41         # service.type: Bogus
+    helm upgrade shop podinfo --repo https://stefanprodan.github.io/podinfo --version 6.15.0 \
+      -n lab41 --reuse-values --set service.type=ClusterIP --wait
+    ```
+  setup: |
+    command -v helm >/dev/null 2>&1 || die "Chưa có helm. Cài theo https://helm.sh/docs/intro/install/"
+    answers_dir; rm -f "$ANS/41-argocd.yaml"
+    helm uninstall podinfo shop -n lab41 >/dev/null 2>&1 || true
+    ns_fresh lab41
+    info "Cài release shop rồi nâng cấp hỏng có chủ đích"
+    helm install shop podinfo --repo https://stefanprodan.github.io/podinfo --version 6.15.0 -n lab41 \
+      --set replicaCount=2 >/dev/null || die "Không cài được release shop (cần internet tới stefanprodan.github.io)"
+    helm upgrade shop podinfo --repo https://stefanprodan.github.io/podinfo --version 6.15.0 -n lab41 \
+      --reuse-values --set service.type=Bogus >/dev/null 2>&1 || true
+    [ "$(helm status shop -n lab41 2>/dev/null | awk '/^STATUS:/{print $2}')" = failed ] || info "Lưu ý: release shop chưa ở trạng thái failed"
+  verify: |
+    f="$ANS/41-argocd.yaml"
+    check "41-argocd.yaml tồn tại" test -s "$f"
+    expect "Không có CRD trong file" "$(grep -c '^kind: CustomResourceDefinition' "$f" 2>/dev/null || true)" "0"
+    check "Có Deployment argocd-server" bash -c "grep -q '^  name: argocd-server$' '$f'"
+    check "Chart argo-cd 10.11.1" bash -c "grep -q 'helm.sh/chart: argo-cd-10.11.1' '$f'"
+    check "Namespace argocd" bash -c "grep -q 'namespace: argocd' '$f'"
+    check_not "Không cài release argocd vào cluster" bash -c "helm status argocd -n argocd >/dev/null 2>&1"
+    expect "Release podinfo deployed" "$(helm status podinfo -n lab41 2>/dev/null | awk '/^STATUS:/{print $2}')" "deployed"
+    check "podinfo dùng chart podinfo-6.15.0" bash -c "helm list -n lab41 2>/dev/null | grep -E '^podinfo[[:space:]]' | grep -q 'podinfo-6.15.0'"
+    expect "Deployment podinfo 2/2" "$(jp deploy podinfo -n lab41 '{.status.readyReplicas}')" "2"
+    expect "ui.message = CKA" "$(jp deploy podinfo -n lab41 '{.spec.template.spec.containers[0].env[?(@.name=="PODINFO_UI_MESSAGE")].value}')" "CKA"
+    expect "Release shop deployed" "$(helm status shop -n lab41 2>/dev/null | awk '/^STATUS:/{print $2}')" "deployed"
+    expect "Service shop-podinfo là ClusterIP" "$(jp svc shop-podinfo -n lab41 '{.spec.type}')" "ClusterIP"
+    expect "shop vẫn 2 replica" "$(jp deploy shop-podinfo -n lab41 '{.spec.replicas}')" "2"
+  cleanup: |
+    helm uninstall podinfo shop -n lab41 >/dev/null 2>&1 || true
+    kubectl delete ns lab41 --ignore-not-found --wait=false >/dev/null
+    rm -f "$ANS/41-argocd.yaml"
+  solve: |
+    helm repo add argo https://argoproj.github.io/argo-helm >/dev/null 2>&1 || true
+    helm repo update argo >/dev/null
+    helm template argocd argo/argo-cd --version 10.11.1 -n argocd --set crds.install=false > "$ANS/41-argocd.yaml"
+    helm install podinfo oci://ghcr.io/stefanprodan/charts/podinfo --version 6.15.0 -n lab41 \
+      --set replicaCount=2 --set ui.message=CKA --wait --timeout 5m
+    helm upgrade shop podinfo --repo https://stefanprodan.github.io/podinfo --version 6.15.0 -n lab41 \
+      --reuse-values --set service.type=ClusterIP --wait --timeout 5m
+  docs:
+    - [Helm · Using Helm, "https://helm.sh/docs/intro/using_helm/"]
+    - [Helm · Registries (OCI), "https://helm.sh/docs/topics/registries/"]
+    - [helm template, "https://helm.sh/docs/helm/helm_template/"]
+    - [Argo CD Helm chart, "https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd"]
+
+- id: 42
+  slug: operator-cert-manager
+  title: Cài và dùng một Operator thật - cert-manager
+  level: 7
+  minutes: 30
+  env: any
+  test: false
+  competencies: ["arch:7", "arch:5"]
+  goal: |
+    Cài một operator thật từ manifest chính thức, tìm và đọc tài liệu CRD của nó bằng `kubectl`, rồi dùng chính các CRD đó để operator làm việc cho bạn (cấp chứng chỉ TLS).
+  concepts: |
+    - Operator gồm **CRD** (kiểu object mới) + **controller** (Deployment theo dõi các object đó). cert-manager có 3 Deployment: `cert-manager`, `cert-manager-cainjector`, `cert-manager-webhook`.
+    - Liệt kê CRD của một operator: `kubectl get crd | grep <group>` hoặc `kubectl api-resources --api-group=<group>`.
+    - `kubectl explain <kind>.spec.<field>` đọc tài liệu từ schema của CRD, không cần internet. Đề thi có thể bắt ghi kết quả này ra file.
+    - Webhook của operator chỉ nhận request khi Pod webhook đã sẵn sàng. Tạo object quá sớm sẽ gặp lỗi `failed calling webhook`: chờ `kubectl wait --for=condition=Available` rồi thử lại.
+    - Luồng của cert-manager: `Issuer`/`ClusterIssuer` (ai ký) → `Certificate` (muốn chứng chỉ gì) → controller tạo `CertificateRequest`, ký, ghi kết quả vào **Secret** kiểu `kubernetes.io/tls`.
+  setup_note: |
+    Cần internet. Setup gỡ cert-manager nếu đã có (để bạn tự cài) và tạo namespace `lab42`.
+  tasks:
+    - |
+      Cài cert-manager **v1.21.3** từ manifest chính thức của bản phát hành. Chờ cả 3 Deployment trong namespace `cert-manager` sẵn sàng.
+    - |
+      Ghi tên mọi CRD của cert-manager (group kết thúc bằng `cert-manager.io`) vào `~/cka-answers/42-crds.txt`, mỗi dòng một tên, sắp xếp theo bảng chữ cái.
+    - |
+      Ghi tài liệu của trường `spec.subject` trong `Certificate` (kết quả `kubectl explain`) vào `~/cka-answers/42-subject.txt`.
+    - |
+      Tạo ClusterIssuer `selfsigned` kiểu self-signed. Trong `lab42`, tạo Certificate `web-cert` cho DNS `web.lab42.svc`, lưu vào Secret `web-tls`, ký bởi ClusterIssuer đó. Certificate phải `Ready`.
+  hints:
+    - |
+      URL manifest
+      Bản phát hành trên GitHub có file `cert-manager.yaml`: `https://github.com/cert-manager/cert-manager/releases/download/<version>/cert-manager.yaml`
+    - |
+      Lỗi webhook khi tạo ClusterIssuer
+      Chờ `kubectl -n cert-manager wait --for=condition=Available deploy --all` rồi tạo lại.
+  solution: |
+    ```bash
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.3/cert-manager.yaml
+    kubectl -n cert-manager wait --for=condition=Available deploy --all --timeout=300s
+
+    kubectl get crd -o name | grep 'cert-manager.io' | cut -d/ -f2 | sort > ~/cka-answers/42-crds.txt
+    kubectl explain certificate.spec.subject > ~/cka-answers/42-subject.txt
+    ```
+    ```yaml
+    apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata: {name: selfsigned}
+    spec:
+      selfSigned: {}
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata: {name: web-cert, namespace: lab42}
+    spec:
+      secretName: web-tls
+      dnsNames: [web.lab42.svc]
+      issuerRef: {name: selfsigned, kind: ClusterIssuer}
+    ```
+    ```bash
+    kubectl wait --for=condition=Ready certificate/web-cert -n lab42 --timeout=120s
+    kubectl get secret web-tls -n lab42      # TYPE kubernetes.io/tls
+    ```
+  setup: |
+    answers_dir; rm -f "$ANS/42-crds.txt" "$ANS/42-subject.txt"
+    if kubectl get ns cert-manager >/dev/null 2>&1 || kubectl get crd certificates.cert-manager.io >/dev/null 2>&1; then
+      info "Gỡ cert-manager đang có để bạn tự cài"
+      kubectl delete clusterissuer --all >/dev/null 2>&1 || true
+      kubectl delete ns cert-manager --wait=true >/dev/null 2>&1 || true
+      kubectl delete crd,clusterrole,clusterrolebinding,mutatingwebhookconfiguration,validatingwebhookconfiguration -l app.kubernetes.io/instance=cert-manager >/dev/null 2>&1 || true
+      kubectl get crd -o name 2>/dev/null | grep 'cert-manager\.io$' | xargs -r kubectl delete >/dev/null 2>&1 || true
+      kubectl delete role,rolebinding -n kube-system -l app.kubernetes.io/instance=cert-manager >/dev/null 2>&1 || true
+    fi
+    ns_fresh lab42
+  verify: |
+    for d in cert-manager cert-manager-cainjector cert-manager-webhook; do
+      expect "Deployment $d sẵn sàng" "$(jp deploy "$d" -n cert-manager '{.status.conditions[?(@.type=="Available")].status}')" "True"
+    done
+    want="$(kubectl get crd -o name 2>/dev/null | grep 'cert-manager\.io$' | sed 's#.*/##' | sort | tr '\n' ' ')"
+    got="$(sed 's#.*/##; s/[[:space:]]//g; /^$/d' "$ANS/42-crds.txt" 2>/dev/null | tr '\n' ' ')"
+    check "Có CRD cert-manager trong cluster" test -n "$want"
+    expect "42-crds.txt đủ tên và đúng thứ tự" "$got" "${want:-<chưa có CRD>}"
+    check "42-subject.txt là kết quả kubectl explain của spec.subject" bash -c "grep -Eq 'FIELD:[[:space:]]+subject' '$ANS/42-subject.txt'"
+    expect "ClusterIssuer selfsigned Ready" "$(jp clusterissuer selfsigned '{.status.conditions[?(@.type=="Ready")].status}')" "True"
+    expect "Certificate web-cert Ready" "$(jp certificate web-cert -n lab42 '{.status.conditions[?(@.type=="Ready")].status}')" "True"
+    expect "Certificate cho web.lab42.svc" "$(jp certificate web-cert -n lab42 '{.spec.dnsNames[*]}')" "web.lab42.svc"
+    expect "Secret web-tls kiểu kubernetes.io/tls" "$(jp secret web-tls -n lab42 '{.type}')" "kubernetes.io/tls"
+  cleanup: |
+    kubectl delete ns lab42 --ignore-not-found --wait=false >/dev/null
+    kubectl delete clusterissuer selfsigned --ignore-not-found >/dev/null 2>&1 || true
+    rm -f "$ANS/42-crds.txt" "$ANS/42-subject.txt"
+  solve: |
+    kubectl apply -f https://github.com/cert-manager/cert-manager/releases/download/v1.21.3/cert-manager.yaml >/dev/null
+    kubectl -n cert-manager wait --for=condition=Available deploy --all --timeout=300s
+    kubectl get crd -o name | grep 'cert-manager\.io$' | cut -d/ -f2 | sort > "$ANS/42-crds.txt"
+    kubectl explain certificate.spec.subject > "$ANS/42-subject.txt"
+    for i in $(seq 1 20); do
+      kubectl apply -f - >/dev/null 2>&1 <<'EOF' && break
+    apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata: {name: selfsigned}
+    spec:
+      selfSigned: {}
+    ---
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata: {name: web-cert, namespace: lab42}
+    spec:
+      secretName: web-tls
+      dnsNames: [web.lab42.svc]
+      issuerRef: {name: selfsigned, kind: ClusterIssuer}
+    EOF
+      sleep 5
+    done
+    kubectl wait --for=condition=Ready certificate/web-cert -n lab42 --timeout=120s
+  docs:
+    - [cert-manager · Install with kubectl apply, "https://cert-manager.io/docs/installation/kubectl/"]
+    - [Operator pattern, "https://kubernetes.io/docs/concepts/extend-kubernetes/operator/"]
+    - [kubectl explain, "https://kubernetes.io/docs/reference/kubectl/generated/kubectl_explain/"]

@@ -130,4 +130,4 @@ Lời giải: [SOLUTION.md](SOLUTION.md) (chỉ mở sau khi đã tự làm).
 
 ---
 
-← [Lab 28 · CustomResourceDefinition và Operator](../28-crd-operator/README.md) · [Lab 30 · Nâng cấp cluster kubeadm 1.34 → 1.35](../30-kubeadm-upgrade/README.md) →
+← [Lab 28 · CustomResourceDefinition và Operator](../28-crd-operator/README.md) · [Lab 30 · Nâng cấp cluster kubeadm 1.36 → 1.37](../30-kubeadm-upgrade/README.md) →

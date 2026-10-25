@@ -1,0 +1,4 @@
+ID=40
+LEVEL=7
+ENV=any
+TITLE="Cài CNI Calico bằng Tigera Operator"

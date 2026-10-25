@@ -5,7 +5,7 @@
   minutes: 30
   env: any
   goal: |
-    Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.35 để làm mọi bài lab, cấu hình terminal giống phòng thi và biết cách dùng `./lab`.
+    Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.37 (phiên bản của đề thi) để làm mọi bài lab, cấu hình terminal giống phòng thi và biết cách dùng `./lab`.
   concepts: |
     - **kind** (Kubernetes in Docker) dựng mỗi node thành một container. Bên trong là kubeadm, kubelet chạy bằng systemd và control plane dạng static pod, giống hệt cluster thật. Gần như mọi lab chạy trên kind.
     - **Cluster kubeadm trên máy ảo** (thư mục `env/kubeadm`) chỉ cần cho các bài cài đặt, nâng cấp và HA (lab 01, 30, 32).
@@ -14,7 +14,7 @@
     - Trong bài, `$CP`, `$NODE1`, `$NODE2` là tên node control plane và hai worker. Nạp chúng bằng `eval "$(./lab env)"`. Với kind, tên là `cka-control-plane`, `cka-worker`, `cka-worker2`.
   tasks:
     - |
-      Cài Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.33+ và kubectl v1.35, rồi dựng cluster:
+      Cài Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) v0.33+ và kubectl v1.37, rồi dựng cluster:
       ```bash
       ./env/kind/up.sh
       ```
@@ -30,7 +30,7 @@
     - |
       Chạy `./lab doctor` và `eval "$(./lab env)"`. Ghi tên node control plane vào `~/cka-answers/00-cp.txt`.
     - |
-      Ghi phiên bản kubelet của `$NODE1` (ví dụ `v1.35.8`) vào `~/cka-answers/00-kubelet.txt`. Lấy từ `kubectl get node`, không gõ tay.
+      Ghi phiên bản kubelet của `$NODE1` (ví dụ `v1.37.0`) vào `~/cka-answers/00-kubelet.txt`. Lấy từ `kubectl get node`, không gõ tay.
     - |
       Vào shell của `$NODE1` bằng `./lab ssh $NODE1`, chạy `crictl ps` để thấy container trên node, rồi `exit`.
   hints:
@@ -94,7 +94,7 @@
   setup_note: |
     Lab này không dùng `./lab start`. Dựng 3 máy ảo trước:
     ```bash
-    cd env/kubeadm && vagrant up      # cp-1, worker-1, worker-2 với Kubernetes v1.34
+    cd env/kubeadm && vagrant up      # cp-1, worker-1, worker-2 với Kubernetes v1.36
     vagrant ssh cp-1
     ```
     `prepare-node.sh` đã chuẩn bị sẵn từng node (swap, module, sysctl, containerd, các gói kube*). Hãy đọc file đó: đề thi có thể yêu cầu bạn tự làm từng bước.
@@ -106,7 +106,7 @@
     - |
       Cấu hình kubectl cho user `vagrant`.
     - |
-      Cài Calico v3.32.2 với pool IP `10.244.0.0/16`.
+      Cài Calico v3.33.0 với pool IP `10.244.0.0/16`.
     - |
       Join `worker-1` và `worker-2`. Chờ cả 3 node `Ready`.
     - |
@@ -130,7 +130,7 @@
     sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config
     sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
-    curl -LO https://raw.githubusercontent.com/projectcalico/calico/v3.32.2/manifests/calico.yaml
+    curl -LO https://raw.githubusercontent.com/projectcalico/calico/v3.33.0/manifests/calico.yaml
     sed -i 's|# - name: CALICO_IPV4POOL_CIDR|- name: CALICO_IPV4POOL_CIDR|; s|#   value: "192.168.0.0/16"|  value: "10.244.0.0/16"|' calico.yaml
     kubectl apply -f calico.yaml
 
@@ -149,7 +149,7 @@
     for c in kube-apiserver etcd kube-scheduler kube-controller-manager; do
       expect "static pod $c Running trên $CP" "$(jp pod "$c-$CP" -n kube-system '{.status.phase}')" "Running"
     done
-    expect_match "Phiên bản kubelet là v1.34 hoặc mới hơn" "$(jp node "$CP" '{.status.nodeInfo.kubeletVersion}')" '^v1\.3[4-9]'
+    expect_match "Phiên bản kubelet là v1.36 hoặc mới hơn" "$(jp node "$CP" '{.status.nodeInfo.kubeletVersion}')" '^v1\.(3[6-9]|[4-9][0-9])'
     expect "podCIDR của cluster là 10.244.0.0/16" "$(node_exec "$CP" "grep -o 'cluster-cidr=[^ ]*' /etc/kubernetes/manifests/kube-controller-manager.yaml | cut -d= -f2")" "10.244.0.0/16"
     expect "API endpoint là k8s-api:6443" "$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')" "https://k8s-api:6443"
     check "CoreDNS sẵn sàng" kubectl -n kube-system rollout status deploy/coredns --timeout=5s

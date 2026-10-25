@@ -25,6 +25,7 @@ ${C_B}CKA Labs${C_0}
   ./lab env                In biến CP, NODE1, NODE2   (dùng: eval "\$(./lab env)")
   ./lab ssh <node>         Vào shell của node (docker exec với kind, ssh với VM)
   ./lab doctor             Kiểm tra công cụ và cluster
+  ./lab exam-hosts         Cài kubectl + kubeconfig + alias k lên mọi node (luyện kiểu "ssh <host>" như phòng thi)
 
 Đáp án dạng file ghi vào: $ANS
 EOF
@@ -37,8 +38,8 @@ case "$cmd" in
     for d in "$ROOT"/labs/*/; do
       m="$d/.meta"; [ -f "$m" ] || continue
       # shellcheck disable=SC1090
-      ( source "$m"; printf "%-4s %-6s %-6s %s\n" "$ID" "$LEVEL" "$ENV" "$TITLE" )
-    done ;;
+      ( source "$m"; printf "%s\t%s\t%-4s %-6s %-6s %s\n" "$LEVEL" "$ID" "$ID" "$LEVEL" "$ENV" "$TITLE" )
+    done | sort -n -k1,1 -k2,2 | cut -f3- ;;
   start|setup)
     d="$(lab_dir "${1:-}")"; source "$d/.meta"
     echo "${C_B}▶ Lab $ID · $TITLE${C_0}"
@@ -73,5 +74,7 @@ case "$cmd" in
       detect_nodes; echo "  ${C_OK}✔${C_0} cluster: $(flavor) · CP=$CP NODE1=$NODE1 NODE2=${NODE2:-—}"
       kubectl get nodes
     else echo "  ${C_BAD}✘${C_0} chưa kết nối được cluster"; fi ;;
+  exam-hosts)
+    exam_hosts && echo "${C_OK}✔ Mọi node đã có kubectl, kubeconfig và alias k. Vào node: ./lab ssh <node>${C_0}" ;;
   help|-h|--help|*) usage ;;
 esac

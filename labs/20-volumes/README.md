@@ -140,4 +140,4 @@ Lời giải: [SOLUTION.md](SOLUTION.md) (chỉ mở sau khi đã tự làm).
 
 ---
 
-← [Lab 19 · Gateway API, HTTPRoute và ReferenceGrant](../19-gateway-api/README.md) · [Lab 21 · PersistentVolume, PVC và reclaim policy](../21-pv-pvc/README.md) →
+← [Lab 44 · Gateway API với controller thật - HTTPS và chuyển từ Ingress](../44-gateway-migrate-ingress/README.md) · [Lab 21 · PersistentVolume, PVC và reclaim policy](../21-pv-pvc/README.md) →

@@ -12,7 +12,7 @@ Biến cluster một control plane thành ba control plane với etcd xếp ch�
 
 ## Cần làm trước
 
-- [Lab 30 · Nâng cấp cluster kubeadm 1.34 → 1.35](../30-kubeadm-upgrade/README.md)
+- [Lab 30 · Nâng cấp cluster kubeadm 1.36 → 1.37](../30-kubeadm-upgrade/README.md)
 
 ## Kiến thức cần nắm
 
@@ -131,4 +131,4 @@ Lời giải: [SOLUTION.md](SOLUTION.md) (chỉ mở sau khi đã tự làm).
 
 ---
 
-← [Lab 31 · Chứng chỉ, cấu hình control plane và kubelet](../31-control-plane-config/README.md) · [Lab 33 · Troubleshooting ứng dụng: sáu Deployment hỏng](../33-troubleshoot-apps/README.md) →
+← [Lab 31 · Chứng chỉ, cấu hình control plane và kubelet](../31-control-plane-config/README.md) · [Lab 39 · Chuẩn bị node - container runtime, kernel và CRI](../39-node-runtime-prep/README.md) →

@@ -1,4 +1,4 @@
-# Cụm lab: 1 control plane + 2 worker, Kubernetes v1.35 (phiên bản của đề thi CKA)
+# Cụm lab: 1 control plane + 2 worker, Kubernetes v1.37 (phiên bản của đề thi CKA từ 10/2026)
 # kind dùng chính kubeadm để dựng cluster, nên control plane chạy dưới dạng static pod
 # và mỗi node có kubelet chạy bằng systemd, giống cluster thật.
 kind: Cluster
@@ -9,10 +9,10 @@ networking:
   serviceSubnet: 10.96.0.0/12
 nodes:
 - role: control-plane
-  image: kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+  image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
   extraPortMappings:
   - {containerPort: 30080, hostPort: 30080}   # để thử NodePort từ máy của bạn
 - role: worker
-  image: kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+  image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5
 - role: worker
-  image: kindest/node:v1.35.8@sha256:07b2536e30b803ed61d1677a79df6115f798ce64c80f9e22f6ed45afd09323c0
+  image: kindest/node:v1.37.0@sha256:a1ed56cfb0e7b93589bdf97c8cd566405a265939e3620fc4f5de89adff580ae5

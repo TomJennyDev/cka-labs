@@ -12,41 +12,42 @@
     - Sinh YAML bằng `$do`, tra field bằng `kubectl explain`, chỉ mở tài liệu khi cần ví dụ dài (NetworkPolicy, PV, Ingress).
     - Sau mỗi câu, kiểm tra nhanh bằng `kubectl get`: đề thi chấm trạng thái trong cluster, không chấm file YAML.
     - Chỉ chạy `./lab check 38` khi đã hết giờ hoặc làm xong, để luyện cảm giác tự kiểm tra.
+    - **Chế độ phòng thi:** mỗi câu ghi host. Vào host bằng `./lab ssh <host>` (phòng thi thật: `ssh <host>` rồi `sudo -i`), làm trên đó, xong `exit` về máy của bạn. Setup đã cài kubectl, kubeconfig và `alias k` lên mọi node. Đừng làm hết từ máy của bạn: tập thói quen đổi host ngay từ bây giờ.
   setup_note: |
     Setup tạo sẵn các namespace `mock-a`, `mock-b`, `mock-c` cùng vài workload, gắn label và taint lên `$NODE2`, rồi in giờ bắt đầu. Bấm đồng hồ 120 phút. Trên trang hướng dẫn HTML có đồng hồ đếm ngược.
   tasks:
     - |
-      **(4%)** Tạo namespace `mock-x` có label `env=exam`.
+      **Host `$CP`** · **(4%)** Tạo namespace `mock-x` có label `env=exam`.
     - |
-      **(8%)** Trong `mock-a`, tạo Deployment `frontend`: 3 replica, `nginx:1.27`, request CPU `100m`, rolling update `maxSurge: 1`, `maxUnavailable: 0`. Sau đó nâng lên `nginx:1.28` với change-cause `exam upgrade`.
+      **Host `$NODE1`** · **(8%)** Trong `mock-a`, tạo Deployment `frontend`: 3 replica, `nginx:1.27`, request CPU `100m`, rolling update `maxSurge: 1`, `maxUnavailable: 0`. Sau đó nâng lên `nginx:1.28` với change-cause `exam upgrade`.
     - |
-      **(5%)** Trong `mock-a`, tạo ConfigMap `exam-cfg` (`LEVEL=hard`) và Secret `exam-sec` (`token=abc123`). Tạo Pod `cfg-pod` (`busybox:1.36`, `sleep 3600`) có biến `LEVEL` từ ConfigMap và `TOKEN` từ key `token` của Secret.
+      **Host `$NODE2`** · **(5%)** Trong `mock-a`, tạo ConfigMap `exam-cfg` (`LEVEL=hard`) và Secret `exam-sec` (`token=abc123`). Tạo Pod `cfg-pod` (`busybox:1.36`, `sleep 3600`) có biến `LEVEL` từ ConfigMap và `TOKEN` từ key `token` của Secret.
     - |
-      **(6%)** Tạo HPA cho `frontend`: 3 tới 6 replica, CPU mục tiêu 60%.
+      **Host `$CP`** · **(6%)** Tạo HPA cho `frontend`: 3 tới 6 replica, CPU mục tiêu 60%.
     - |
-      **(6%)** `$NODE2` có label `exam-role=gpu` và taint `exam=true:NoSchedule`. Tạo Pod `gpu-pod` (`nginx:1.27`) trong `mock-a` chạy trên đúng node đó.
+      **Host `$NODE2`** · **(6%)** `$NODE2` có label `exam-role=gpu` và taint `exam=true:NoSchedule`. Tạo Pod `gpu-pod` (`nginx:1.27`) trong `mock-a` chạy trên đúng node đó.
     - |
-      **(5%)** Tạo Pod `logger` trong `mock-a`: container `app` (`busybox:1.36`) ghi `tick` vào `/var/log/app.log` mỗi 2 giây; sidecar kiểu native tên `tail` (`busybox:1.36`) chạy `tail -F /var/log/app.log`. Hai container dùng chung emptyDir.
+      **Host `$NODE1`** · **(5%)** Tạo Pod `logger` trong `mock-a`: container `app` (`busybox:1.36`) ghi `tick` vào `/var/log/app.log` mỗi 2 giây; sidecar kiểu native tên `tail` (`busybox:1.36`) chạy `tail -F /var/log/app.log`. Hai container dùng chung emptyDir.
     - |
-      **(6%)** Tạo Service `frontend-np` kiểu NodePort cho `frontend`, cổng 80, nodePort `30090`.
+      **Host `$CP`** · **(6%)** Tạo Service `frontend-np` kiểu NodePort cho `frontend`, cổng 80, nodePort `30090`.
     - |
-      **(8%)** Trong `mock-b`, tạo NetworkPolicy `db-access`: Pod `app=db` chỉ nhận TCP 80 từ Pod `app=api` **trong namespace `mock-a`**.
+      **Host `$NODE2`** · **(8%)** Trong `mock-b`, tạo NetworkPolicy `db-access`: Pod `app=db` chỉ nhận TCP 80 từ Pod `app=api` **trong namespace `mock-a`**.
     - |
-      **(5%)** Tạo Ingress `frontend` trong `mock-a`: host `exam.local`, path `/` (Prefix) tới `frontend-np:80`.
+      **Host `$NODE1`** · **(5%)** Tạo Ingress `frontend` trong `mock-a`: host `exam.local`, path `/` (Prefix) tới `frontend-np:80`.
     - |
-      **(6%)** Tạo PVC `exam-data` (1Gi, RWO, StorageClass mặc định) trong `mock-a` và Pod `writer` (`busybox:1.36`) gắn nó tại `/data`, ghi file `/data/ok` rồi `sleep 3600`.
+      **Host `$CP`** · **(6%)** Tạo PVC `exam-data` (1Gi, RWO, StorageClass mặc định) trong `mock-a` và Pod `writer` (`busybox:1.36`) gắn nó tại `/data`, ghi file `/data/ok` rồi `sleep 3600`.
     - |
-      **(6%)** Tạo ServiceAccount `ci` trong `mock-a`, chỉ được `create` Deployment và `get, list` Pod trong `mock-a`.
+      **Host `$NODE2`** · **(6%)** Tạo ServiceAccount `ci` trong `mock-a`, chỉ được `create` Deployment và `get, list` Pod trong `mock-a`.
     - |
-      **(6%)** Tạo static pod `exam-static` (`nginx:1.27`) trên `$NODE1`.
+      **Host `$NODE1`** · **(6%)** Tạo static pod `exam-static` (`nginx:1.27`) trên `$NODE1`.
     - |
-      **(10%)** Deployment `broken-api` trong `mock-c` không có Pod nào sẵn sàng. Sửa để 2/2 sẵn sàng, giữ readinessProbe.
+      **Host `$CP`** · **(10%)** Deployment `broken-api` trong `mock-c` không có Pod nào sẵn sàng. Sửa để 2/2 sẵn sàng, giữ readinessProbe.
     - |
-      **(8%)** Service `backend` trong `mock-c` không có endpoint. Sửa để gọi `http://backend.mock-c` được (không sửa Deployment `backend`).
+      **Host `$NODE1`** · **(8%)** Service `backend` trong `mock-c` không có endpoint. Sửa để gọi `http://backend.mock-c` được (không sửa Deployment `backend`).
     - |
-      **(6%)** Ghi vào `~/cka-answers/38-nodes.txt` mỗi node một dòng dạng `<tên> <phiên bản kubelet>`, sắp theo tên.
+      **Máy của bạn** · **(6%)** Ghi vào `~/cka-answers/38-nodes.txt` mỗi node một dòng dạng `<tên> <phiên bản kubelet>`, sắp theo tên.
     - |
-      **(5%)** Tạo PriorityClass `exam-high` (value `100000`) và Pod `vip` (`nginx:1.27`) trong `mock-a` dùng nó.
+      **Host `$NODE2`** · **(5%)** Tạo PriorityClass `exam-high` (value `100000`) và Pod `vip` (`nginx:1.27`) trong `mock-a` dùng nó.
   hints:
     - |
       Câu 8: AND giữa namespace và Pod
@@ -100,6 +101,7 @@
     YAML đầy đủ của từng câu nằm trong `tests/solutions/38.sh` của repo.
   setup: |
     answers_dir; rm -f "$ANS/38-nodes.txt"
+    exam_hosts || info "Không cài được kubectl lên node, vẫn làm được từ máy của bạn"
     kubectl delete ns mock-x mock-a mock-b mock-c --ignore-not-found --wait=true >/dev/null 2>&1
     kubectl delete pc exam-high --ignore-not-found >/dev/null
     node_exec "$NODE1" "rm -f $(static_dir "$NODE1")/exam-static.yaml" >/dev/null 2>&1 || true

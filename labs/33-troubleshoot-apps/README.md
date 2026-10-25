@@ -138,4 +138,4 @@ Lời giải: [SOLUTION.md](SOLUTION.md) (chỉ mở sau khi đã tự làm).
 
 ---
 
-← [Lab 32 · Thêm control plane cho cluster HA](../32-control-plane-ha/README.md) · [Lab 34 · Troubleshooting mạng: Service, NetworkPolicy và DNS](../34-troubleshoot-network/README.md) →
+← [Lab 42 · Cài và dùng một Operator thật - cert-manager](../42-operator-cert-manager/README.md) · [Lab 34 · Troubleshooting mạng: Service, NetworkPolicy và DNS](../34-troubleshoot-network/README.md) →

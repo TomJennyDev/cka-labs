@@ -1,0 +1,576 @@
+- id: 45
+  slug: mock-exam-2
+  title: Đề thi thử 2 - chế độ phòng thi (2 giờ, 16 câu)
+  level: 9
+  minutes: 120
+  env: kind
+  competencies: ["trouble:2", "trouble:3", "trouble:4", "arch:0", "arch:5", "arch:6", "arch:7", "net:1", "net:2", "net:3", "work:0", "work:3", "work:4", "stor:0", "stor:1", "stor:2"]
+  goal: |
+    Đề tổng hợp thứ hai, làm theo đúng nhịp phòng thi v1.37: mỗi câu ghi **host** phải vào, câu có trọng số và chỉ được điểm khi đúng toàn bộ. Phân bố theo đề thật: Troubleshooting 30%, Cluster Architecture 25%, Services & Networking 20%, Workloads 15%, Storage 10%. Cần **66%** để đậu.
+  concepts: |
+    - Mỗi câu bắt đầu bằng host. Vào bằng `./lab ssh <host>` (phòng thi thật: `ssh <host>` rồi `sudo -i`), làm, rồi `exit`. Setup đã cài kubectl, kubeconfig, `alias k` lên mọi node.
+    - Câu yêu cầu ghi file "trên host" thì file phải nằm trên chính host đó, không phải máy của bạn.
+    - Câu nào kẹt quá 7 phút thì ghi số câu ra giấy rồi đi tiếp.
+    - Làm đề 1 (lab 38) trước. Đề 2 khó hơn: nhiều câu sửa lỗi hơn và có Kustomize, CRD, CRI, Gateway API.
+  setup_note: |
+    Setup tạo các namespace `m2-ops`, `m2-app`, `m2-net`, `m2-mon`, `m2-store` cùng workload, CRD, PV và lỗi cài sẵn, rồi cài kubectl lên các node. Bấm đồng hồ 120 phút; trang hướng dẫn có đồng hồ đếm ngược.
+  tasks:
+    - |
+      **Host `$CP`** · **(6%)** Tạo ServiceAccount `audit` trong `m2-ops`. Tạo ClusterRole `pv-viewer` cho phép `get, list, watch` trên `persistentvolumes` và `storageclasses`, và ClusterRoleBinding `pv-viewer` gắn nó cho `audit`.
+    - |
+      **Máy của bạn** · **(5%)** Base Kustomize có sẵn ở `~/cka-answers/m2-kust/base`. Tạo overlay `~/cka-answers/m2-kust/overlays/prod` đưa Deployment `shop-ui` vào namespace `m2-app` với 2 replica và image `nginx:1.28`, rồi áp dụng overlay. Không sửa base.
+    - |
+      **Host `$NODE1`** · **(6%)** Cluster có CRD `widgets.lab.example.com`. Tạo một `Widget` tên `blue` trong `m2-app` với `size` 3 và màu `blue`. Dùng `kubectl explain` để biết trường.
+    - |
+      **Host `$NODE2`** · **(8%)** Pod `m2-beacon` (namespace `m2-ops`) chạy trên `$NODE2`. Dùng `crictl` trên host này để tìm container `beacon` và ghi **13 ký tự đầu** của container ID vào `/root/45-beacon.txt` trên `$NODE2`.
+    - |
+      **Host `$CP`** · **(5%)** Deployment `m2-web` trong `m2-app` đã qua 3 revision và đang kẹt. Quay về **revision 1**. Cả 2 Pod phải sẵn sàng.
+    - |
+      **Host `$NODE1`** · **(5%)** Tạo DaemonSet `m2-agent` (`busybox:1.36`, `sleep 3600`) trong `m2-app` chỉ chạy trên các node có label `m2-agent=true`, kể cả khi node đó là control plane.
+    - |
+      **Host `$NODE2`** · **(5%)** Tạo Pod `m2-vip` (`nginx:1.27`) trong `m2-app` thuộc QoS `Guaranteed` với CPU `100m`, memory `64Mi`, dùng PriorityClass có sẵn `m2-high`.
+    - |
+      **Host `$CP`** · **(6%)** Trong `m2-net`, tạo NetworkPolicy `db-guard`: Pod `app=db` chỉ nhận TCP 80 từ Pod `role=api` cùng namespace, **hoặc** từ mọi Pod trong namespace `m2-mon`.
+    - |
+      **Host `$NODE1`** · **(8%)** Trong `m2-net`, tạo Gateway `m2-gw` (class `m2-gc`) có listener `https` (HTTPS, cổng 443, hostname `m2.local`, Secret `m2-tls`). Tạo HTTPRoute `m2-route` gắn vào listener đó, hostname `m2.local`, chuyển `/` tới Service `m2-api:80` và thêm header `x-env: exam` vào request.
+    - |
+      **Host `$NODE2`** · **(6%)** Tạo Service `m2-api` (ClusterIP, cổng 80) cho Deployment `m2-api` trong `m2-net`, `targetPort` dùng **tên** cổng của container, và giữ client gắn với cùng một Pod (`sessionAffinity: ClientIP`).
+    - |
+      **Host `$CP`** · **(5%)** PVC `m2-data` trong `m2-store` đứng `Pending`. Làm cho nó `Bound` với PV `m2-pv` mà **không sửa PV**. PVC vẫn tên `m2-data`, 1Gi.
+    - |
+      **Host `$NODE1`** · **(5%)** Tạo StorageClass `m2-retain` dùng provisioner của StorageClass mặc định, reclaim `Retain`, `WaitForFirstConsumer`. Trong `m2-store` tạo PVC `m2-logs` 500Mi dùng lớp đó và Pod `m2-logs-pod` (`busybox:1.36`, `sleep 3600`) gắn nó tại `/logs`. PVC phải `Bound`.
+    - |
+      **Host `$NODE2`** · **(10%)** Deployment `m2-shop` trong `m2-app` không có Pod nào sẵn sàng. Sửa để 2/2 sẵn sàng với image `nginx:1.27`, và biến `MODE` vẫn lấy từ ConfigMap `m2-shop-cfg` (giá trị `prod`).
+    - |
+      **Host `$CP`** · **(8%)** Service `m2-backend` trong `m2-net` không trả lời. Sửa **Service** (không sửa Deployment) để `http://m2-backend.m2-net` trả trang nginx.
+    - |
+      **Host `$NODE1`** · **(6%)** Pod `m2-logger` trong `m2-ops` có hai container. Ghi mọi dòng chứa `level=error` trong log của container `worker` vào `/root/45-errors.txt` trên `$NODE1`.
+    - |
+      **Host `$CP`** · **(6%)** Ghi tên Pod trong `m2-ops` đang dùng **nhiều memory nhất** vào `/root/45-top.txt` trên `$CP`.
+  hints:
+    - |
+      Câu 4: crictl
+      `crictl ps --name beacon` (cột CONTAINER), hoặc `crictl ps --name beacon -q | cut -c1-13`.
+    - |
+      Câu 11: vì sao Pending?
+      So `accessModes` và `storageClassName` của PVC với PV. Phần lớn trường của PVC không sửa được: xuất YAML, xóa, tạo lại.
+    - |
+      Câu 13 có hai lỗi
+      Một lỗi làm container không tạo được, một lỗi làm image không kéo được. `kubectl describe pod` cho thấy cả hai.
+  solution: |
+    ```bash
+    eval "$(./lab env)"
+    # 1  (host CP)
+    kubectl create sa audit -n m2-ops
+    kubectl create clusterrole pv-viewer --verb=get,list,watch --resource=persistentvolumes,storageclasses
+    kubectl create clusterrolebinding pv-viewer --clusterrole=pv-viewer --serviceaccount=m2-ops:audit
+    # 2  (máy của bạn)
+    mkdir -p ~/cka-answers/m2-kust/overlays/prod
+    cat > ~/cka-answers/m2-kust/overlays/prod/kustomization.yaml <<'EOF'
+    apiVersion: kustomize.config.k8s.io/v1beta1
+    kind: Kustomization
+    resources: [../../base]
+    namespace: m2-app
+    replicas: [{name: shop-ui, count: 2}]
+    images: [{name: nginx, newTag: "1.28"}]
+    EOF
+    kubectl apply -k ~/cka-answers/m2-kust/overlays/prod
+    # 3  (host NODE1)
+    kubectl explain widget.spec
+    kubectl apply -f - <<'EOF'
+    apiVersion: lab.example.com/v1
+    kind: Widget
+    metadata: {name: blue, namespace: m2-app}
+    spec: {size: 3, color: blue}
+    EOF
+    # 4  (host NODE2)
+    crictl ps --name beacon -q | cut -c1-13 > /root/45-beacon.txt
+    # 5  (host CP)
+    kubectl rollout history deploy m2-web -n m2-app
+    kubectl rollout undo deploy m2-web -n m2-app --to-revision=1
+    # 6  (host NODE1)
+    kubectl create deploy m2-agent -n m2-app --image=busybox:1.36 $do -- sleep 3600 > ds.yaml
+    # đổi kind thành DaemonSet, xóa replicas/strategy, thêm vào template.spec:
+    #   nodeSelector: {m2-agent: "true"}
+    #   tolerations: [{key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}]
+    # 7  (host NODE2): requests = limits = cpu 100m, memory 64Mi; priorityClassName: m2-high
+    # 8  (host CP)
+    ```
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: db-guard, namespace: m2-net}
+    spec:
+      podSelector: {matchLabels: {app: db}}
+      policyTypes: [Ingress]
+      ingress:
+      - from:
+        - podSelector: {matchLabels: {role: api}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: m2-mon}}
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    # 9  (host NODE1)
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata: {name: m2-gw, namespace: m2-net}
+    spec:
+      gatewayClassName: m2-gc
+      listeners:
+      - name: https
+        protocol: HTTPS
+        port: 443
+        hostname: m2.local
+        tls: {mode: Terminate, certificateRefs: [{name: m2-tls}]}
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: m2-route, namespace: m2-net}
+    spec:
+      parentRefs: [{name: m2-gw, sectionName: https}]
+      hostnames: [m2.local]
+      rules:
+      - matches: [{path: {type: PathPrefix, value: /}}]
+        filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier: {add: [{name: x-env, value: exam}]}
+        backendRefs: [{name: m2-api, port: 80}]
+    ---
+    # 10  (host NODE2)
+    apiVersion: v1
+    kind: Service
+    metadata: {name: m2-api, namespace: m2-net}
+    spec:
+      selector: {app: m2-api}
+      sessionAffinity: ClientIP
+      ports: [{port: 80, targetPort: http}]
+    ```
+    ```bash
+    # 11  (host CP): PVC xin ReadWriteMany, PV chỉ có ReadWriteOnce
+    kubectl get pvc m2-data -n m2-store -o yaml > pvc.yaml   # đổi accessModes thành [ReadWriteOnce], xóa status
+    kubectl replace --force -f pvc.yaml
+    # 12  (host NODE1): StorageClass + PVC + Pod như lab 22
+    # 13  (host NODE2)
+    kubectl describe pod -n m2-app -l app=m2-shop | grep -A3 -E 'Warning|Error'
+    kubectl get cm m2-shop-cfg -n m2-app -o yaml          # key là "mode", Deployment đòi "MODE"
+    kubectl set image deploy/m2-shop -n m2-app nginx=nginx:1.27
+    kubectl patch deploy m2-shop -n m2-app --type=json -p '[{"op":"replace","path":"/spec/template/spec/containers/0/env/0/valueFrom/configMapKeyRef/key","value":"mode"}]'
+    # 14  (host CP): selector app=back-end → app=backend, targetPort 8080 → 80
+    kubectl patch svc m2-backend -n m2-net --type=json -p '[{"op":"replace","path":"/spec/selector","value":{"app":"backend"}},{"op":"replace","path":"/spec/ports/0/targetPort","value":80}]'
+    # 15  (host NODE1)
+    kubectl logs m2-logger -n m2-ops -c worker | grep 'level=error' > /root/45-errors.txt
+    # 16  (host CP)
+    kubectl top pod -n m2-ops --sort-by=memory --no-headers | head -1 | awk '{print $1}' > /root/45-top.txt
+    ```
+  setup: |
+    answers_dir; rm -rf "$ANS/m2-kust"
+    command -v openssl >/dev/null 2>&1 || die "Cần openssl trên máy chạy lab"
+    kubectl delete ns m2-ops m2-app m2-net m2-mon m2-store --ignore-not-found --wait=true >/dev/null 2>&1
+    kubectl delete pv m2-pv --ignore-not-found >/dev/null 2>&1
+    kubectl delete sc m2-retain --ignore-not-found >/dev/null 2>&1
+    kubectl delete pc m2-high --ignore-not-found >/dev/null 2>&1
+    kubectl delete clusterrole,clusterrolebinding pv-viewer --ignore-not-found >/dev/null 2>&1
+    kubectl delete crd widgets.lab.example.com --ignore-not-found >/dev/null 2>&1
+    kubectl delete gatewayclass m2-gc --ignore-not-found >/dev/null 2>&1
+    kubectl label node --all m2-agent- >/dev/null 2>&1
+    for n in "$CP" "$NODE1" "$NODE2"; do node_exec "$n" 'rm -f /root/45-*.txt' >/dev/null 2>&1; done
+    exam_hosts || info "Không cài được kubectl lên node, vẫn làm được từ máy của bạn"
+    for ns in m2-ops m2-app m2-net m2-mon m2-store; do kubectl create ns "$ns" >/dev/null; done
+    # 2 · kustomize base
+    mkdir -p "$ANS/m2-kust/base"
+    cat > "$ANS/m2-kust/base/deployment.yaml" <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: shop-ui}
+    spec:
+      replicas: 1
+      selector: {matchLabels: {app: shop-ui}}
+      template:
+        metadata: {labels: {app: shop-ui}}
+        spec:
+          containers: [{name: nginx, image: "nginx:1.27"}]
+    EOF
+    printf 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources: [deployment.yaml]\n' > "$ANS/m2-kust/base/kustomization.yaml"
+    # 3 · CRD
+    kubectl apply -f - >/dev/null <<'EOF'
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata: {name: widgets.lab.example.com}
+    spec:
+      group: lab.example.com
+      scope: Namespaced
+      names: {kind: Widget, plural: widgets, singular: widget, shortNames: [wd]}
+      versions:
+      - name: v1
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                required: [size, color]
+                properties:
+                  size: {type: integer, minimum: 1, maximum: 5, description: "Kích thước, 1 tới 5"}
+                  color: {type: string, enum: [blue, green, red], description: "Màu của widget"}
+    EOF
+    # 4 · beacon on NODE2
+    kubectl apply -n m2-ops -f - >/dev/null <<EOF
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: m2-beacon}
+    spec:
+      nodeName: $NODE2
+      containers: [{name: beacon, image: "busybox:1.36", command: ["sleep", "3600"]}]
+    EOF
+    # 5 · m2-web with 3 revisions
+    kubectl create deploy m2-web -n m2-app --image=nginx:1.27 --replicas=2 >/dev/null
+    kubectl rollout status deploy/m2-web -n m2-app --timeout=120s >/dev/null
+    kubectl set image deploy/m2-web -n m2-app nginx=nginx:1.28 >/dev/null
+    kubectl rollout status deploy/m2-web -n m2-app --timeout=120s >/dev/null
+    kubectl set image deploy/m2-web -n m2-app nginx=nginx:1.99 >/dev/null
+    # 6 · node labels
+    kubectl label node "$CP" "$NODE2" m2-agent=true --overwrite >/dev/null
+    # 7 · PriorityClass
+    kubectl create priorityclass m2-high --value=50000 --description="mock exam 2" >/dev/null
+    # 8, 10, 14 · networking
+    kubectl apply -n m2-net -f - >/dev/null <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: db}
+    spec:
+      selector: {matchLabels: {app: db}}
+      template:
+        metadata: {labels: {app: db}}
+        spec: {containers: [{name: nginx, image: "nginx:1.27", ports: [{containerPort: 80}]}]}
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: db}
+    spec: {selector: {app: db}, ports: [{port: 80}]}
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: m2-api}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: m2-api}}
+      template:
+        metadata: {labels: {app: m2-api}}
+        spec: {containers: [{name: nginx, image: "nginx:1.27", ports: [{name: http, containerPort: 80}]}]}
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: m2-backend}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: backend}}
+      template:
+        metadata: {labels: {app: backend}}
+        spec: {containers: [{name: nginx, image: "nginx:1.27", ports: [{containerPort: 80}]}]}
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: m2-backend}
+    spec: {selector: {app: back-end}, ports: [{port: 80, targetPort: 8080}]}
+    EOF
+    # 9 · Gateway API
+    if ! kubectl get crd httproutes.gateway.networking.k8s.io >/dev/null 2>&1; then
+      kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.6.3/standard-install.yaml >/dev/null || die "Không tải được CRD Gateway API (cần internet)"
+      kubectl wait --for=condition=Established crd/gateways.gateway.networking.k8s.io crd/httproutes.gateway.networking.k8s.io --timeout=60s >/dev/null
+    fi
+    printf 'apiVersion: gateway.networking.k8s.io/v1\nkind: GatewayClass\nmetadata: {name: m2-gc}\nspec: {controllerName: lab.example.com/gateway-controller}\n' | kubectl apply -f - >/dev/null
+    t="$(mktemp -d)"
+    openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout "$t/k" -out "$t/c" -subj "/CN=m2.local" >/dev/null 2>&1
+    kubectl create secret tls m2-tls -n m2-net --cert="$t/c" --key="$t/k" >/dev/null; rm -rf "$t"
+    # 11 · storage
+    kubectl apply -f - >/dev/null <<'EOF'
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata: {name: m2-pv}
+    spec:
+      capacity: {storage: 1Gi}
+      accessModes: [ReadWriteOnce]
+      storageClassName: m2-manual
+      persistentVolumeReclaimPolicy: Retain
+      hostPath: {path: /tmp/m2-pv, type: DirectoryOrCreate}
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: {name: m2-data, namespace: m2-store}
+    spec:
+      accessModes: [ReadWriteMany]
+      storageClassName: m2-manual
+      resources: {requests: {storage: 1Gi}}
+    EOF
+    # 13 · broken shop
+    kubectl create cm m2-shop-cfg -n m2-app --from-literal=mode=prod >/dev/null
+    kubectl apply -n m2-app -f - >/dev/null <<'EOF'
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: m2-shop}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: m2-shop}}
+      template:
+        metadata: {labels: {app: m2-shop}}
+        spec:
+          containers:
+          - name: nginx
+            image: "nginx:1.27-alpnie"
+            env:
+            - name: MODE
+              valueFrom: {configMapKeyRef: {name: m2-shop-cfg, key: MODE}}
+    EOF
+    # 15, 16 · logs and memory
+    kubectl apply -n m2-ops -f - >/dev/null <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: m2-logger}
+    spec:
+      containers:
+      - name: web
+        image: busybox:1.36
+        command: ["sh", "-c", "echo 'level=info msg=web ready'; echo 'level=error msg=should not be counted'; sleep 3600"]
+      - name: worker
+        image: busybox:1.36
+        command: ["sh", "-c", "echo 'level=info msg=job start'; echo 'level=error msg=db timeout id=7'; echo 'level=warn msg=retry'; echo 'level=error msg=db timeout id=8'; echo 'level=info msg=job done'; echo 'level=error msg=queue full'; sleep 3600"]
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: m2-hog}
+    spec:
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "x=$(head -c 40m /dev/zero | tr '\\000' a); echo loaded; sleep 3600"]
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: m2-idle}
+    spec:
+      containers: [{name: app, image: "busybox:1.36", command: ["sleep", "3600"]}]
+    EOF
+    kubectl wait --for=condition=Ready pod --all -n m2-ops --timeout=120s >/dev/null 2>&1 || true
+    echo "Bắt đầu: $(date +%H:%M). Hết giờ: $(date -d '+120 min' +%H:%M 2>/dev/null || date -v+120M +%H:%M 2>/dev/null)"
+  verify: |
+    can() { kubectl auth can-i "$@" 2>/dev/null; }
+    exam_task 1 6 "RBAC cho ServiceAccount audit"
+    check "SA audit" exists sa audit -n m2-ops
+    expect "ClusterRoleBinding pv-viewer dùng ClusterRole pv-viewer" "$(jp clusterrolebinding pv-viewer '{.roleRef.kind}/{.roleRef.name}')" "ClusterRole/pv-viewer"
+    expect "audit list persistentvolumes" "$(can list persistentvolumes --as=system:serviceaccount:m2-ops:audit)" "yes"
+    expect "audit watch storageclasses" "$(can watch storageclasses --as=system:serviceaccount:m2-ops:audit)" "yes"
+    expect "audit không xóa được PV" "$(can delete persistentvolumes --as=system:serviceaccount:m2-ops:audit)" "no"
+
+    exam_task 2 5 "Kustomize overlay prod"
+    check "Có overlays/prod/kustomization.yaml" test -f "$ANS/m2-kust/overlays/prod/kustomization.yaml"
+    check "Base vẫn dùng nginx:1.27" grep -q 'nginx:1.27' "$ANS/m2-kust/base/deployment.yaml"
+    expect "shop-ui trong m2-app: 2 replica, nginx:1.28" "$(jp deploy shop-ui -n m2-app '{.spec.replicas}:{.spec.template.spec.containers[0].image}')" "2:nginx:1.28"
+    expect "shop-ui 2 Pod sẵn sàng" "$(jp deploy shop-ui -n m2-app '{.status.readyReplicas}')" "2"
+
+    exam_task 3 6 "Widget blue"
+    expect "Widget blue size 3, color blue" "$(jp widget blue -n m2-app '{.spec.size}:{.spec.color}')" "3:blue"
+
+    exam_task 4 8 "crictl: container ID của beacon"
+    cid="$(jp pod m2-beacon -n m2-ops '{.status.containerStatuses[0].containerID}')"; cid="${cid#*://}"
+    expect "/root/45-beacon.txt trên $NODE2" "$(node_exec "$NODE2" 'cat /root/45-beacon.txt 2>/dev/null' | tr -d '[:space:]')" "${cid:0:13}"
+
+    exam_task 5 5 "Rollback m2-web về revision 1"
+    expect "m2-web dùng nginx:1.27" "$(jp deploy m2-web -n m2-app '{.spec.template.spec.containers[0].image}')" "nginx:1.27"
+    expect "m2-web 2 Pod sẵn sàng" "$(jp deploy m2-web -n m2-app '{.status.readyReplicas}/{.status.updatedReplicas}')" "2/2"
+
+    exam_task 6 5 "DaemonSet m2-agent"
+    expect "m2-agent chọn node m2-agent=true" "$(jp ds m2-agent -n m2-app '{.spec.template.spec.nodeSelector.m2-agent}')" "true"
+    expect "m2-agent chạy trên đúng 2 node và sẵn sàng" "$(jp ds m2-agent -n m2-app '{.status.desiredNumberScheduled}/{.status.numberReady}')" "2/2"
+
+    exam_task 7 5 "Pod m2-vip"
+    expect "QoS Guaranteed" "$(jp pod m2-vip -n m2-app '{.status.qosClass}')" "Guaranteed"
+    expect "requests cpu 100m, memory 64Mi" "$(jp pod m2-vip -n m2-app '{.spec.containers[0].resources.requests.cpu}/{.spec.containers[0].resources.requests.memory}')" "100m/64Mi"
+    expect "PriorityClass m2-high (50000)" "$(jp pod m2-vip -n m2-app '{.spec.priorityClassName}/{.spec.priority}')" "m2-high/50000"
+
+    exam_task 8 6 "NetworkPolicy db-guard"
+    expect "db-guard chọn app=db" "$(jp netpol db-guard -n m2-net '{.spec.podSelector.matchLabels.app}')" "db"
+    check "role=api trong m2-net → db: được" can_reach m2-net http://db.m2-net role=api
+    check_not "Pod khác trong m2-net → db: bị chặn" can_reach m2-net http://db.m2-net role=web
+    check "Pod trong m2-mon → db: được" can_reach m2-mon http://db.m2-net
+    check_not "Pod trong m2-ops → db: bị chặn" can_reach m2-ops http://db.m2-net
+
+    exam_task 9 8 "Gateway và HTTPRoute"
+    expect "Gateway m2-gw class m2-gc" "$(jp gateway m2-gw -n m2-net '{.spec.gatewayClassName}')" "m2-gc"
+    expect "Listener https" "$(jp gateway m2-gw -n m2-net '{.spec.listeners[?(@.name=="https")].protocol}:{.spec.listeners[?(@.name=="https")].port}:{.spec.listeners[?(@.name=="https")].hostname}')" "HTTPS:443:m2.local"
+    expect "Listener dùng Secret m2-tls" "$(jp gateway m2-gw -n m2-net '{.spec.listeners[?(@.name=="https")].tls.certificateRefs[0].name}')" "m2-tls"
+    expect "m2-route gắn m2-gw/https" "$(jp httproute m2-route -n m2-net '{.spec.parentRefs[0].name}/{.spec.parentRefs[0].sectionName}')" "m2-gw/https"
+    expect "m2-route hostname m2.local" "$(jp httproute m2-route -n m2-net '{.spec.hostnames[*]}')" "m2.local"
+    expect "m2-route tới m2-api:80" "$(jp httproute m2-route -n m2-net '{.spec.rules[0].backendRefs[0].name}:{.spec.rules[0].backendRefs[0].port}')" "m2-api:80"
+    expect "Thêm header x-env: exam" "$(jp httproute m2-route -n m2-net '{.spec.rules[0].filters[?(@.type=="RequestHeaderModifier")].requestHeaderModifier.add[0].name}={.spec.rules[0].filters[?(@.type=="RequestHeaderModifier")].requestHeaderModifier.add[0].value}')" "x-env=exam"
+
+    exam_task 10 6 "Service m2-api"
+    expect "ClusterIP cổng 80, targetPort http" "$(jp svc m2-api -n m2-net '{.spec.type}:{.spec.ports[0].port}:{.spec.ports[0].targetPort}')" "ClusterIP:80:http"
+    expect "sessionAffinity ClientIP" "$(jp svc m2-api -n m2-net '{.spec.sessionAffinity}')" "ClientIP"
+    check "Gọi được http://m2-api.m2-net" can_reach m2-net http://m2-api.m2-net
+
+    exam_task 11 5 "PVC m2-data Bound"
+    expect "m2-data Bound với m2-pv" "$(jp pvc m2-data -n m2-store '{.status.phase}/{.spec.volumeName}')" "Bound/m2-pv"
+    expect "m2-data vẫn 1Gi" "$(jp pvc m2-data -n m2-store '{.spec.resources.requests.storage}')" "1Gi"
+    expect "PV không bị sửa (chỉ ReadWriteOnce)" "$(jp pv m2-pv '{.spec.accessModes[*]}')" "ReadWriteOnce"
+
+    exam_task 12 5 "StorageClass m2-retain"
+    defp="$(kubectl get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name} {.provisioner}{"\n"}{end}' 2>/dev/null | grep -v '^m2-retain ' | head -1 | awk '{print $2}')"
+    expect "m2-retain: provisioner, Retain, WaitForFirstConsumer" "$(jp sc m2-retain '{.provisioner}/{.reclaimPolicy}/{.volumeBindingMode}')" "$defp/Retain/WaitForFirstConsumer"
+    expect "PVC m2-logs Bound, lớp m2-retain" "$(jp pvc m2-logs -n m2-store '{.status.phase}/{.spec.storageClassName}')" "Bound/m2-retain"
+    expect "m2-logs-pod Running, gắn /logs" "$(jp pod m2-logs-pod -n m2-store '{.status.phase}:{.spec.containers[0].volumeMounts[?(@.mountPath=="/logs")].mountPath}')" "Running:/logs"
+
+    exam_task 13 10 "Sửa m2-shop"
+    expect "m2-shop 2/2 sẵn sàng" "$(jp deploy m2-shop -n m2-app '{.status.readyReplicas}/{.status.updatedReplicas}')" "2/2"
+    expect "Image nginx:1.27" "$(jp deploy m2-shop -n m2-app '{.spec.template.spec.containers[0].image}')" "nginx:1.27"
+    expect "MODE vẫn lấy từ ConfigMap m2-shop-cfg" "$(jp deploy m2-shop -n m2-app '{.spec.template.spec.containers[0].env[?(@.name=="MODE")].valueFrom.configMapKeyRef.name}')" "m2-shop-cfg"
+    expect "MODE=prod trong container" "$(kubectl exec -n m2-app deploy/m2-shop -- printenv MODE 2>/dev/null | tr -d '[:space:]')" "prod"
+
+    exam_task 14 8 "Sửa Service m2-backend"
+    expect "Deployment m2-backend không bị sửa" "$(jp deploy m2-backend -n m2-net '{.spec.template.metadata.labels.app}:{.spec.replicas}')" "backend:2"
+    expect "m2-backend có 2 endpoint" "$(jp endpointslices -n m2-net -l kubernetes.io/service-name=m2-backend '{.items[*].endpoints[*].addresses[0]}' | wc -w | tr -d ' ')" "2"
+    check "Gọi được http://m2-backend.m2-net" can_reach m2-net http://m2-backend.m2-net
+
+    exam_task 15 6 "Log lỗi của container worker"
+    want="$(printf 'level=error msg=db timeout id=7\nlevel=error msg=db timeout id=8\nlevel=error msg=queue full')"
+    expect "/root/45-errors.txt trên $NODE1" "$(node_exec "$NODE1" 'cat /root/45-errors.txt 2>/dev/null' | sed '/^$/d')" "$want"
+
+    exam_task 16 6 "Pod tốn memory nhất"
+    expect "/root/45-top.txt trên $CP" "$(node_exec "$CP" 'cat /root/45-top.txt 2>/dev/null' | tr -d '[:space:]')" "m2-hog"
+    exam_end
+  cleanup: |
+    kubectl delete ns m2-ops m2-app m2-net m2-mon m2-store --ignore-not-found --wait=false >/dev/null 2>&1
+    kubectl delete pv m2-pv --ignore-not-found --wait=false >/dev/null 2>&1
+    kubectl delete sc m2-retain --ignore-not-found >/dev/null 2>&1
+    kubectl delete pc m2-high --ignore-not-found >/dev/null 2>&1
+    kubectl delete clusterrole,clusterrolebinding pv-viewer --ignore-not-found >/dev/null 2>&1
+    kubectl delete crd widgets.lab.example.com --ignore-not-found --wait=false >/dev/null 2>&1
+    kubectl delete gatewayclass m2-gc --ignore-not-found >/dev/null 2>&1
+    kubectl label node --all m2-agent- >/dev/null 2>&1
+    for n in "$CP" "$NODE1" "$NODE2"; do node_exec "$n" 'rm -f /root/45-*.txt' >/dev/null 2>&1; done
+    rm -rf "$ANS/m2-kust"
+  solve: |
+    kubectl create sa audit -n m2-ops
+    kubectl create clusterrole pv-viewer --verb=get,list,watch --resource=persistentvolumes,storageclasses
+    kubectl create clusterrolebinding pv-viewer --clusterrole=pv-viewer --serviceaccount=m2-ops:audit
+    mkdir -p "$ANS/m2-kust/overlays/prod"
+    printf 'apiVersion: kustomize.config.k8s.io/v1beta1\nkind: Kustomization\nresources: [../../base]\nnamespace: m2-app\nreplicas: [{name: shop-ui, count: 2}]\nimages: [{name: nginx, newTag: "1.28"}]\n' > "$ANS/m2-kust/overlays/prod/kustomization.yaml"
+    kubectl apply -k "$ANS/m2-kust/overlays/prod"
+    printf 'apiVersion: lab.example.com/v1\nkind: Widget\nmetadata: {name: blue, namespace: m2-app}\nspec: {size: 3, color: blue}\n' | kubectl apply -f -
+    cid="$(kubectl get pod m2-beacon -n m2-ops -o jsonpath='{.status.containerStatuses[0].containerID}')"; cid="${cid#*://}"
+    node_exec "$NODE2" "echo ${cid:0:13} > /root/45-beacon.txt"
+    kubectl rollout undo deploy m2-web -n m2-app --to-revision=1
+    kubectl apply -f - <<'EOF'
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata: {name: m2-agent, namespace: m2-app}
+    spec:
+      selector: {matchLabels: {app: m2-agent}}
+      template:
+        metadata: {labels: {app: m2-agent}}
+        spec:
+          nodeSelector: {m2-agent: "true"}
+          tolerations: [{key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}]
+          containers: [{name: agent, image: "busybox:1.36", command: ["sleep", "3600"]}]
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: m2-vip, namespace: m2-app}
+    spec:
+      priorityClassName: m2-high
+      containers:
+      - name: nginx
+        image: nginx:1.27
+        resources:
+          requests: {cpu: 100m, memory: 64Mi}
+          limits: {cpu: 100m, memory: 64Mi}
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: db-guard, namespace: m2-net}
+    spec:
+      podSelector: {matchLabels: {app: db}}
+      policyTypes: [Ingress]
+      ingress:
+      - from:
+        - podSelector: {matchLabels: {role: api}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: m2-mon}}
+        ports: [{protocol: TCP, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata: {name: m2-gw, namespace: m2-net}
+    spec:
+      gatewayClassName: m2-gc
+      listeners:
+      - name: https
+        protocol: HTTPS
+        port: 443
+        hostname: m2.local
+        tls: {mode: Terminate, certificateRefs: [{name: m2-tls}]}
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata: {name: m2-route, namespace: m2-net}
+    spec:
+      parentRefs: [{name: m2-gw, sectionName: https}]
+      hostnames: [m2.local]
+      rules:
+      - matches: [{path: {type: PathPrefix, value: /}}]
+        filters:
+        - type: RequestHeaderModifier
+          requestHeaderModifier: {add: [{name: x-env, value: exam}]}
+        backendRefs: [{name: m2-api, port: 80}]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata: {name: m2-api, namespace: m2-net}
+    spec:
+      selector: {app: m2-api}
+      sessionAffinity: ClientIP
+      ports: [{port: 80, targetPort: http}]
+    EOF
+    prov="$(kubectl get sc -o jsonpath='{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class=="true")]}{.metadata.name} {.provisioner}{"\n"}{end}' | grep -v '^m2-retain ' | head -1 | awk '{print $2}')"
+    kubectl apply -f - <<EOF
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata: {name: m2-retain}
+    provisioner: $prov
+    reclaimPolicy: Retain
+    volumeBindingMode: WaitForFirstConsumer
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: {name: m2-logs, namespace: m2-store}
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: m2-retain
+      resources: {requests: {storage: 500Mi}}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: m2-logs-pod, namespace: m2-store}
+    spec:
+      containers:
+      - {name: c, image: "busybox:1.36", command: ["sleep", "3600"], volumeMounts: [{name: l, mountPath: /logs}]}
+      volumes: [{name: l, persistentVolumeClaim: {claimName: m2-logs}}]
+    EOF
+    kubectl get pvc m2-data -n m2-store -o yaml | sed 's/ReadWriteMany/ReadWriteOnce/' | sed '/^status:/,$d' > /tmp/m2-data.yaml
+    kubectl replace --force -f /tmp/m2-data.yaml
+    kubectl set image deploy/m2-shop -n m2-app nginx=nginx:1.27
+    kubectl patch deploy m2-shop -n m2-app --type=json -p '[{"op":"replace","path":"/spec/template/spec/containers/0/env/0/valueFrom/configMapKeyRef/key","value":"mode"}]'
+    kubectl patch svc m2-backend -n m2-net --type=json -p '[{"op":"replace","path":"/spec/selector","value":{"app":"backend"}},{"op":"replace","path":"/spec/ports/0/targetPort","value":80}]'
+    kubectl logs m2-logger -n m2-ops -c worker | grep 'level=error' > /tmp/m2-errors.txt
+    node_put "$NODE1" /tmp/m2-errors.txt /root/45-errors.txt
+    node_exec "$CP" 'echo m2-hog > /root/45-top.txt'
+    kubectl rollout status deploy/m2-web -n m2-app --timeout=180s
+    kubectl rollout status deploy/m2-shop -n m2-app --timeout=180s
+    kubectl rollout status deploy/shop-ui -n m2-app --timeout=180s
+    kubectl rollout status ds/m2-agent -n m2-app --timeout=180s
+    kubectl wait --for=condition=Ready pod/m2-vip -n m2-app --timeout=120s
+    kubectl wait --for=condition=Ready pod/m2-logs-pod -n m2-store --timeout=180s
+    for i in $(seq 1 30); do [ "$(kubectl get pvc m2-data -n m2-store -o jsonpath='{.status.phase}')" = Bound ] && break; sleep 2; done
+    sleep 5
+  docs:
+    - [CKA · Important Instructions, "https://docs.linuxfoundation.org/tc-docs/certification/tips-cka-and-ckad"]
+    - [kubectl Quick Reference, "https://kubernetes.io/docs/reference/kubectl/quick-reference/"]

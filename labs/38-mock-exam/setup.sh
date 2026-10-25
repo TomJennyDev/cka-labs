@@ -6,6 +6,7 @@ source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../../lib/common.sh"
 require_env kind
 detect_nodes
 answers_dir; rm -f "$ANS/38-nodes.txt"
+exam_hosts || info "Không cài được kubectl lên node, vẫn làm được từ máy của bạn"
 kubectl delete ns mock-x mock-a mock-b mock-c --ignore-not-found --wait=true >/dev/null 2>&1
 kubectl delete pc exam-high --ignore-not-found >/dev/null
 node_exec "$NODE1" "rm -f $(static_dir "$NODE1")/exam-static.yaml" >/dev/null 2>&1 || true
