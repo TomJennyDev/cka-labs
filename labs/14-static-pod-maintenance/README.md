@@ -20,6 +20,44 @@ Chạy Pod không qua scheduler (static pod, `nodeName`), và đưa một node v
 - Đặt `spec.nodeName` thì bỏ qua scheduler: kubelet của node đó nhận Pod luôn. Hữu ích khi scheduler chết.
 - `cordon` chặn Pod mới; `drain` = cordon + đuổi Pod qua Eviction API, tôn trọng **PodDisruptionBudget**. DaemonSet và mirror pod không bị đuổi; cần `--ignore-daemonsets`, `--delete-emptydir-data`.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph n1 ["NODE1"]
+    f["staticPodPath/static-web.yaml"] --> kl["kubelet"]
+    kl --> sp["static-web (chạy thật)"]
+  end
+  kl -->|"tạo mirror pod"| api["kube-apiserver<br/>static-web-NODE1"]
+  manual["Pod manual<br/>spec.nodeName: NODE2"] -->|"bỏ qua scheduler"| n2["NODE2"]
+  pdb["PDB web-pdb<br/>minAvailable 2"] --> web["Deployment web × 3"]
+  drain["kubectl drain NODE1"] -->|"tôn trọng"| pdb
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant K as kubectl drain
+  participant A as kube-apiserver
+  participant P as PDB
+  participant RS as ReplicaSet controller
+  K->>A: cordon: spec.unschedulable = true
+  loop từng Pod trên node (trừ DaemonSet, static pod)
+    K->>A: POST eviction
+    A->>P: còn đủ minAvailable nếu đuổi Pod này?
+    alt đủ
+      A-->>K: 201, Pod bị xóa
+      RS->>A: tạo Pod thay thế ở node khác
+    else không đủ
+      A-->>K: 429, thử lại sau
+    end
+  end
+  K-->>K: node drained
+```
+
 ## Chuẩn bị
 
 ```bash

@@ -74,6 +74,8 @@ Mức hướng dẫn trong mỗi bài giảm dần theo cấp độ, để bạn
 | 3–6 (lab 12–25) | **Dẫn hướng** | *Cách tiếp cận* cho từng câu: tra ở đâu, khung lệnh, cách tự kiểm, bẫy hay gặp. Không có đáp án |
 | 7–9 (lab 26–38) | **Tự lực** | *Quy trình tư duy*: cách làm việc và cách kiểm chứng, chi tiết tự tra như khi thi |
 
+Mỗi bài có phần **Sơ đồ** (Mermaid): một sơ đồ cho biết lab dựng những gì và chúng nối với nhau ra sao, một sequence diagram cho thấy bên trong Kubernetes xử lý thế nào. Với bài troubleshooting, sơ đồ chỉ vẽ đường đi và các điểm cần kiểm tra, không lộ lỗi.
+
 Mỗi bài cũng ghi **Cần làm trước** để bạn biết nên học bài nào trước. Gợi ý (`./lab hint`) và lời giải (`./lab solution`) luôn có cho mọi bài.
 
 Gợi ý nhịp học 6 tuần: tuần 1 cấp 0–1, tuần 2 cấp 2, tuần 3 cấp 3–4, tuần 4 cấp 5–6, tuần 5 cấp 7–8, tuần 6 làm lại các bài sai và thi thử 2 lần.
@@ -168,10 +170,13 @@ lib/common.sh           hàm dùng chung cho setup/verify/cleanup
 env/kind/               cluster kind 3 node
 env/kubeadm/            Vagrantfile + script chuẩn bị node cho kubeadm
 src/labs/*.yaml         NGUỒN của mọi bài lab (sửa ở đây)
+src/guides/NN.md        hướng dẫn từng bước / cách tiếp cận / quy trình tư duy
+src/diagrams/NN.md      sơ đồ Mermaid: lab dựng gì và luồng hoạt động
 labs/NN-tên/            sinh tự động: README.md, SOLUTION.md, setup.sh, verify.sh, cleanup.sh
 tests/                  bộ kiểm thử chính các bài lab
 docs/index.html         trang hướng dẫn, sinh tự động
 tools/build.py          sinh labs/, README (bảng), docs/ từ src/
+tools/check_diagrams.py render thử mọi sơ đồ Mermaid để bắt lỗi cú pháp
 ```
 
 ## Đóng góp
@@ -181,6 +186,7 @@ Mỗi bài là một mục trong `src/labs/*.yaml`. Sau khi sửa:
 ```bash
 pip install pyyaml markdown
 python3 tools/build.py
+python3 tools/check_diagrams.py 07   # cần mermaid-cli: npm i -g @mermaid-js/mermaid-cli
 tests/run.sh 07          # setup → verify phải FAIL → lời giải mẫu → verify phải PASS → cleanup
 ```
 

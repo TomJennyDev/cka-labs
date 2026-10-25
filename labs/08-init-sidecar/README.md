@@ -22,6 +22,47 @@ Dùng init container để chờ phụ thuộc, và thêm sidecar đọc log fil
 - Các container trong Pod dùng chung volume (`emptyDir`) và network namespace (gọi nhau qua `localhost`).
 - Spec của Pod đang chạy gần như bất biến: muốn thêm container phải xuất YAML, sửa, rồi `kubectl replace --force -f`.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph web ["Pod web"]
+    i1["init: wait-db<br/>until nslookup db"] --> c1["nginx"]
+  end
+  svc["Service db<br/>ClusterIP, không selector"] -.->|"tên DNS có rồi thì init xong"| i1
+  subgraph legacy ["Pod legacy"]
+    app["app: ghi /var/log/app/app.log"]
+    sc["log-tail: init container<br/>restartPolicy: Always"]
+    v[("emptyDir logs")]
+    app --> v
+    v --> sc
+  end
+  sc -->|"stdout"| logs["kubectl logs legacy -c log-tail"]
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant KL as kubelet
+  participant I as init container
+  participant S as sidecar (native)
+  participant M as container chính
+  KL->>I: chạy wait-db
+  loop tới khi tên db phân giải được
+    I->>I: nslookup db.lab08... thất bại, sleep 2
+  end
+  I-->>KL: thoát mã 0
+  Note over KL: Pod Init:0/1 → PodInitializing
+  KL->>S: chạy sidecar, KHÔNG chờ nó thoát
+  KL->>M: chạy container chính
+  Note over S,M: chạy song song suốt đời Pod
+  KL->>M: khi xóa Pod: dừng container chính trước
+  KL->>S: rồi mới dừng sidecar
+```
+
 ## Chuẩn bị
 
 ```bash

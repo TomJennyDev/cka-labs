@@ -20,6 +20,43 @@ Chọn đúng loại workload: một Pod trên mỗi node (DaemonSet), tác vụ
 - Job: `completions` (cần bao nhiêu lần thành công), `parallelism` (chạy song song bao nhiêu), `backoffLimit` (số lần thử lại), `ttlSecondsAfterFinished` (tự xóa). `restartPolicy` chỉ được `Never` hoặc `OnFailure`.
 - CronJob: `schedule` theo cú pháp cron, `concurrencyPolicy` (`Allow`, `Forbid`, `Replace`), giới hạn lịch sử job. `kubectl create job x --from=cronjob/y` chạy ngay một lần.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart TB
+  ds["DaemonSet node-agent<br/>+ toleration control-plane"] --> n0["Pod trên control plane"]
+  ds --> n1["Pod trên worker 1"]
+  ds --> n2["Pod trên worker 2"]
+  job["Job batch-sum<br/>completions 4 · parallelism 2"] --> j["Pod 1,2 chạy → Pod 3,4 chạy"]
+  cj["CronJob report<br/>*/15 * * * * · Forbid"] -->|"mỗi 15 phút"| jt["Job"]
+  cj -->|"kubectl create job --from"| now["Job report-now"]
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant CJ as CronJob controller
+  participant JC as Job controller
+  participant A as kube-apiserver
+  participant P as Pod
+  CJ->>CJ: tới giờ theo schedule
+  alt Job trước chưa xong và concurrencyPolicy Forbid
+    CJ->>CJ: bỏ qua lần này
+  else
+    CJ->>A: tạo Job từ jobTemplate
+  end
+  JC->>A: tạo tối đa parallelism Pod
+  P-->>JC: thoát 0 (1 completion)
+  JC->>A: tạo Pod tiếp tới đủ completions
+  P-->>JC: thoát khác 0
+  JC->>A: thử lại, tối đa backoffLimit lần
+  JC->>A: Job Complete
+  Note over A: ttlSecondsAfterFinished hết hạn thì Job bị xóa
+```
+
 ## Chuẩn bị
 
 ```bash

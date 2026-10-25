@@ -22,6 +22,44 @@ Chọn đúng loại volume cho từng nhu cầu: chia sẻ dữ liệu giữa c
 - **projected** gộp `configMap`, `secret`, `downwardAPI`, `serviceAccountToken` vào một thư mục.
 - **Downward API** đưa thông tin của chính Pod (tên, namespace, IP, node, label, resources) vào biến môi trường hoặc file.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph shared ["Pod shared"]
+    w["writer: date >> /data/out.log"] --> v[("emptyDir data<br/>tmpfs 64Mi")]
+    v --> r["reader: tail -F"]
+  end
+  subgraph hostlog ["Pod hostlog trên NODE1"]
+    h["/logs/hello.txt"]
+  end
+  h <-->|"hostPath DirectoryOrCreate"| hp[("NODE1:/var/log/lab20")]
+  subgraph info ["Pod info"]
+    e["env POD_IP, NODE_NAME<br/>(fieldRef)"]
+    pv["/etc/info: projected"]
+  end
+  cm["ConfigMap app-cfg"] --> pv
+  lb["metadata.labels"] --> pv
+  tok["token SA, hạn 3600 giây"] --> pv
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant KL as kubelet
+  participant FS as filesystem của node
+  participant C as container
+  KL->>FS: emptyDir: tạo thư mục (hoặc tmpfs) khi Pod tới node
+  KL->>FS: hostPath: dùng thẳng thư mục của node
+  KL->>KL: projected: ghép ConfigMap + downwardAPI + token vào một thư mục
+  KL->>C: mount các volume rồi khởi động container
+  Note over KL,C: token được kubelet làm mới trước khi hết hạn
+  KL->>FS: Pod bị xóa: xóa emptyDir. hostPath vẫn giữ nguyên
+```
+
 ## Chuẩn bị
 
 ```bash

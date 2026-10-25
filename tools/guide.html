@@ -69,7 +69,7 @@ main{min-width:0;padding-block:28px 90px;padding-left:max(16px,env(safe-area-ins
 .page{max-width:900px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
 .page.wide{max-width:1180px}
 .eyebrow{font:600 12px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin:0}
-h1{font:800 clamp(30px,4.6vw,50px)/1.05 var(--f-display);letter-spacing:-.025em;margin:6px 0 0;text-wrap:balance}
+h1{overflow-wrap:break-word;font:800 clamp(30px,4.6vw,50px)/1.05 var(--f-display);letter-spacing:-.025em;margin:6px 0 0;text-wrap:balance}
 h2{font:700 24px/1.2 var(--f-display);letter-spacing:-.01em;margin:0 0 10px;text-wrap:balance}
 h3{font:600 18px/1.3 var(--f-display);margin:0 0 8px}
 p{margin:0 0 10px}
@@ -120,7 +120,7 @@ details.hint>div{padding:0 0 12px}
 .solution{border:1px dashed var(--line);border-radius:10px;padding:16px}
 .solution[data-open="1"]{border-style:solid;border-color:var(--accent)}
 .navnext{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:16px}
-.navnext a{display:flex;flex-direction:column;gap:2px;text-decoration:none;color:var(--ink);max-width:48%}
+.navnext a{overflow-wrap:anywhere;display:flex;flex-direction:column;gap:2px;text-decoration:none;color:var(--ink);max-width:48%}
 .navnext a small{font:600 11px var(--f-mono);color:var(--muted)}
 .navnext a.next{text-align:right;margin-left:auto}
 .timer{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -191,6 +191,18 @@ details.hint>div{padding:0 0 12px}
 .mode .sup{align-self:flex-start}
 .mode p{margin:0;font-size:13.5px;color:var(--muted)}
 .mode .lv{font:600 12px var(--f-mono);color:var(--ink)}
+.diagrams{display:grid;gap:14px;grid-template-columns:minmax(0,1fr)}
+.diagram{margin:0;overflow:hidden;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.diagram h3{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px}
+.diagram h3::before{content:"";width:8px;height:8px;border-radius:2px;background:var(--accent)}
+.mmd{overflow-x:auto;padding:4px 0;text-align:center}
+.mmd pre.mermaid{background:none;color:var(--ink);padding:0;margin:0;font:12px/1.5 var(--f-mono);text-align:left;white-space:pre-wrap}
+.mmd svg{height:auto}
+@media (max-width:640px){.mmd svg{min-width:600px}}
+.mmd.zoom svg{min-width:var(--nat)!important}
+.zoomhint{display:none;font:600 11px var(--f-mono);color:var(--muted);margin-top:6px}
+@media (max-width:640px){.zoomhint{display:block}}
+.diagram .md>p{font-size:13.5px;color:var(--muted);margin-top:8px}
 .fade{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--ok) 0%,var(--accent) 45%,var(--warn) 80%,var(--line) 100%)}
 .fade-l{display:flex;justify-content:space-between;font:600 11px var(--f-mono);color:var(--muted);margin-top:6px}
 @media (prefers-reduced-motion: reduce){*{transition:none !important}}
@@ -242,12 +254,32 @@ function copyBtn(wrap, getText) {
   wrap.style.position = "relative"; wrap.appendChild(b);
 }
 function enhance(root) {
-  $$(".md pre", root).forEach(pre => { if (pre.parentElement.classList.contains("code")) return; const w = document.createElement("div"); w.className = "code"; pre.replaceWith(w); w.appendChild(pre); copyBtn(w, () => pre.textContent); });
+  $$(".md pre:not(.mermaid)", root).forEach(pre => { if (pre.parentElement.classList.contains("code")) return; const w = document.createElement("div"); w.className = "code"; pre.replaceWith(w); w.appendChild(pre); copyBtn(w, () => pre.textContent); });
   $$(".cmd", root).forEach(c => copyBtn(c, () => c.dataset.cmd));
   $$(".md a[href^='http']", root).forEach(a => { a.target = "_blank"; a.rel = "noopener"; });
 }
 const cmd = c => '<div class="cmd" data-cmd="' + esc(c) + '"><span>$</span>' + esc(c) + "</div>";
 
+// Mermaid: loaded from the CDN only when a page has diagrams
+let mermaidLoad = null;
+const isDark = () => { const t = document.documentElement.dataset.theme; return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches; };
+function diagrams(root) {
+  const codes = $$("code.language-mermaid", root);
+  if (!codes.length) return;
+  const nodes = codes.map(c => { const pre = c.parentElement, box = document.createElement("div"), m = document.createElement("pre"); box.className = "mmd"; m.className = "mermaid"; m.textContent = c.textContent; box.appendChild(m); pre.replaceWith(box); return m; });
+  mermaidLoad = mermaidLoad || new Promise((ok, no) => { const sc = document.createElement("script"); sc.src = "https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+  mermaidLoad.then(() => {
+    window.mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: isDark() ? "dark" : "neutral", fontFamily: "Be Vietnam Pro, system-ui, sans-serif", sequence: { mirrorActors: false } });
+    return window.mermaid.run({ nodes: nodes.filter(n => n.isConnected) });
+  }).then(() => nodes.forEach(n => {
+    const box = n.parentElement, svg = box && box.querySelector("svg"); if (!svg) return;
+    const nat = parseFloat(svg.style.maxWidth) || 0; if (!nat) return;
+    box.style.setProperty("--nat", nat + "px");
+    const hint = document.createElement("div"); hint.className = "zoomhint"; hint.textContent = "Chạm để phóng to · vuốt ngang để xem hết";
+    box.after(hint);
+    box.onclick = () => box.classList.toggle("zoom");
+  })).catch(() => { mermaidLoad = null; });
+}
 function renderSide(filter) {
   const q = (filter || "").trim().toLowerCase();
   let html = "";
@@ -318,6 +350,7 @@ function lab(id) {
   if (l.prereq.length) h += '<div class="prereq"><span class="lbl">Cần làm trước:</span>' + (l.prereq.length > 6 ? '<a class="chip" href="#lab-' + pad(l.prereq[0]) + '">Lab ' + pad(l.prereq[0]) + "–" + pad(l.prereq[l.prereq.length - 1]) + "</a>" : l.prereq.map(p => '<a class="chip ' + labStatus(p) + '" href="#lab-' + pad(p) + '" title="' + esc(byId(p).title) + '">' + pad(p) + " · " + esc(byId(p).title) + "</a>").join("")) + "</div>";
   h += "</section>";
   if (l.concepts) h += '<section class="sec panel"><h2>Kiến thức cần nắm</h2><div class="md">' + l.concepts + "</div></section>";
+  if (l.diagrams.length) h += '<section class="sec"><h2>Sơ đồ</h2><div class="diagrams">' + l.diagrams.map(d => '<figure class="diagram"><h3>' + esc(d[0]) + '</h3><div class="md">' + d[1] + "</div></figure>").join("") + "</div></section>";
   h += '<section class="sec"><h2>Chuẩn bị</h2>' + (l.id === 1 ? "" : cmd("./lab start " + l.id)) + (l.setup_note ? '<div class="md">' + l.setup_note + "</div>" : "") + "</section>";
   h += '<section class="sec"><h2>Đề bài <small id="tcount"></small></h2><ol class="tasks">' + l.tasks.map((t, i) => { const key = l.id + ":" + i; return '<li class="task' + (state.tasks[key] ? " done" : "") + '"><label><input type="checkbox" data-task="' + key + '"' + (state.tasks[key] ? " checked" : "") + ' aria-label="Đánh dấu câu ' + (i + 1) + '"></label><div class="md">' + t + "</div></li>"; }).join("") + "</ol></section>";
   h += guideHtml(l);
@@ -378,7 +411,7 @@ function render() {
   const m = h.match(/^lab-(\d+)$/);
   const main = $("#main");
   clearInterval(timerInt);
-  if (m && byId(+m[1])) { main.innerHTML = lab(+m[1]); enhance(main); wireLab(+m[1]); document.title = "Lab " + m[1] + " · CKA Labs"; }
+  if (m && byId(+m[1])) { main.innerHTML = lab(+m[1]); diagrams(main); enhance(main); wireLab(+m[1]); document.title = "Lab " + m[1] + " · CKA Labs"; }
   else if (h === "setup") { main.innerHTML = setup(); enhance(main); document.title = "Môi trường · CKA Labs"; }
   else { main.innerHTML = home(); enhance(main); document.title = "CKA Labs"; }
   renderSide($("#q").value); progress();

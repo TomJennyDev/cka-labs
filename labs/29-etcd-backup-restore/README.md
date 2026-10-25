@@ -21,6 +21,43 @@ Chụp snapshot etcd đúng cách, và khôi phục cluster về thời điểm 
 - Sau khi restore, sửa `hostPath` của volume `etcd-data` trong `etcd.yaml` trỏ sang thư mục mới. kubelet tự tạo lại Pod etcd; API server có thể mất 1–2 phút để trở lại.
 - Restore đưa **toàn bộ** cluster về thời điểm chụp: object tạo sau đó biến mất.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph cp ["control plane"]
+    m["manifests/etcd.yaml<br/>--data-dir, hostPath"] --> etcd["etcd"]
+    d1[("/var/lib/etcd")] --- etcd
+    snap[("/opt/etcd-backup.db")]
+    d2[("/var/lib/etcd-restore")]
+  end
+  etcd -->|"etcdctl snapshot save (TLS)"| snap
+  snap -->|"etcdutl snapshot restore"| d2
+  d2 -.->|"sửa manifest trỏ sang"| m
+  api["kube-apiserver"] --> etcd
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  actor U as Bạn (trên node)
+  participant E as etcd
+  participant KL as kubelet
+  participant A as kube-apiserver
+  U->>E: snapshot save (endpoint, cacert, cert, key)
+  E-->>U: backup.db
+  U->>A: tạo ns lab29-after (sau snapshot)
+  U->>U: snapshot restore ra thư mục mới
+  U->>KL: sửa etcd.yaml trỏ data dir mới
+  KL->>E: dừng etcd cũ, chạy etcd mới với dữ liệu snapshot
+  Note over A: API server mất kết nối 1–2 phút
+  A->>E: kết nối lại
+  Note over A: cluster quay về thời điểm snapshot, lab29-after biến mất
+```
+
 ## Chuẩn bị
 
 ```bash

@@ -21,6 +21,42 @@ Mở rộng Kubernetes API bằng loại object của riêng bạn, có kiểm t
 - `additionalPrinterColumns` thêm cột cho `kubectl get`.
 - **Operator** = CRD + controller theo dõi các object đó và vận hành phần mềm thay con người (cert-manager, Prometheus Operator, CloudNativePG…). Cài thường bằng Helm hoặc manifest.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  crd["CRD backups.ops.example.com<br/>kind Backup · short bk<br/>schema: schedule (bắt buộc), retention 1–30"]
+  crd --> api["API mới:<br/>/apis/ops.example.com/v1/.../backups"]
+  ok["Backup nightly<br/>retention 7"] -->|"hợp lệ"| api
+  bad["Backup bad<br/>retention 100"] -.->|"bị từ chối"| api
+  op["Operator (controller)"] -.->|"watch Backup, làm việc thật"| api
+  classDef bad stroke:#C63B36,stroke-width:2px,stroke-dasharray:5 3
+  class bad bad
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant U as Bạn
+  participant A as kube-apiserver
+  participant E as etcd
+  participant OP as Operator
+  U->>A: tạo CRD
+  A->>A: đăng ký endpoint REST mới, kubectl api-resources thấy bk
+  U->>A: tạo Backup
+  A->>A: kiểm tra theo openAPIV3Schema
+  alt sai schema
+    A-->>U: 422 Invalid
+  else đúng
+    A->>E: lưu
+    OP->>A: watch Backup mới
+    OP->>OP: reconcile: tạo CronJob, cập nhật status
+  end
+```
+
 ## Chuẩn bị
 
 ```bash

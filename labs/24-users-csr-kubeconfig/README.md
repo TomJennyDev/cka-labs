@@ -21,6 +21,39 @@ Cấp quyền truy cập cho một lập trình viên từ đầu: tạo khóa v
 - kubeconfig gồm `clusters` (server + CA), `users` (cert + key), `contexts` (ghép hai cái trên). `--embed-certs` nhúng nội dung vào file thay vì trỏ đường dẫn.
 - Phân quyền cho **group** tiện hơn từng user: thêm người chỉ cần cấp cert có `O=<group>`.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  key["dev1.key"] --> csr["dev1.csr<br/>CN=dev1 · O=developers"]
+  csr -->|"base64"| obj["CertificateSigningRequest dev1"]
+  obj -->|"kubectl certificate approve"| crt["dev1.crt"]
+  crt & key --> kc["dev1.kubeconfig<br/>context dev1@lab · ns lab24"]
+  ca["CA của cluster"] --> kc
+  kc --> api["kube-apiserver"]
+  rb["RoleBinding developers<br/>group developers"] --> role["Role: pods, deployments"]
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  actor U as Admin
+  participant A as kube-apiserver
+  participant CS as signer (controller-manager)
+  actor D as dev1
+  U->>A: tạo CSR (signer kube-apiserver-client)
+  U->>A: approve
+  CS->>A: ký bằng CA, ghi status.certificate
+  U->>U: lấy cert, dựng kubeconfig riêng
+  D->>A: request với chứng chỉ client
+  A->>A: xác thực: user = CN dev1, groups = O developers
+  A->>A: RBAC theo group developers
+  A-->>D: tạo Deployment ✔, xem node ✘ 403
+```
+
 ## Chuẩn bị
 
 ```bash

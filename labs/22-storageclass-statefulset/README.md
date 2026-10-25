@@ -21,6 +21,42 @@ Mức hỗ trợ: **Dẫn hướng**. Mỗi câu chỉ ra chỗ tra tài liệu,
 - Annotation `storageclass.kubernetes.io/is-default-class: "true"` chọn lớp mặc định cho PVC không ghi `storageClassName`. Chỉ nên có **một** lớp mặc định.
 - StatefulSet với `volumeClaimTemplates` tạo PVC tên `<template>-<sts>-<số>`; PVC **không** bị xóa khi scale xuống (trừ khi đặt `persistentVolumeClaimRetentionPolicy`).
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  sc["StorageClass fast (default)<br/>Retain · WaitForFirstConsumer<br/>allowVolumeExpansion"]
+  old["StorageClass cũ<br/>không còn default"]
+  pvc["PVC data<br/>không ghi class"] -->|"nhận class mặc định"| sc
+  app["Pod app"] --> pvc
+  subgraph sts ["StatefulSet db"]
+    d0["db-0"] --> c0["PVC data-db-0"]
+    d1["db-1"] --> c1["PVC data-db-1"]
+  end
+  hs["Service db headless"] --> sts
+  c0 & c1 --> sc
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant U as Bạn
+  participant A as kube-apiserver
+  participant S as kube-scheduler
+  participant P as provisioner (local-path)
+  U->>A: tạo PVC data
+  Note over A: WaitForFirstConsumer: PVC Pending, chưa tạo volume
+  U->>A: tạo Pod app dùng PVC
+  S->>A: chọn node cho Pod, ghi annotation selected-node lên PVC
+  P->>A: watch PVC có selected-node
+  P->>P: tạo thư mục trên đúng node đó
+  P->>A: tạo PV, bind với PVC
+  Note over A: PVC Bound, Pod chạy được
+```
+
 ## Chuẩn bị
 
 ```bash

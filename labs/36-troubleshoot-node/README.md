@@ -20,6 +20,42 @@ Mức hỗ trợ: **Tự lực**. Đề bài kiểu phòng thi. Phần này ch�
 - Trên node: `systemctl status kubelet`, `journalctl -u kubelet -n 50`, cấu hình ở `/var/lib/kubelet/config.yaml`, cờ ở `/var/lib/kubelet/kubeadm-flags.env`, unit drop-in ở `/usr/lib/systemd/system/kubelet.service.d/10-kubeadm.conf`.
 - `systemctl enable --now kubelet` vừa chạy ngay vừa tự chạy khi boot. Chỉ `start` thì sau reboot lại hỏng.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph n2 ["NODE2 · NotReady"]
+    sd["systemd"] -->|"enable? start?"| kl["kubelet"]
+    u["unit file + drop-in<br/>kubeadm-flags.env"] --> kl
+    cfg["/var/lib/kubelet/config.yaml"] --> kl
+    kc["/etc/kubernetes/kubelet.conf"] --> kl
+    kl --> rt["containerd"]
+  end
+  kl -->|"heartbeat: Lease mỗi 10 giây"| api["kube-apiserver"]
+  api -->|"hết thời gian chờ, mặc định khoảng 50 giây"| nr["Node NotReady"]
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  actor U as Bạn
+  participant A as kube-apiserver
+  participant N as NODE2
+  U->>A: describe node → Conditions, lần heartbeat cuối
+  U->>N: systemctl status kubelet
+  alt inactive
+    U->>N: systemctl start kubelet
+  end
+  U->>N: journalctl -u kubelet → dòng lỗi cuối
+  U->>N: sửa file cấu hình mà log chỉ ra
+  U->>N: systemctl daemon-reload, restart, enable
+  N->>A: heartbeat trở lại
+  A-->>U: Node Ready
+```
+
 ## Chuẩn bị
 
 ```bash

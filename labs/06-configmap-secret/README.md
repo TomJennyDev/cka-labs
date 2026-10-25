@@ -20,6 +20,46 @@ Tách cấu hình khỏi image: tạo ConfigMap và Secret từ literal và file
 - ConfigMap gắn qua volume: mỗi key thành một file. File tự cập nhật khi ConfigMap đổi (trừ khi dùng `subPath`); biến môi trường thì **không**, phải restart Pod.
 - Secret chỉ được **base64**, không mã hóa. Đọc: `kubectl get secret x -o jsonpath='{.data.key}' | base64 -d`.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  cm1["ConfigMap app-config<br/>APP_MODE, APP_PORT"]
+  cm2["ConfigMap app-files<br/>key app.properties"]
+  s1["Secret db-cred<br/>username, password"]
+  subgraph pod ["Pod của Deployment app"]
+    env["biến môi trường"]
+    vol["/etc/app/app.properties"]
+  end
+  cm1 -->|"envFrom: mọi key"| env
+  s1 -->|"env.valueFrom.secretKeyRef: password"| env
+  cm2 -->|"volume configMap, readOnly"| vol
+  s2["Secret legacy-token"] -->|"base64 -d"| f["06-token.txt"]
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant A as kube-apiserver
+  participant KL as kubelet
+  participant C as container
+  KL->>A: Pod mới được gán cho node
+  KL->>A: đọc ConfigMap và Secret được tham chiếu
+  alt thiếu ConfigMap/Secret hoặc key
+    KL->>A: status CreateContainerConfigError
+  else đủ
+    KL->>KL: ghi file vào volume (tmpfs cho Secret)
+    KL->>C: khởi động với biến môi trường
+  end
+  Note over A,KL: ConfigMap đổi sau đó
+  KL->>A: watch ConfigMap
+  KL->>C: cập nhật file trong volume (~1 phút)
+  Note over C: biến môi trường KHÔNG đổi tới khi container khởi động lại
+```
+
 ## Chuẩn bị
 
 ```bash

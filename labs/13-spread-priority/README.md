@@ -20,6 +20,45 @@ Tách replica ra các node khác nhau để chịu lỗi, chia đều Pod theo t
 - `topologySpreadConstraints`: `maxSkew` là chênh lệch tối đa giữa các miền, `whenUnsatisfiable: DoNotSchedule` (cứng) hoặc `ScheduleAnyway`. `nodeTaintsPolicy: Honor` loại khỏi phép tính các node có taint mà Pod không tolerate (mặc định là `Ignore`, tức vẫn tính).
 - PriorityClass gán số ưu tiên; Pod ưu tiên cao có thể **preempt** (đuổi) Pod thấp hơn khi thiếu chỗ. Một PriorityClass có thể là `globalDefault`.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart TB
+  subgraph w1 ["worker 1"]
+    a1["web"]
+    s1["spread"]
+    s2["spread"]
+  end
+  subgraph w2 ["worker 2"]
+    a2["web"]
+    s3["spread"]
+    s4["spread"]
+  end
+  cp["control plane (taint)<br/>không được tính là miền"]
+  a1 <-.->|"anti-affinity: không chung node"| a2
+  pc["PriorityClass critical-app<br/>value 1000000"] --> vip["Pod vip"]
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant S as kube-scheduler
+  participant N as các node
+  S->>N: đếm Pod app=spread theo từng miền (hostname)
+  Note over S: skew = max − min, phải ≤ maxSkew 1
+  alt nodeTaintsPolicy Honor
+    S->>S: chỉ tính 2 worker → 2 + 2 hợp lệ
+  else mặc định (Ignore)
+    S->>S: control plane là miền có 0 Pod
+    S->>S: worker thứ 2 lên 2 Pod thì skew = 2 → Pending
+  end
+  Note over S: Pod priority cao, không node nào trống
+  S->>N: preemption: đuổi Pod priority thấp hơn
+```
+
 ## Chuẩn bị
 
 ```bash

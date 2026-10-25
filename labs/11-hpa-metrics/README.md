@@ -20,6 +20,43 @@ Theo dõi CPU/RAM bằng `kubectl top`, tạo HPA có behavior, và sửa HPA hi
 - HPA tính `desiredReplicas = ceil(replicas × giá trị hiện tại / mục tiêu)`. Utilization tính theo **requests**, nên Pod không có CPU request thì HPA không tính được (`<unknown>`).
 - `behavior.scaleDown.stabilizationWindowSeconds` (mặc định 300) chống dao động: khi giảm, HPA lấy khuyến nghị cao nhất trong cửa sổ.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  kl["kubelet trên mỗi node<br/>/metrics/resource"] --> ms["metrics-server"]
+  ms --> mapi["API metrics.k8s.io"]
+  mapi --> top["kubectl top"]
+  mapi --> hpa["HPA web<br/>min 2 · max 6 · CPU 50%"]
+  hpa -->|"scale"| d["Deployment web<br/>request cpu 100m"]
+  hpa2["HPA api<br/>TARGETS unknown"] -.->|"thiếu CPU request"| d2["Deployment api"]
+  classDef bad stroke:#C63B36,stroke-width:2px,stroke-dasharray:5 3
+  class hpa2 bad
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant H as HPA controller
+  participant M as metrics.k8s.io
+  participant A as kube-apiserver
+  loop mỗi 15 giây
+    H->>M: CPU hiện tại của các Pod web
+    M-->>H: tổng millicore
+    H->>H: % = dùng / request
+    H->>H: mong muốn = ceil(hiện tại × % / 50%)
+    alt tăng
+      H->>A: scale Deployment lên (≤ max)
+    else giảm
+      H->>H: chờ hết stabilizationWindowSeconds
+      H->>A: scale xuống (≥ min)
+    end
+  end
+```
+
 ## Chuẩn bị
 
 ```bash

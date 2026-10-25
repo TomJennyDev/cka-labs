@@ -21,6 +21,44 @@ Mọi lab từ 02 tới 37.
 - Sau mỗi câu, kiểm tra nhanh bằng `kubectl get`: đề thi chấm trạng thái trong cluster, không chấm file YAML.
 - Chỉ chạy `./lab check 38` khi đã hết giờ hoặc làm xong, để luyện cảm giác tự kiểm tra.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph a ["ns mock-a"]
+    fe["frontend + HPA + NodePort + Ingress"]
+    cfg["cfg-pod · logger · writer + PVC"]
+    rb["SA ci + RBAC"]
+    gp["gpu-pod · vip"]
+  end
+  subgraph b ["ns mock-b"]
+    db["app=db + NetworkPolicy"]
+  end
+  subgraph c ["ns mock-c"]
+    br["broken-api"]
+    bk["backend"]
+  end
+  a -->|"app=api được vào"| db
+  n1["NODE1: static pod"]
+  n2["NODE2: label + taint"]
+  classDef bad stroke:#C63B36,stroke-width:2px,stroke-dasharray:5 3
+  class br,bk bad
+```
+
+### Luồng hoạt động
+
+```mermaid
+flowchart LR
+  s(["Bắt đầu 120 phút"]) --> r1["Lượt 1: làm theo thứ tự<br/>tối đa 6–7 phút/câu"]
+  r1 -->|"kẹt"| skip["ghi số câu, bỏ qua"]
+  skip --> r1
+  r1 --> r2["Lượt 2: câu đã bỏ<br/>ưu tiên trọng số cao"]
+  r2 --> r3["10 phút cuối: rà sửa nhỏ"]
+  r3 --> c(["./lab check 38 · cần ≥ 66%"])
+```
+
 ## Chuẩn bị
 
 ```bash

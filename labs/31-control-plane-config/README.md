@@ -21,6 +21,41 @@ Biết cấu hình của từng thành phần nằm ở đâu, đọc và sửa 
 - kubelet: cấu hình ở `/var/lib/kubelet/config.yaml` (`cgroupDriver`, `clusterDNS`, `staticPodPath`…), cờ thêm ở `/var/lib/kubelet/kubeadm-flags.env`.
 - Trước khi sửa manifest, luôn sao lưu ra **ngoài** thư mục manifests (kubelet đọc mọi file trong đó).
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph cp ["control plane"]
+    man["/etc/kubernetes/manifests/kube-apiserver.yaml<br/>--service-cluster-ip-range<br/>--enable-admission-plugins"]
+    pki["/etc/kubernetes/pki/apiserver.crt"]
+    man --> api["kube-apiserver"]
+    pki --> api
+  end
+  subgraph n1 ["NODE1"]
+    kc["/var/lib/kubelet/config.yaml<br/>cgroupDriver · clusterDNS"] --> kl["kubelet"]
+  end
+  ka["kubeadm certs renew apiserver"] --> pki
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  actor U as Bạn
+  participant F as manifests/
+  participant KL as kubelet
+  participant API as kube-apiserver
+  U->>F: sửa kube-apiserver.yaml (thêm plugin vào danh sách)
+  KL->>F: phát hiện file đổi
+  KL->>API: dừng Pod cũ, chạy Pod mới với cờ mới
+  U->>U: kubeadm certs renew apiserver
+  Note over API: file cert mới, nhưng tiến trình vẫn dùng cert cũ trong bộ nhớ
+  U->>KL: buộc static pod khởi động lại (di chuyển manifest ra rồi vào)
+  KL->>API: chạy lại, nạp cert mới
+```
+
 ## Chuẩn bị
 
 ```bash

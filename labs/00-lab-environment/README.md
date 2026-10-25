@@ -16,6 +16,57 @@ Có một cluster 3 node (1 control plane, 2 worker) chạy Kubernetes v1.35 đ�
 - Một số bài yêu cầu ghi đáp án ra file. Thư mục đáp án mặc định là `~/cka-answers`; đổi bằng biến `CKA_ANSWERS`.
 - Trong bài, `$CP`, `$NODE1`, `$NODE2` là tên node control plane và hai worker. Nạp chúng bằng `eval "$(./lab env)"`. Với kind, tên là `cka-control-plane`, `cka-worker`, `cka-worker2`.
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  you(["Bạn: kubectl, ./lab"]) -->|"~/.kube/config"| api
+  subgraph docker ["Docker trên laptop"]
+    subgraph cp ["cka-control-plane"]
+      api["kube-apiserver"]
+      etcd[("etcd")]
+      sch["kube-scheduler"]
+      cm["kube-controller-manager"]
+      k0["kubelet + containerd"]
+    end
+    subgraph w1 ["cka-worker"]
+      k1["kubelet + containerd"]
+    end
+    subgraph w2 ["cka-worker2"]
+      k2["kubelet + containerd"]
+    end
+  end
+  api <--> etcd
+  sch --> api
+  cm --> api
+  k0 --> api
+  k1 --> api
+  k2 --> api
+```
+Mỗi node của kind là một container Docker. Control plane chạy dưới dạng static pod, do kubelet trên `cka-control-plane` khởi động.
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  actor U as Bạn
+  participant L as ./lab
+  participant A as kube-apiserver
+  participant F as ~/cka-answers
+  U->>L: ./lab start 0
+  L->>A: setup.sh tạo tình huống
+  U->>A: kubectl get node ... -o jsonpath
+  A-->>U: v1.35.x
+  U->>F: ghi 00-kubelet.txt
+  U->>L: ./lab check 0
+  L->>A: đọc trạng thái cluster
+  L->>F: đọc file đáp án
+  L-->>U: ✔ / ✘ từng tiêu chí
+```
+Mọi bài đều theo vòng này: `start` dựng tình huống, bạn sửa cluster hoặc ghi file, `check` so trạng thái thật với yêu cầu.
+
 ## Chuẩn bị
 
 ```bash

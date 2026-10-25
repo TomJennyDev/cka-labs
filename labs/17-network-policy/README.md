@@ -23,6 +23,49 @@ Khóa một ứng dụng ba tầng web → api → db: chặn mặc định, ch�
 - Chặn egress thì phải mở UDP/TCP 53 tới CoreDNS, nếu không mọi lần gọi bằng tên đều lỗi.
 - Policy chỉ có hiệu lực khi CNI hỗ trợ (kindnet, Calico, Cilium… có; Flannel thuần thì không).
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  subgraph lab17 ["ns lab17 · default-deny ingress"]
+    web["app=web"]
+    api["app=api<br/>egress: chỉ db + DNS"]
+    db["app=db"]
+  end
+  mon["ns lab17-mon<br/>purpose=monitoring"]
+  other["ns lab17-other"]
+  web -->|"TCP 80 ✔"| api
+  mon -->|"TCP 80 ✔"| api
+  other -.-x|"✘"| api
+  api -->|"TCP 80 ✔"| db
+  web -.-x|"✘"| db
+  api -->|"UDP/TCP 53 ✔"| dns["CoreDNS ở kube-system"]
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant S as Pod nguồn
+  participant AG as agent NetworkPolicy (trên node)
+  participant D as Pod đích
+  Note over AG: agent watch NetworkPolicy, Pod, Namespace và dịch thành luật lọc gói
+  S->>AG: gói ra (egress)
+  AG->>AG: Pod nguồn bị policy Egress nào chọn?
+  alt có, và không rule nào cho phép đích
+    AG-->>S: drop
+  end
+  AG->>D: gói vào (ingress)
+  AG->>AG: Pod đích bị policy Ingress nào chọn?
+  alt không policy nào chọn
+    AG->>D: cho qua
+  else có: OR mọi rule của mọi policy
+    AG->>D: cho qua nếu khớp from + port
+  end
+```
+
 ## Chuẩn bị
 
 ```bash

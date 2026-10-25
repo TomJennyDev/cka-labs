@@ -86,6 +86,19 @@ def md(text):
     return markdown.markdown(text or "", extensions=["fenced_code", "tables", "sane_lists"])
 
 
+def sections(path):
+    """Split a markdown file on '### ' headings → [(title, body)]."""
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8") as f:
+        text = f.read()
+    out = []
+    for chunk in re.split(r"^### ", text, flags=re.M)[1:]:
+        title, _, body = chunk.partition("\n")
+        out.append((title.strip(), body.strip()))
+    return out
+
+
 def load():
     labs = []
     for path in sorted(glob.glob(os.path.join(ROOT, "src", "labs", "*.yaml"))):
@@ -105,14 +118,8 @@ def load():
         l.setdefault("tasks", [])
         l["support"] = support_of(l["level"])
         l["prereq"] = PREREQ.get(l["id"], [])
-        gp = os.path.join(ROOT, "src", "guides", "%02d.md" % l["id"])
-        l["guide"] = []
-        if os.path.exists(gp):
-            with open(gp, encoding="utf-8") as f:
-                text = f.read()
-            for chunk in re.split(r"^### ", text, flags=re.M)[1:]:
-                title, _, body = chunk.partition("\n")
-                l["guide"].append((title.strip(), body.strip()))
+        l["guide"] = sections(os.path.join(ROOT, "src", "guides", "%02d.md" % l["id"]))
+        l["diagrams"] = sections(os.path.join(ROOT, "src", "diagrams", "%02d.md" % l["id"]))
         l["dir"] = "%02d-%s" % (l["id"], l["slug"])
         for c in l.get("competencies", []):
             d, i = c.split(":")
@@ -160,6 +167,10 @@ def lab_readme(l, prev, nxt):
             lines.append("")
     if l.get("concepts"):
         lines += ["## Kiến thức cần nắm", "", l["concepts"].strip(), ""]
+    if l["diagrams"]:
+        lines += ["## Sơ đồ", ""]
+        for t, b in l["diagrams"]:
+            lines += ["### " + t, "", b, ""]
     lines += ["## Chuẩn bị", "", "```bash", "./lab start %d" % l["id"], "```", ""]
     if l.get("setup_note"):
         lines += [l["setup_note"].strip(), ""]
@@ -259,6 +270,7 @@ def main():
             "solution": md(l["solution"]), "docs": l["docs"],
             "support": l["support"], "prereq": l["prereq"],
             "guide": [[t, md(b)] for t, b in l["guide"]],
+            "diagrams": [[t, md(b)] for t, b in l["diagrams"]],
         } for l in labs],
     }
     with open(os.path.join(ROOT, "tools", "guide.html"), encoding="utf-8") as f:

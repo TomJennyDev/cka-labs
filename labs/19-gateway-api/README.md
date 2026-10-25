@@ -21,6 +21,55 @@ Dựng định tuyến L7 bằng Gateway API: Gateway do đội hạ tầng qu�
 - Route tham chiếu Service ở **namespace khác** chỉ hợp lệ khi namespace đích có **ReferenceGrant** cho phép.
 - Kiểm tra trạng thái: `kubectl describe httproute`, các condition `Accepted` và `ResolvedRefs` (cần controller thật).
 
+## Sơ đồ
+
+### Lab dựng gì
+
+```mermaid
+flowchart LR
+  gc["GatewayClass lab-gc"] --> gw
+  subgraph infra ["ns lab19-infra"]
+    gw["Gateway public<br/>listener http:80<br/>allowedRoutes: gateway-access=true"]
+    adm["HTTPRoute admin"]
+  end
+  subgraph app ["ns lab19-app · gateway-access=true"]
+    shop["HTTPRoute shop"]
+    api["api:8080"]
+    v2["api-v2:8080"]
+    web["web:80"]
+    admin["admin:80"]
+    rg["ReferenceGrant<br/>cho HTTPRoute từ lab19-infra"]
+  end
+  shop -->|"parentRef"| gw
+  adm -->|"parentRef"| gw
+  shop -->|"header x-canary"| v2
+  shop -->|"/api 90%"| api
+  shop -->|"/api 10%"| v2
+  shop -->|"/"| web
+  adm -->|"cần ReferenceGrant"| admin
+  rg -.-> admin
+```
+
+### Luồng hoạt động
+
+```mermaid
+sequenceDiagram
+  participant R as HTTPRoute shop
+  participant G as Gateway public
+  participant C as Gateway controller
+  participant RG as ReferenceGrant
+  C->>G: listener có cho namespace của route không?
+  G-->>C: namespace có label gateway-access=true ✔
+  C->>R: status.parents Accepted True
+  C->>RG: backend ở namespace khác có được cho phép?
+  alt không có ReferenceGrant
+    C->>R: ResolvedRefs False, RefNotPermitted
+  else có
+    C->>R: ResolvedRefs True
+  end
+  Note over C: request: khớp hostname → match header/path → chia theo weight
+```
+
 ## Chuẩn bị
 
 ```bash
