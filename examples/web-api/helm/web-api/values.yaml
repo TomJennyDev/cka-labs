@@ -1,0 +1,95 @@
+# Giá trị mặc định: chạy được ngay ở môi trường dev.
+# Môi trường khác chỉ ghi phần khác: helm install … -f values-prod.yaml
+
+# -- Số bản sao khi KHÔNG bật autoscaling
+replicaCount: 2
+
+image:
+  repository: ghcr.io/stefanprodan/podinfo
+  # -- Để trống thì dùng appVersion trong Chart.yaml
+  tag: ""
+  # -- Ghim theo digest (sha256:…) để image bất biến; ưu tiên hơn tag
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  # -- Ứng dụng không gọi Kubernetes API thì để false
+  automountToken: false
+  name: ""
+  annotations: {}
+
+podAnnotations: {}
+podLabels: {}
+
+# -- Biến môi trường không bí mật, đưa vào ConfigMap
+config:
+  LOG_LEVEL: info
+  PODINFO_UI_MESSAGE: "shop web-api"
+
+# -- Secret có sẵn (do External Secrets, Sealed Secrets… tạo). Chart không chứa bí mật.
+existingSecret: ""
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile: {type: RuntimeDefault}
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: ["ALL"]}
+
+containerPort: 9898
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests: {cpu: 100m, memory: 128Mi}
+  limits: {memory: 256Mi}
+
+probes:
+  startup: {path: /healthz, periodSeconds: 5, failureThreshold: 24}
+  readiness: {path: /readyz, periodSeconds: 5, failureThreshold: 3}
+  liveness: {path: /healthz, periodSeconds: 10, failureThreshold: 3}
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+pdb:
+  enabled: true
+  maxUnavailable: 1
+
+networkPolicy:
+  enabled: true
+  # -- Namespace được phép gọi vào (thường là namespace của Gateway/Ingress controller)
+  allowFromNamespaces: [gateway-system]
+
+httpRoute:
+  enabled: false
+  parentRefs:
+  - {name: public, namespace: gateway-system, sectionName: https}
+  hostnames: [api.shop.example.com]
+
+ingress:
+  enabled: false
+  className: ""
+  host: api.shop.example.com
+  tlsSecret: ""
+
+topologySpread: true
+terminationGracePeriodSeconds: 30
+nodeSelector: {}
+tolerations: []
+affinity: {}

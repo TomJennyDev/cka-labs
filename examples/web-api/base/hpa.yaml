@@ -1,0 +1,20 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: web-api
+  labels:
+    app.kubernetes.io/name: web-api
+    app.kubernetes.io/part-of: shop
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web-api}
+  minReplicas: 2                 # tối thiểu 2 để chịu được mất một Pod
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target: {type: Utilization, averageUtilization: 70}
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300   # giảm chậm để tránh dao động
+      policies: [{type: Percent, value: 50, periodSeconds: 60}]

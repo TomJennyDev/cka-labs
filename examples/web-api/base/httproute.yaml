@@ -1,0 +1,15 @@
+# Đưa traffic từ Gateway dùng chung (do đội platform quản lý) vào Service.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-api
+  labels:
+    app.kubernetes.io/name: web-api
+    app.kubernetes.io/part-of: shop
+spec:
+  parentRefs:
+  - {name: public, namespace: gateway-system, sectionName: https}
+  hostnames: [api.shop.example.com]
+  rules:
+  - matches: [{path: {type: PathPrefix, value: /}}]
+    backendRefs: [{name: web-api, port: 80}]

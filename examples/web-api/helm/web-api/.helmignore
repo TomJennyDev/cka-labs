@@ -1,0 +1,7 @@
+# Không đóng gói các file này vào chart
+.git/
+*.swp
+*.bak
+*.tmp
+.DS_Store
+ci/

@@ -1,0 +1,14 @@
+# base: cấu hình chung cho mọi môi trường. Áp trực tiếp: kubectl apply -k base
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: web-api
+resources:
+- namespace.yaml
+- serviceaccount.yaml
+- configmap.yaml
+- deployment.yaml
+- service.yaml
+- hpa.yaml
+- pdb.yaml
+- networkpolicy.yaml
+- httproute.yaml

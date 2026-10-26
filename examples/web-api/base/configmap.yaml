@@ -1,0 +1,12 @@
+# Cấu hình không bí mật. Đổi nội dung thì phải rollout lại Pod
+# (Kustomize configMapGenerator hoặc checksum annotation trong Helm làm việc này tự động).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-api-config
+  labels:
+    app.kubernetes.io/name: web-api
+    app.kubernetes.io/part-of: shop
+data:
+  PODINFO_UI_MESSAGE: "shop web-api"
+  LOG_LEVEL: info

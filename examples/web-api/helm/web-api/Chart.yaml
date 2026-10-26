@@ -1,0 +1,10 @@
+apiVersion: v2                 # Helm 3+ chart
+name: web-api
+description: API của hệ thống shop - mẫu chart theo best practice
+type: application
+version: 0.1.0                 # phiên bản CHART (SemVer); tăng mỗi lần đổi template hoặc values mặc định
+appVersion: "6.15.0"           # phiên bản ỨNG DỤNG; dùng làm tag image mặc định
+kubeVersion: ">=1.30.0-0"
+keywords: [api, shop]
+maintainers:
+- name: platform-team

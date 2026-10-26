@@ -1,0 +1,6 @@
+{{ include "web-api.fullname" . }} đã được cài vào namespace {{ .Release.Namespace }}.
+
+Kiểm tra:
+  kubectl -n {{ .Release.Namespace }} rollout status deploy/{{ include "web-api.fullname" . }}
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "web-api.fullname" . }} 8080:{{ .Values.service.port }}
+  helm test {{ .Release.Name }} -n {{ .Release.Namespace }}

@@ -178,6 +178,10 @@ Domain và năng lực theo curriculum CKA v1.37 (đề thi chạy Kubernetes v1
 | Storage 10% | PersistentVolume và PersistentVolumeClaim | 21, 22, 38, 45 |
 <!-- COVERAGE:END -->
 
+## Best practices và file mẫu
+
+Thư mục [`examples/`](examples/README.md) có một ứng dụng mẫu viết theo best practice, ở ba dạng: YAML chuẩn production (Kustomize base), overlays `dev`/`prod`, và Helm chart đầy đủ (schema, helpers, NOTES, helm test). Kèm các cách chia thư mục cho repo ứng dụng, Kustomize và repo GitOps nhiều cluster. Phần **Lý thuyết** của trang hướng dẫn có mục *Best practices* giải thích từng file. Kiểm tra bộ mẫu trên cluster: `python3 tools/check_examples.py`.
+
 ## Cấu trúc repo
 
 ```text
@@ -193,7 +197,9 @@ tests/                  bộ kiểm thử chính các bài lab
 docs/index.html         trang hướng dẫn, sinh tự động
 tools/build.py          sinh labs/, README (bảng), docs/ từ src/
 tools/check_diagrams.py render thử mọi sơ đồ Mermaid để bắt lỗi cú pháp
-tools/learn.html        nguồn của phần Lý thuyết (docs/learn.html)
+tools/learn.html        nguồn của phần Lý thuyết (docs/learn.html); learn-kinds.js, learn-best.js là các mục thêm
+examples/               ứng dụng mẫu theo best practice: YAML chuẩn, Kustomize, Helm chart
+tools/check_examples.py kiểm tra examples/ bằng server dry-run (tools/minihelm render chart khi không có Helm)
 ```
 
 ## Đóng góp

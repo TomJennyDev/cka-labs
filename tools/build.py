@@ -292,8 +292,19 @@ def main():
     # theory page (interactive concepts), served next to the guide as learn.html
     with open(os.path.join(ROOT, "tools", "learn.html"), encoding="utf-8") as f:
         learn = f.read()
-    with open(os.path.join(ROOT, "tools", "learn-kinds.js"), encoding="utf-8") as f:
-        learn += "\n<script>\n\"use strict\";\n" + f.read().replace("</script", "<\\/script") + "\n</script>\n"
+    # extra views: workload resources, best practices (example files come from examples/web-api)
+    ex = os.path.join(ROOT, "examples", "web-api")
+    best_files = {}
+    for dp, _, fs in os.walk(ex):
+        for fn in sorted(fs):
+            fp = os.path.join(dp, fn)
+            with open(fp, encoding="utf-8") as f:
+                best_files[os.path.relpath(fp, ex).replace(os.sep, "/")] = f.read()
+    js = "const BEST_FILES = " + json.dumps(best_files, ensure_ascii=False) + ";\n"
+    for part in ("learn-kinds.js", "learn-best.js"):
+        with open(os.path.join(ROOT, "tools", part), encoding="utf-8") as f:
+            js += f.read() + "\n"
+    learn += "\n<script>\n\"use strict\";\n" + js.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT") + "\n</script>\n"
     lhead, lbody = learn.split("</style>", 1)
     learn_full = ('<!doctype html>\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n'
                   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'

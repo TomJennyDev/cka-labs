@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-api
+  labels:
+    # Bộ label khuyến nghị của Kubernetes: công cụ và người đọc đều hiểu
+    app.kubernetes.io/name: web-api          # tên ứng dụng
+    app.kubernetes.io/instance: web-api      # tên bản cài (một ứng dụng có thể cài nhiều lần)
+    app.kubernetes.io/version: "6.15.0"      # phiên bản ứng dụng
+    app.kubernetes.io/component: api         # vai trò trong hệ thống
+    app.kubernetes.io/part-of: shop          # hệ thống lớn chứa nó
+spec:
+  # Không đặt replicas khi có HPA: mỗi lần apply sẽ ghi đè số HPA đã chọn.
+  revisionHistoryLimit: 5
+  minReadySeconds: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 25%
+      maxUnavailable: 0          # không bao giờ thiếu Pod phục vụ khi cập nhật
+  selector:
+    matchLabels:                 # selector bất biến: chỉ dùng label không bao giờ đổi
+      app.kubernetes.io/name: web-api
+      app.kubernetes.io/instance: web-api
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: web-api
+        app.kubernetes.io/instance: web-api
+        app.kubernetes.io/version: "6.15.0"
+        app.kubernetes.io/component: api
+        app.kubernetes.io/part-of: shop
+    spec:
+      serviceAccountName: web-api
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:           # cấp Pod: áp cho mọi container
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile: {type: RuntimeDefault}
+      topologySpreadConstraints: # rải Pod qua zone và node: mất một node không mất hết
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels: {app.kubernetes.io/name: web-api, app.kubernetes.io/instance: web-api}
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels: {app.kubernetes.io/name: web-api, app.kubernetes.io/instance: web-api}
+      containers:
+      - name: web-api
+        image: ghcr.io/stefanprodan/podinfo:6.15.0   # luôn ghim tag (tốt hơn: digest), không dùng latest
+        imagePullPolicy: IfNotPresent
+        args: ["--port=9898", "--level=$(LOG_LEVEL)"]
+        ports:
+        - {name: http, containerPort: 9898, protocol: TCP}   # đặt tên cổng để Service, probe tham chiếu
+        envFrom:
+        - configMapRef: {name: web-api-config}
+        env:
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef: {name: web-api-secrets, key: db-password, optional: true}
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}   # scheduler giữ chỗ theo requests
+          limits: {memory: 256Mi}                # giới hạn memory; CPU để không giới hạn tránh throttle
+        startupProbe:            # cho thời gian khởi động, chặn liveness tới khi xong
+          httpGet: {path: /healthz, port: http}
+          periodSeconds: 5
+          failureThreshold: 24
+        readinessProbe:          # sẵn sàng nhận traffic chưa (được phép kiểm phụ thuộc)
+          httpGet: {path: /readyz, port: http}
+          periodSeconds: 5
+          failureThreshold: 3
+        livenessProbe:           # tiến trình còn sống không (KHÔNG kiểm database hay dịch vụ ngoài)
+          httpGet: {path: /healthz, port: http}
+          periodSeconds: 10
+          failureThreshold: 3
+        lifecycle:
+          preStop:               # chờ endpoint được gỡ trước khi tắt, tránh lỗi 502 khi rollout
+            sleep: {seconds: 5}
+        securityContext:         # cấp container: đạt chuẩn restricted
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: ["ALL"]}
+        volumeMounts:
+        - {name: tmp, mountPath: /tmp}
+        - {name: data, mountPath: /data}
+      volumes:
+      - {name: tmp, emptyDir: {sizeLimit: 64Mi}}
+      - {name: data, emptyDir: {sizeLimit: 256Mi}}

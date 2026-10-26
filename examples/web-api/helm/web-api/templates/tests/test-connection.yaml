@@ -1,0 +1,25 @@
+# helm test: Pod gọi thử Service, thành công thì release đạt
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "web-api.fullname" . }}-test
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "web-api.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/hook: test
+    helm.sh/hook-delete-policy: before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 10001
+    seccompProfile: {type: RuntimeDefault}
+  containers:
+  - name: wget
+    image: busybox:1.36
+    command: ["wget", "-qO-", "-T", "5", "http://{{ include "web-api.fullname" . }}:{{ .Values.service.port }}/healthz"]
+    securityContext:
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities: {drop: ["ALL"]}

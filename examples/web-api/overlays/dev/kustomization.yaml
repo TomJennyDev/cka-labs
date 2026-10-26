@@ -1,0 +1,27 @@
+# overlay dev: chỉ ghi phần KHÁC base. Xem kết quả: kubectl kustomize overlays/dev
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: web-api-dev
+resources:
+- ../../base
+labels:
+- pairs: {environment: dev}
+  includeSelectors: false        # không đụng selector (bất biến)
+  includeTemplates: true
+patches:
+- target: {kind: HorizontalPodAutoscaler, name: web-api}
+  patch: |-
+    - {op: replace, path: /spec/minReplicas, value: 1}
+    - {op: replace, path: /spec/maxReplicas, value: 2}
+- target: {kind: ConfigMap, name: web-api-config}
+  patch: |-
+    - {op: replace, path: /data/LOG_LEVEL, value: debug}
+- target: {kind: HTTPRoute, name: web-api}
+  patch: |-
+    - {op: replace, path: /spec/hostnames, value: [api.dev.shop.example.com]}
+- target: {kind: PodDisruptionBudget, name: web-api}   # dev chạy 1 Pod: PDB sẽ chặn drain
+  patch: |-
+    $patch: delete
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata: {name: web-api}

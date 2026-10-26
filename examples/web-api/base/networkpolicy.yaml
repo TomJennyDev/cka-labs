@@ -1,0 +1,32 @@
+# Mặc định chặn mọi traffic vào và ra của namespace, rồi mở đúng những gì cần.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: web-api
+  labels:
+    app.kubernetes.io/name: web-api
+    app.kubernetes.io/part-of: shop
+spec:
+  podSelector:
+    matchLabels: {app.kubernetes.io/name: web-api, app.kubernetes.io/instance: web-api}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from:                        # chỉ nhận traffic từ namespace của Gateway
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: gateway-system}
+    ports: [{protocol: TCP, port: http}]
+  egress:
+  - to:                          # được hỏi DNS
+    - namespaceSelector:
+        matchLabels: {kubernetes.io/metadata.name: kube-system}
+      podSelector:
+        matchLabels: {k8s-app: kube-dns}
+    ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]

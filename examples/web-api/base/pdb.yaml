@@ -1,0 +1,12 @@
+# Giữ ít nhất một Pod khi drain node hoặc nâng cấp cluster.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: web-api
+  labels:
+    app.kubernetes.io/name: web-api
+    app.kubernetes.io/part-of: shop
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: web-api, app.kubernetes.io/instance: web-api}

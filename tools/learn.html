@@ -849,6 +849,17 @@ k delete deploy web --cascade=orphan   # giữ ReplicaSet và Pod</pre></div>
   </div>
 </section>
 
+<!-- ============ BEST PRACTICES ============ -->
+<section class="view" data-view="best" hidden>
+  <header class="vh">
+    <p class="eyebrow">Thực chiến · làm như trong dự án thật</p>
+    <h2>Best practices: chia thư mục, YAML chuẩn, Kustomize, Helm</h2>
+    <p class="lead">Đề CKA chấm kết quả trên cluster; dự án thật còn chấm cách bạn tổ chức cấu hình. Mọi file mẫu ở đây lấy thẳng từ <code>examples/web-api</code> trong repo, đã kiểm tra với Pod Security <code>restricted</code>.</p>
+  </header>
+  <div class="seg" id="bestTabs" role="group" aria-label="Chọn chủ đề"></div>
+  <div id="bestBody" class="col" style="gap:16px" aria-live="polite"></div>
+</section>
+
 <section class="view" data-view="workloads" hidden>
   <header class="vh">
     <p class="eyebrow">Workloads &amp; Scheduling · 15%</p>
@@ -1576,8 +1587,8 @@ function addCopy(wrap, pre) {
 const MODULES = [
   { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "arch", n: "01", t: "Kiến trúc cluster" }, { id: "flow", n: "02", t: "Một Pod ra đời" }, { id: "linux", n: "03", t: "Bên trong Linux" }, { id: "mech", n: "04", t: "Cơ chế động" },
   { g: "Domain thi" }, { id: "network", n: "05", t: "Mạng & Service" }, { id: "kinds", n: "06", t: "Workload resources" }, { id: "workloads", n: "07", t: "Rolling update & Scheduling" }, { id: "probes", n: "08", t: "Probes & tự phục hồi" }, { id: "storage", n: "09", t: "Storage" }, { id: "security", n: "10", t: "RBAC & bảo mật" }, { id: "ops", n: "11", t: "Vận hành cluster" }, { id: "trouble", n: "12", t: "Troubleshooting" },
-  { g: "Thực chiến" }, { id: "labs", n: "13", t: "Bài tập theo domain" }, { id: "perf", n: "14", t: "Hiệu năng & best practice" }, { id: "cases", n: "15", t: "Use case thực tế" }, { id: "quiz", n: "16", t: "Quiz" },
-  { g: "Tra cứu" }, { id: "concepts", n: "17", t: "Thư viện khái niệm" }, { id: "commands", n: "18", t: "Lệnh & terminal" }
+  { g: "Thực chiến" }, { id: "labs", n: "13", t: "Bài tập theo domain" }, { id: "best", n: "14", t: "Best practices & cấu trúc dự án" }, { id: "perf", n: "15", t: "Hiệu năng & QoS" }, { id: "cases", n: "16", t: "Use case thực tế" }, { id: "quiz", n: "17", t: "Quiz" },
+  { g: "Tra cứu" }, { id: "concepts", n: "18", t: "Thư viện khái niệm" }, { id: "commands", n: "19", t: "Lệnh & terminal" }
 ];
 const onShow = {};
 let current = "overview";
