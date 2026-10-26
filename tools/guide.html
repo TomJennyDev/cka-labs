@@ -41,7 +41,7 @@ pre{margin:0}
 .top .meta{margin-left:auto;display:flex;gap:10px;align-items:center;font:12px var(--f-mono);color:var(--muted);white-space:nowrap}
 .meter{width:90px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
 .meter i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
-@media (max-width:640px){.top nav{display:none}.meter{width:50px}}
+@media (max-width:640px){.top nav{margin-left:0}.top nav a:not(:first-child){display:none}.meter{width:50px}}
 
 .layout{display:grid;grid-template-columns:minmax(0,1fr)}
 .side{background:var(--bg);border-bottom:1px solid var(--line);padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -210,7 +210,7 @@ details.hint>div{padding:0 0 12px}
 
 <header class="top">
   <a class="brand" href="#home">CKA Labs <i>v1.37</i></a>
-  <nav><a href="#home" data-nav="home">Lộ trình</a><a href="#setup" data-nav="setup">Môi trường</a><a href="#lab-38" data-nav="exam">Thi thử</a><a href="https://github.com/TomJennyDev/cka-labs" target="_blank" rel="noopener">GitHub ↗</a></nav>
+  <nav><a href="learn.html#overview">Lý thuyết</a><a href="#home" data-nav="home">Lộ trình</a><a href="#setup" data-nav="setup">Môi trường</a><a href="#lab-38" data-nav="exam">Thi thử</a><a href="https://github.com/TomJennyDev/cka-labs" target="_blank" rel="noopener">GitHub ↗</a></nav>
   <div class="meta"><span id="progTxt">0/39</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
 </header>
 <div class="layout">
@@ -241,6 +241,9 @@ const save = () => store.set("state", state);
 state.steps = state.steps || {}; state.guideHidden = state.guideHidden || {};
 const labStatus = id => state.done[id] ? "done" : Object.keys(state.tasks).some(k => k.startsWith(id + ":") && state.tasks[k]) ? "wip" : "";
 const byId = id => DATA.labs.find(l => l.id === id);
+// lab → views of the theory page (learn.html) worth reading first
+const THEORY_NAMES = { arch: "Giải phẫu cluster", flow: "Từ kubectl tới kernel", linux: "Linux bên dưới", mech: "Cơ chế bên trong", network: "Service và mạng", workloads: "Rolling update và scheduler", probes: "Probe", storage: "PV, PVC, CSI", security: "RBAC và bảo mật", ops: "Dựng và nâng cấp", trouble: "Cây chẩn đoán", perf: "Hiệu năng, QoS", cases: "Use case thực tế", commands: "Terminal và bảng lệnh", quiz: "Quiz", concepts: "Thư viện khái niệm" };
+const THEORY = { 0: ["arch", "commands"], 1: ["arch", "linux", "ops"], 2: ["commands", "flow"], 3: ["flow", "commands"], 4: ["commands"], 5: ["workloads", "mech"], 6: ["concepts"], 7: ["probes"], 8: ["mech", "concepts"], 9: ["workloads", "concepts"], 10: ["perf", "linux"], 11: ["perf"], 12: ["workloads"], 13: ["workloads"], 14: ["arch", "ops"], 15: ["network"], 16: ["network"], 17: ["network"], 18: ["network"], 19: ["network"], 20: ["storage", "linux"], 21: ["storage"], 22: ["storage"], 23: ["security"], 24: ["security"], 25: ["security"], 26: ["ops"], 27: ["ops"], 28: ["ops", "concepts"], 29: ["ops"], 30: ["ops"], 31: ["arch", "ops"], 32: ["arch", "ops"], 33: ["trouble", "probes"], 34: ["trouble", "network"], 35: ["trouble", "arch"], 36: ["trouble", "linux"], 37: ["trouble", "commands"], 38: ["quiz", "cases"], 39: ["linux", "arch"], 40: ["network", "ops"], 41: ["ops"], 42: ["ops", "concepts"], 43: ["network"], 44: ["network"], 45: ["quiz", "trouble"] };
 const supTag = k => '<span class="sup ' + k + '">' + esc(DATA.support[k][1]) + "</span>";
 const compName = c => { const [d, i] = c.split(":"); return DATA.domains[d][2][+i]; };
 
@@ -306,7 +309,7 @@ function home() {
   const total = DATA.labs.length, tested = DATA.labs.filter(l => l.env !== "vm").length;
   const nComp = Object.values(DATA.domains).reduce((a, d) => a + d[2].length, 0);
   let h = '<div class="page wide">';
-  h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.37</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
+  h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.37</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="learn.html#overview">Học lý thuyết tương tác</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
   h += '<div class="code"><pre>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh        # cluster 3 node v1.37\n./lab start 7           # dựng tình huống\n./lab check 7           # chấm bài\n./lab reset 7           # dọn dẹp</pre></div></section>';
   h += '<div class="stats"><div><b>' + total + '</b><span>bài lab có script tự chấm</span></div><div><b>' + nComp + '/' + nComp + '</b><span>năng lực của đề thi được phủ</span></div><div><b>' + tested + '</b><span>bài chạy trên kind ngay trên laptop</span></div><div><b>120′</b><span>đề thi thử chấm theo trọng số</span></div></div>';
   h += '<section><h2>Hướng dẫn giảm dần theo cấp độ</h2><p class="muted small">Bài đầu dắt bạn từng lệnh. Càng lên cao, phần hướng dẫn càng ít đi, cho tới khi bạn tự làm như trong phòng thi.</p><div class="fade" aria-hidden="true"></div><div class="fade-l" aria-hidden="true"><span>Nhiều hướng dẫn</span><span>Tự lực</span></div><div class="modes" style="margin-top:14px">' +
@@ -348,6 +351,8 @@ function lab(id) {
   if (l.id === 38 || l.id === 45) h += '<section class="panel timer" id="timer"><b id="tLeft">120:00</b><div class="row"><button class="btn primary" id="tStart" type="button">Bắt đầu tính giờ</button><button class="btn" id="tReset" type="button">Đặt lại</button></div><span class="small muted" id="tNote">Đồng hồ chạy tiếp kể cả khi bạn đóng trang.</span></section>';
   h += '<section class="sec"><h2>Mục tiêu</h2><div class="md">' + l.goal + "</div>";
   if (l.prereq.length) h += '<div class="prereq"><span class="lbl">Cần làm trước:</span>' + (l.prereq.length > 6 ? '<a class="chip" href="#lab-' + pad(l.prereq[0]) + '">Lab ' + pad(l.prereq[0]) + "–" + pad(l.prereq[l.prereq.length - 1]) + "</a>" : l.prereq.map(p => '<a class="chip ' + labStatus(p) + '" href="#lab-' + pad(p) + '" title="' + esc(byId(p).title) + '">' + pad(p) + " · " + esc(byId(p).title) + "</a>").join("")) + "</div>";
+  const th = THEORY[l.id] || [];
+  if (th.length) h += '<div class="prereq"><span class="lbl">Lý thuyết liên quan:</span>' + th.map(v => '<a class="chip" href="learn.html#' + v + '">' + esc(THEORY_NAMES[v]) + "</a>").join("") + "</div>";
   h += "</section>";
   if (l.concepts) h += '<section class="sec panel"><h2>Kiến thức cần nắm</h2><div class="md">' + l.concepts + "</div></section>";
   if (l.diagrams.length) h += '<section class="sec"><h2>Sơ đồ</h2><div class="diagrams">' + l.diagrams.map(d => '<figure class="diagram"><h3>' + esc(d[0]) + '</h3><div class="md">' + d[1] + "</div></figure>").join("") + "</div></section>";

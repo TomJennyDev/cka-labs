@@ -2,7 +2,7 @@
 
 Bộ **46 bài lab thực hành** để thi Certified Kubernetes Administrator (CKA), đi từ cơ bản tới nâng cao, phủ đủ **27 năng lực** trong 5 domain của curriculum CKA v1.37 (đề thi hiện chạy Kubernetes v1.37). Mỗi bài dựng sẵn tình huống trên cluster của bạn, có đề bài kiểu phòng thi, script **tự chấm**, gợi ý và lời giải. Cuối lộ trình là **hai đề thi thử 2 giờ** chấm điểm theo trọng số, ở chế độ phòng thi: mỗi câu ghi host phải `ssh` vào.
 
-**Trang hướng dẫn:** [`docs/index.html`](docs/index.html) (bật GitHub Pages với thư mục `/docs` để xem online). Trang có lộ trình, từng bài, đồng hồ thi thử và lưu tiến độ trong trình duyệt.
+**Trang hướng dẫn:** [`docs/index.html`](docs/index.html) (bật GitHub Pages với thư mục `/docs` để xem online) gồm hai phần liên kết với nhau: **Lý thuyết** ([`docs/learn.html`](docs/learn.html): kiến trúc, luồng từ kubectl tới kernel, animation cơ chế, terminal mô phỏng, quiz) và **Lab thực hành** (lộ trình, từng bài, đồng hồ thi thử, lưu tiến độ trong trình duyệt). Mỗi bài lab có link tới phần lý thuyết liên quan.
 
 ```text
 ./lab start 7      # dựng tình huống
@@ -193,6 +193,7 @@ tests/                  bộ kiểm thử chính các bài lab
 docs/index.html         trang hướng dẫn, sinh tự động
 tools/build.py          sinh labs/, README (bảng), docs/ từ src/
 tools/check_diagrams.py render thử mọi sơ đồ Mermaid để bắt lỗi cú pháp
+tools/learn.html        nguồn của phần Lý thuyết (docs/learn.html)
 ```
 
 ## Đóng góp

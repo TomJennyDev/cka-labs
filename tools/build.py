@@ -288,6 +288,16 @@ def main():
             '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
             + head + "[hidden]{display:none!important}\n</style>\n</head>\n<body>\n" + body + "\n</body>\n</html>\n")
     write(os.path.join(ROOT, "docs", "index.html"), full)
+
+    # theory page (interactive concepts), served next to the guide as learn.html
+    with open(os.path.join(ROOT, "tools", "learn.html"), encoding="utf-8") as f:
+        learn = f.read()
+    lhead, lbody = learn.split("</style>", 1)
+    learn_full = ('<!doctype html>\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n'
+                  '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
+                  + lhead + "[hidden]{display:none!important}\n</style>\n</head>\n<body>\n" + lbody + "\n</body>\n</html>\n")
+    write(os.path.join(ROOT, "docs", "learn.html"), learn_full)
+    write(os.path.join(ROOT, "build", "learn.html"), learn_full)
     print("built %d labs, %d in test suite" % (len(labs), len(tested)))
 
 
