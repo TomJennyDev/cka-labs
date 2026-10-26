@@ -41,6 +41,12 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--paper-2);border:
 .xnav{display:flex;gap:4px;margin-left:6px}.xnav a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:6px;white-space:nowrap}.xnav a[aria-current="page"]{color:var(--ink);background:var(--paper-2)}
 @media (max-width:560px){.xnav{margin-left:0}.xnav a{padding:6px 7px;font-size:13px}.top .meta,.brand .tag{display:none!important}.top{gap:8px}}
 .plan li>div{min-width:0;overflow-wrap:anywhere}
+.mmd{overflow-x:auto;text-align:center;padding:4px 0}
+.mmd pre.mermaid{background:none;margin:0;font:12px/1.5 var(--f-mono);color:var(--ink);text-align:left;white-space:pre-wrap}
+.mmd svg{height:auto}
+@media (max-width:640px){.mmd svg{min-width:560px}}
+#kindsCmp th:first-child,#kindsCmp tbody th{position:sticky;left:0;background:var(--paper)}
+#kindsCmp td{min-width:120px;font-size:13.5px}
 .brand .tag{font:600 11px/1 var(--f-mono);color:var(--accent);background:var(--accent-soft);padding:5px 7px;border-radius:4px}
 .top .meta{margin-left:auto;display:flex;align-items:center;gap:10px;font:12px var(--f-mono);color:var(--muted);white-space:nowrap}
 .meter{width:80px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
@@ -818,6 +824,31 @@ spec:
 </section>
 
 <!-- ============ 05 WORKLOADS ============ -->
+<!-- ============ WORKLOAD RESOURCES ============ -->
+<section class="view" data-view="kinds" hidden>
+  <header class="vh">
+    <p class="eyebrow">Workloads &amp; Scheduling · 15% · tách riêng từng loại</p>
+    <h2>Workload resources: mỗi loại một vai trò</h2>
+    <p class="lead">Pod chạy container. Mọi thứ còn lại là controller tạo và giữ Pod cho bạn theo một kiểu khác nhau. Chọn từng loại để xem cấu trúc, cách controller làm việc, các trường quan trọng, lệnh và bẫy hay gặp khi thi.</p>
+  </header>
+  <div id="kindsTop" class="col" style="gap:20px">
+    <div class="split even">
+      <div class="panel col"><h4>Nên chọn loại nào?</h4><div id="kindsPick"></div></div>
+      <div class="panel col"><h4>Ai sở hữu ai</h4>
+        <p class="small">Controller đặt <code>metadata.ownerReferences</code> lên object nó tạo: Deployment → ReplicaSet → Pod, CronJob → Job → Pod, StatefulSet và DaemonSet → Pod. Xóa chủ thì garbage collector xóa luôn object con, trừ khi dùng <code>--cascade=orphan</code>.</p>
+        <div class="codewrap"><pre class="code">k get pod web-5d4f8c-a -o jsonpath='{.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name}'
+# ReplicaSet/web-5d4f8c
+k get rs web-5d4f8c -o jsonpath='{.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].name}'
+# Deployment/web
+k delete deploy web --cascade=orphan   # giữ ReplicaSet và Pod</pre></div>
+      </div>
+    </div>
+    <div class="panel"><h4>So sánh nhanh</h4><div class="tbl"><table id="kindsCmp"></table></div></div>
+    <div class="seg" id="kindsTabs" role="group" aria-label="Chọn loại workload"></div>
+    <div id="kindBody" class="col" style="gap:16px" aria-live="polite"></div>
+  </div>
+</section>
+
 <section class="view" data-view="workloads" hidden>
   <header class="vh">
     <p class="eyebrow">Workloads &amp; Scheduling · 15%</p>
@@ -1544,9 +1575,9 @@ function addCopy(wrap, pre) {
 /* ---------- modules / nav ---------- */
 const MODULES = [
   { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "arch", n: "01", t: "Kiến trúc cluster" }, { id: "flow", n: "02", t: "Một Pod ra đời" }, { id: "linux", n: "03", t: "Bên trong Linux" }, { id: "mech", n: "04", t: "Cơ chế động" },
-  { g: "Domain thi" }, { id: "network", n: "05", t: "Mạng & Service" }, { id: "workloads", n: "06", t: "Workloads & Scheduling" }, { id: "probes", n: "07", t: "Probes & tự phục hồi" }, { id: "storage", n: "08", t: "Storage" }, { id: "security", n: "09", t: "RBAC & bảo mật" }, { id: "ops", n: "10", t: "Vận hành cluster" }, { id: "trouble", n: "11", t: "Troubleshooting" },
-  { g: "Thực chiến" }, { id: "labs", n: "12", t: "Bài tập theo domain" }, { id: "perf", n: "13", t: "Hiệu năng & best practice" }, { id: "cases", n: "14", t: "Use case thực tế" }, { id: "quiz", n: "15", t: "Quiz" },
-  { g: "Tra cứu" }, { id: "concepts", n: "16", t: "Thư viện khái niệm" }, { id: "commands", n: "17", t: "Lệnh & terminal" }
+  { g: "Domain thi" }, { id: "network", n: "05", t: "Mạng & Service" }, { id: "kinds", n: "06", t: "Workload resources" }, { id: "workloads", n: "07", t: "Rolling update & Scheduling" }, { id: "probes", n: "08", t: "Probes & tự phục hồi" }, { id: "storage", n: "09", t: "Storage" }, { id: "security", n: "10", t: "RBAC & bảo mật" }, { id: "ops", n: "11", t: "Vận hành cluster" }, { id: "trouble", n: "12", t: "Troubleshooting" },
+  { g: "Thực chiến" }, { id: "labs", n: "13", t: "Bài tập theo domain" }, { id: "perf", n: "14", t: "Hiệu năng & best practice" }, { id: "cases", n: "15", t: "Use case thực tế" }, { id: "quiz", n: "16", t: "Quiz" },
+  { g: "Tra cứu" }, { id: "concepts", n: "17", t: "Thư viện khái niệm" }, { id: "commands", n: "18", t: "Lệnh & terminal" }
 ];
 const onShow = {};
 let current = "overview";

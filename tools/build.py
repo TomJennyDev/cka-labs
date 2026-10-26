@@ -292,6 +292,8 @@ def main():
     # theory page (interactive concepts), served next to the guide as learn.html
     with open(os.path.join(ROOT, "tools", "learn.html"), encoding="utf-8") as f:
         learn = f.read()
+    with open(os.path.join(ROOT, "tools", "learn-kinds.js"), encoding="utf-8") as f:
+        learn += "\n<script>\n\"use strict\";\n" + f.read().replace("</script", "<\\/script") + "\n</script>\n"
     lhead, lbody = learn.split("</style>", 1)
     learn_full = ('<!doctype html>\n<html lang="vi">\n<head>\n<meta charset="utf-8">\n'
                   '<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">\n'
