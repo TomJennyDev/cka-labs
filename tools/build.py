@@ -301,7 +301,7 @@ def main():
             with open(fp, encoding="utf-8") as f:
                 best_files[os.path.relpath(fp, ex).replace(os.sep, "/")] = f.read()
     js = "const BEST_FILES = " + json.dumps(best_files, ensure_ascii=False) + ";\n"
-    for part in ("learn-kinds.js", "learn-best.js", "learn-wire.js"):
+    for part in ("learn-kinds.js", "learn-best.js", "learn-wire-anim.js", "learn-wire-ops.js", "learn-wire.js"):
         with open(os.path.join(ROOT, "tools", part), encoding="utf-8") as f:
             js += f.read() + "\n"
     learn += "\n<script>\n\"use strict\";\n" + js.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT") + "\n</script>\n"

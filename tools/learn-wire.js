@@ -2,44 +2,6 @@
 /* Nguồn của mục "Giao tiếp & mã hóa" trong learn.html. build.py chèn file này vào trang.
    Mẫu gói tin đánh dấu "bắt thật" lấy từ cluster lab (k3s v1.34, Flannel VXLAN); phần còn lại theo cluster kubeadm. */
 
-const WIRE_MAP = `flowchart LR
-  kc["kubectl / CI"]
-  ext["Client Internet"]
-  subgraph CP ["Control plane"]
-    api["kube-apiserver<br/>:6443"]
-    etcd[("etcd<br/>:2379")]
-    e2[("etcd khác<br/>:2380")]
-    cm["controller-manager<br/>scheduler"]
-  end
-  subgraph N ["Mỗi node"]
-    kl["kubelet<br/>:10250"]
-    cr["containerd<br/>CRI socket"]
-    cni["CNI plugin"]
-    kp["kube-proxy"]
-    pa["Pod A"]
-  end
-  pb["Pod B<br/>ở node khác"]
-  dns["CoreDNS"]
-  reg[("Registry")]
-  wh["Webhook<br/>metrics-server"]
-  gw["Gateway<br/>Ingress"]
-  kc -->|"1 · HTTPS"| api
-  api -->|"2 · gRPC mTLS"| etcd
-  etcd <-->|"3 · Raft mTLS"| e2
-  cm -->|"4 · watch mTLS"| api
-  kl -->|"5 · mTLS"| api
-  api -->|"6 · logs, exec"| kl
-  kl -->|"7 · gRPC unix"| cr
-  cr -->|"8 · exec + JSON"| cni
-  cr -->|"9 · HTTPS"| reg
-  pa -->|"10 · HTTPS + JWT"| api
-  pa -->|"11 · UDP 53"| dns
-  pa <-->|"12 · IP / VXLAN"| pb
-  kp -.->|"13 · rule DNAT"| pa
-  api -->|"14 · AdmissionReview"| wh
-  ext -->|"15 · HTTPS"| gw
-  gw -->|"15 · HTTP"| pb`;
-
 const WIRE_CONNS = [
   {
     id: "kubectl", n: 1, t: "kubectl → kube-apiserver", p: "TCP 6443", tr: "TLS 1.3 · HTTP/2", fm: "protobuf hoặc JSON", cr: ["ok", "TLS"], au: "client cert, token, OIDC",
@@ -371,7 +333,7 @@ openssl s_client -connect shop.example.com:443 -servername shop.example.com </de
 /* layer: [nhóm, tên, số byte, các trường, giải thích, đã mã hóa trên dây?] */
 const WIRE_PKTS = [
   {
-    id: "kubectl", t: "kubectl → apiserver", sub: "kubectl create deploy web, đi qua mạng tới 10.0.0.10:6443",
+    id: "kubectl", from: "kubectl", to: "kube-apiserver", t: "kubectl → apiserver", sub: "kubectl create deploy web, đi qua mạng tới 10.0.0.10:6443",
     see: "IP hai đầu, cổng 6443, SNI lúc bắt tay, kích thước và nhịp gói.", hide: "Verb, đường dẫn API, object, danh tính client (TLS 1.3 mã hóa cả chứng chỉ).",
     layers: [
       ["l2", "Ethernet", 14, "dst 52:54:00:1a:2b:3c (gateway) · src 3c:22:fb:7e:01:9a · type 0x0800", "Chỉ có nghĩa trong một chặng mạng; mỗi router ghi lại.", false],
@@ -384,7 +346,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "etcd", t: "apiserver → etcd: ghi Secret", sub: "kubectl create secret generic db --from-literal=password='S3cr3t!' — etcd riêng ở 10.0.0.21",
+    id: "etcd", from: "kube-apiserver", to: "etcd", t: "apiserver → etcd: ghi Secret", sub: "kubectl create secret generic db --from-literal=password='S3cr3t!' — etcd riêng ở 10.0.0.21",
     variants: ["Chưa mã hóa lúc lưu", "Có EncryptionConfiguration (aescbc)"],
     see: "IP, cổng 2379, kích thước.", hide: "Key, value (nhờ mTLS). Nhưng trên đĩa etcd thì xem dòng value.",
     layers: v => [
@@ -402,7 +364,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "vxlan", t: "Pod → Pod khác node (VXLAN)", sub: "Bắt thật trên cluster lab: Pod cli ở node01 gọi Pod web ở node02, CNI Flannel",
+    id: "vxlan", from: "Pod cli (node01)", to: "Pod web (node02)", t: "Pod → Pod khác node (VXLAN)", sub: "Bắt thật trên cluster lab: Pod cli ở node01 gọi Pod web ở node02, CNI Flannel",
     see: "Mọi thứ: IP node, IP Pod, URL, header, token, body.", hide: "Không có gì.",
     layers: [
       ["l2", "Ethernet ngoài", 14, "dst 12:0f:5a:67:2a:19 (node02) · src 42:64:5d:26:14:ed (node01)", "", false],
@@ -416,7 +378,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "wg", t: "Pod → Pod khác node (WireGuard)", sub: "Cùng request như trên nếu bật WireGuard của CNI (Calico: wireguardEnabled: true)",
+    id: "wg", from: "Pod cli (node01)", to: "Pod web (node02)", t: "Pod → Pod khác node (WireGuard)", sub: "Cùng request như trên nếu bật WireGuard của CNI (Calico: wireguardEnabled: true)",
     see: "IP hai node, cổng WireGuard, kích thước gói.", hide: "IP Pod, cổng, URL, header, token, body.",
     layers: [
       ["l2", "Ethernet", 14, "node01 → node02", "", false],
@@ -430,7 +392,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "svc", t: "Pod → Service ClusterIP", sub: "curl http://web (ClusterIP 10.96.120.15:80) — kube-proxy đã cài rule DNAT trên node nguồn",
+    id: "svc", from: "Pod (node01)", to: "Pod web", t: "Pod → Service ClusterIP", sub: "curl http://web (ClusterIP 10.96.120.15:80) — kube-proxy đã cài rule DNAT trên node nguồn",
     variants: ["Lúc rời Pod", "Sau DNAT trên node nguồn"],
     see: "Mọi thứ (không mã hóa).", hide: "Không có gì. ClusterIP chỉ tồn tại trong node nguồn.",
     layers: v => [
@@ -441,7 +403,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "dns", t: "Pod → CoreDNS", sub: "nslookup web.default từ Pod ở node01",
+    id: "dns", from: "Pod (node01)", to: "CoreDNS", t: "Pod → CoreDNS", sub: "nslookup web.default từ Pod ở node01",
     see: "Mọi thứ: tên đang hỏi và câu trả lời.", hide: "Không có gì.",
     layers: [
       ["l3", "IPv4", 20, "10.244.1.12 → 10.96.0.10 (kube-dns) → DNAT tới 10.244.0.5 (Pod CoreDNS)", "", false],
@@ -451,36 +413,6 @@ const WIRE_PKTS = [
     ]
   }
 ];
-
-const WIRE_TLS_SEQ = `sequenceDiagram
-  participant K as kubelet (client)
-  participant A as kube-apiserver :6443
-  K->>A: ClientHello: TLS 1.3, cipher, key_share (ECDHE), SNI
-  A->>K: ServerHello: chọn cipher, key_share
-  Note over K,A: Hai bên tự tính cùng một khóa phiên từ ECDHE.<br/>Từ đây mọi thứ đã mã hóa.
-  A->>K: CertificateRequest (danh sách CA chấp nhận)
-  A->>K: Certificate apiserver.crt + CertificateVerify + Finished
-  K->>K: kiểm chữ ký bằng ca.crt, SAN có địa chỉ đã gọi, còn hạn
-  K->>A: Certificate kubelet-client-current.pem + CertificateVerify + Finished
-  A->>A: kiểm bằng --client-ca-file
-  Note over A: user = CN system:node:node01<br/>groups = O system:nodes
-  K->>A: HTTP/2: PUT lease, watch Pod (AES-GCM)
-  A->>A: authn xong → authz (Node, RBAC) → admission → etcd`;
-
-const WIRE_BOOT_SEQ = `sequenceDiagram
-  participant N as node04 (kubeadm join, kubelet)
-  participant A as kube-apiserver
-  participant C as controller-manager
-  N->>A: GET configmap cluster-info<br/>(kube-public, ẩn danh)
-  A-->>N: kubeconfig có CA<br/>+ chữ ký JWS bằng token
-  N->>N: kiểm JWS bằng token<br/>hash khóa CA khớp<br/>--discovery-token-ca-cert-hash
-  Note over N: từ đây node04 tin CA,<br/>kiểm được cert server
-  N->>A: Bearer abcdef.0123456789abcdef<br/>tạo CSR: signer kube-apiserver-client-kubelet<br/>CN system:node:node04
-  C->>C: csrapproving tự duyệt<br/>csrsigning ký bằng ca.key
-  A-->>N: status.certificate
-  N->>N: ghi kubelet-client-current.pem<br/>và kubelet.conf
-  N->>A: mọi request sau đó: mTLS bằng cert mới
-  Note over N,C: gần hết hạn: kubelet tự gửi CSR mới (rotateCertificates)`;
 
 const WIRE_IDS = [
   ["Client certificate (x509)", "Trong bắt tay TLS (message Certificate)", "Chữ ký do CA trong <code>--client-ca-file</code>, còn hạn", "user = CN, groups = O. Ví dụ <code>kubernetes-admin</code> / <code>kubeadm:cluster-admins</code>"],
@@ -529,7 +461,7 @@ const WIRE_PROVIDERS = [
   ["kms v2", "Envelope encryption: khóa dữ liệu (DEK) mã hóa object, khóa chính (KEK) nằm trong KMS bên ngoài", "Khuyên dùng cho production: khóa chính không nằm trên đĩa control plane"]
 ];
 
-const WIRE_TABS = [["map", "Bản đồ kết nối"], ["pkt", "Mổ một gói tin"], ["tls", "TLS và danh tính"], ["pki", "Chứng chỉ kubeadm"], ["rest", "Mã hóa lúc lưu"], ["cheat", "Bảng tra nhanh"]];
+const WIRE_TABS = [["map", "Bản đồ kết nối"], ["pkt", "Mổ một gói tin"], ["tls", "TLS và danh tính"], ["pki", "Chứng chỉ kubeadm"], ["rest", "Mã hóa lúc lưu"], ["err", "Sự cố & khắc phục"], ["obs", "Quan sát (observability)"], ["cheat", "Bảng tra nhanh"]];
 let wireCur = "map", wireConn = "kubectl", wirePkt = "kubectl", wireVar = 0, wireEye = 0;
 
 const wCode = (t, cls) => '<div class="codewrap"><pre class="code' + (cls ? " " + cls : "") + '">' + kEsc(t) + "</pre></div>";
@@ -547,14 +479,22 @@ function wireInit() {
     $("#wireBody").addEventListener("click", e => {
       const c = e.target.closest("[data-conn]"); if (c) {
         const jump = wireCur !== "map" || innerWidth < 920; wireConn = c.dataset.conn; store.set("wireConn", wireConn);
-        if (wireCur === "map" && $("#wireDetail")) wireMapDetail(); else { wireCur = "map"; store.set("wire", "map"); wireShow(); }
+        if (wireCur === "map" && $("#wireDetail")) { if (wmTourOn) wmTour(); wireMapDetail(); wmLoop(wireConn); } else { wireCur = "map"; store.set("wire", "map"); wireShow(); }
         if (jump) $("#wireDetail").scrollIntoView({ block: "start" }); return;
       }
       const p = e.target.closest("[data-pk]"); if (p) { wirePkt = p.dataset.pk; wireVar = 0; wireCur = "pkt"; store.set("wire", "pkt"); wireShow(); return; }
       const v = e.target.closest("[data-var]"); if (v) { wireVar = +v.dataset.var; wireShow(); return; }
       const y = e.target.closest("[data-eye]"); if (y) { wireEye = +y.dataset.eye; wireShow(); return; }
+      if (e.target.closest("#wmTour")) { wmTour(); return; }
+      if (e.target.closest("#pkPlay")) { const sc = WIRE_PKTS.find(p => p.id === wirePkt) || WIRE_PKTS[0]; pkPlay(sc, typeof sc.layers === "function" ? sc.layers(wireVar) : sc.layers); return; }
+      if (e.target.closest("#sjPlay")) { sjPlay(); return; }
+      if (e.target.closest("#wLadPlay")) { wireLadderPlay(); return; }
+      const ec = e.target.closest("[data-ec]"); if (ec) { errConn = ec.dataset.ec; $$("#errChips button").forEach(b => b.setAttribute("aria-pressed", b.dataset.ec === errConn ? "true" : "false")); wireErrList(); return; }
       const s = e.target.closest("[data-seg]"); if (s) { const r = $("#pkRow" + s.dataset.seg); if (r) { $$(".pk-row.hl").forEach(x => x.classList.remove("hl")); r.classList.add("hl"); r.scrollIntoView({ block: "nearest" }); } }
     });
+    $("#wireBody").addEventListener("input", e => { if (e.target.id === "errQ") { errQ = e.target.value; wireErrList(); } });
+    $("#wireBody").addEventListener("change", e => { if (e.target.id === "sjEnc") { sjEnc = e.target.checked; sjTok(0); } });
+    $("#wireBody").addEventListener("keydown", e => { const n = e.target.closest(".wm-n"); if (n && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); n.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
     wireCur = store.get("wire", "map"); wireConn = store.get("wireConn", "kubectl");
   }
   wireShow();
@@ -588,6 +528,7 @@ function wirePktHTML() {
   h += '<p class="small muted" style="margin:0">' + kEsc(sc.sub) + "</p>";
   h += '<div class="formrow"><div class="seg" role="group" aria-label="Góc nhìn"><button type="button" data-eye="0" aria-pressed="' + eaves + '">Người bắt gói trên dây</button><button type="button" data-eye="1" aria-pressed="' + !eaves + '">Bên nhận, đã giải mã</button></div>' +
     (sc.variants ? '<div class="seg" role="group" aria-label="Biến thể">' + sc.variants.map((v, i) => '<button type="button" data-var="' + i + '" aria-pressed="' + (i === wireVar) + '">' + kEsc(v) + "</button>").join("") + "</div>" : "") + "</div>";
+  h += pkStageHTML(sc, layers);
   const total = layers.reduce((a, l) => a + l[2], 0);
   h += '<div class="pk-bar" role="group" aria-label="Gói tin theo thứ tự byte">' + layers.map((l, i) => {
     const hid = eaves && l[5];
@@ -611,13 +552,18 @@ function wireShow() {
   let h = "";
   if (wireCur === "map") {
     const c = WIRE_CONNS.find(x => x.id === wireConn) || WIRE_CONNS[0];
-    h += '<div class="panel col"><h4>Ai nói chuyện với ai</h4><p class="small muted">Mô hình hub-and-spoke: mọi thành phần gọi vào kube-apiserver, chỉ apiserver chạm vào etcd. Số trên mũi tên khớp danh sách bên dưới.</p>' + mmd(WIRE_MAP) + "</div>";
+    h += '<div class="panel col"><h4>Ai nói chuyện với ai</h4><p class="small muted">Mô hình hub-and-spoke: mọi thành phần gọi vào kube-apiserver, chỉ apiserver chạm vào etcd. Bấm một số, một đường hoặc một thành phần để xem gói tin chạy trên kết nối đó.</p><div class="stage" id="wmStage"></div>' +
+      '<div class="controls"><button class="btn primary" type="button" id="wmTour">▶ Hành trình một lệnh kubectl</button><span class="wm-leg"><i class="enc"></i>đã mã hóa (TLS/mTLS)</span><span class="wm-leg"><i class="plain"></i>dạng rõ trên mạng</span><span class="wm-leg"><i class="loc"></i>cục bộ trong node</span></div><p class="hint" id="wmCap" aria-live="polite" style="margin:0">Hành trình chạy lần lượt các kết nối khi tạo một Deployment, từ kubectl tới Pod chạy trên node.</p></div>';
     h += '<div class="wire-split"><div class="panel col wire-list" role="list">' + WIRE_CONNS.map(x => '<button type="button" role="listitem" data-conn="' + x.id + '" aria-pressed="' + (x.id === c.id) + '"><span class="n">' + W_CIRC[x.n - 1] + '</span><span class="t">' + kEsc(x.t) + '<small>' + kEsc(x.p + " · " + x.tr) + '</small></span><span class="pill ' + x.cr[0] + '">' + kEsc(x.cr[1].split(",")[0]) + "</span></button>").join("") + "</div>" + wireConnHTML(c) + "</div>";
   } else if (wireCur === "pkt") {
     h += wirePktHTML();
+  } else if (wireCur === "err") {
+    h += wireErrHTML();
+  } else if (wireCur === "obs") {
+    h += wireObsHTML();
   } else if (wireCur === "tls") {
-    h += '<div class="panel col"><h4>Bắt tay TLS 1.3 hai chiều (mTLS)</h4>' + mmd(WIRE_TLS_SEQ) + '<p class="small muted">apiserver xin cert client nhưng không bắt buộc: client không có cert vẫn kết nối được và xác thực bằng token trong header. Khóa phiên mới cho mỗi kết nối (forward secrecy): lộ ca.key sau này cũng không giải mã được gói đã bắt trước đó.</p></div>' +
-      '<div class="panel col"><h4>Node mới vào cluster: TLS bootstrap</h4>' + mmd(WIRE_BOOT_SEQ) + "</div>";
+    h += '<div class="panel col"><h4>Bắt tay TLS 1.3 hai chiều (mTLS)</h4><p class="small muted">Mũi tên đen: dạng rõ. Mũi tên tím có khóa: đã mã hóa bằng khóa phiên.</p><div id="sqTls"></div><p class="small muted">apiserver xin cert client nhưng không bắt buộc: client không có cert vẫn kết nối được và xác thực bằng token trong header. Khóa phiên mới cho mỗi kết nối (forward secrecy): lộ ca.key sau này cũng không giải mã được gói đã bắt trước đó.</p></div>' +
+      '<div class="panel col"><h4>Node mới vào cluster: TLS bootstrap</h4><div id="sqBoot"></div></div>';
     h += '<div class="panel"><h4>Danh tính nằm ở đâu trong gói tin</h4><div class="tbl"><table><thead><tr><th>Cách</th><th>Nằm ở</th><th>apiserver kiểm</th><th>Thành user / group</th></tr></thead><tbody>' + WIRE_IDS.map(r => "<tr><td><b>" + r[0] + "</b></td><td>" + r[1] + "</td><td>" + r[2] + "</td><td>" + r[3] + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Kubernetes không có object User: user chỉ là chuỗi lấy từ cert hoặc token. Thứ tự xử lý một request: xác thực (authn) → phân quyền (Node, RBAC) → admission → validate → lưu etcd.</p></div>';
     h += '<div class="split even"><div class="panel col"><h4>JWT của ServiceAccount: ký, không mã hóa</h4>' + wCode(`eyJhbGciOiJSUzI1NiIsImtpZCI6Il9uSkF3b2lf….eyJhdWQiOlsiaHR0cHM6Ly9rdWJl….Qx7f0c…
 └──── header (base64url) ────┘ └──── payload (base64url) ────┘ └ chữ ký RS256 ┘
@@ -654,7 +600,7 @@ sudo mv /etc/kubernetes/pki/apiserver.{crt,key} /tmp/
 sudo kubeadm init phase certs apiserver --config kc.yaml
 # rồi khởi động lại kube-apiserver như trên và kiểm SAN bằng openssl`) + '<p class="small muted">Duyệt cert cho user mới bằng CSR: xem Lab 24.</p></div></div>';
   } else if (wireCur === "rest") {
-    h += '<div class="panel"><h4>Hành trình của một Secret</h4><div class="tbl"><table><thead><tr><th>#</th><th>Chặng</th><th>Dạng dữ liệu</th><th>Được bảo vệ bằng</th></tr></thead><tbody>' + WIRE_JOURNEY.map(r => "<tr><td>" + r[0] + "</td><td><b>" + kEsc(r[1]) + "</b></td><td>" + kEsc(r[2]) + "</td><td>" + (r[4] ? '<span class="pill ' + r[4] + '">' + kEsc(r[3]) + "</span>" : kEsc(r[3])) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Chặng yếu nhất mặc định là 4: etcd và mọi bản sao lưu của nó. EncryptionConfiguration chỉ vá chặng đó; chặng 6 và 7 cần RBAC chặt (ai được get secret, ai được exec) và hệ thống quản lý bí mật bên ngoài nếu cần.</p></div>';
+    h += '<div class="panel col"><h4>Hành trình của một Secret</h4>' + sjHTML() + '<div class="tbl"><table id="wireJourney"><thead><tr><th>#</th><th>Chặng</th><th>Dạng dữ liệu</th><th>Được bảo vệ bằng</th></tr></thead><tbody>' + WIRE_JOURNEY.map(r => "<tr><td>" + r[0] + "</td><td><b>" + kEsc(r[1]) + "</b></td><td>" + kEsc(r[2]) + "</td><td>" + (r[4] ? '<span class="pill ' + r[4] + '">' + kEsc(r[3]) + "</span>" : kEsc(r[3])) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Chặng yếu nhất mặc định là 4: etcd và mọi bản sao lưu của nó. EncryptionConfiguration chỉ vá chặng đó; chặng 6 và 7 cần RBAC chặt (ai được get secret, ai được exec) và hệ thống quản lý bí mật bên ngoài nếu cần.</p></div>';
     h += '<div class="split even"><div class="panel col"><h4>Bật mã hóa Secret trong etcd</h4>' + wCode(`# 1. Tạo khóa 32 byte và file cấu hình trên MỌI control plane
 head -c 32 /dev/urandom | base64
 sudo mkdir -p /etc/kubernetes/enc
@@ -701,9 +647,14 @@ kubectl get secrets -A -o json | kubectl replace -f -`) + "</div>" +
       ["30000-32767 TCP/UDP", "mọi node", "NodePort"], ["4789 UDP · 179 TCP · 51820 UDP", "mọi node", "Calico VXLAN · BGP · WireGuard (tùy chế độ)"], ["53 UDP/TCP", "Pod CoreDNS", "mọi Pod"]
     ].map(r => "<tr><td><code>" + kEsc(r[0]) + "</code></td><td>" + kEsc(r[1]) + "</td><td>" + kEsc(r[2]) + "</td></tr>").join("") + "</tbody></table></div></div>";
   }
+  wmTok++; wmTourOn = false;
   box.innerHTML = h;
   wireCopy();
   mmdRender(box);
+  if (wireCur === "map") { wmBuild($("#wmStage")); wmLoop(wireConn); }
+  if (wireCur === "tls") { seqStage($("#sqTls"), SEQ_TLS[0], SEQ_TLS[1]); seqStage($("#sqBoot"), SEQ_BOOT[0], SEQ_BOOT[1]); }
+  if (wireCur === "rest") sjTok(0);
+  if (wireCur === "err") wireErrList();
 }
 onShow.wire = wireInit;
 if (current === "wire" || (location.hash || "").slice(1) === "wire") wireInit();

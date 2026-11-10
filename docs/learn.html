@@ -308,6 +308,55 @@ td.num,th.num{font-variant-numeric:tabular-nums}
 #wireCheat td{font-size:13.5px}
 #wireBody td code{white-space:normal}
 .pk-x{letter-spacing:0}
+/* animation của mục giao tiếp */
+.wm-e{transition:stroke .3s,stroke-width .3s}
+.wm-arrow{fill:var(--muted)}
+.wm-hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
+.wm-n{cursor:pointer}
+.wm-n circle{fill:var(--paper);stroke:var(--accent);stroke-width:1.6}
+.wm-nt{fill:var(--accent);font:700 11.5px var(--f-mono)}
+.wm-n.on circle{fill:var(--pkt);stroke:var(--pkt)}.wm-n.on .wm-nt{fill:var(--paper)}
+.wm-n:focus-visible circle{stroke:var(--pkt);stroke-width:3}
+.wpk rect{stroke:var(--paper);stroke-width:1.5}
+.wpk.enc rect{fill:var(--data)}.wpk.plain rect{fill:var(--bad)}.wpk.loc rect{fill:var(--pkt)}
+.wlk,.wln{fill:none;stroke:var(--paper);stroke-width:1.6;stroke-linecap:round}
+.wm-leg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.wm-leg i{width:16px;height:11px;border-radius:3px;display:inline-block}
+.wm-leg i.enc{background:var(--data)}.wm-leg i.plain{background:var(--bad)}.wm-leg i.loc{background:var(--pkt)}
+.seq svg{min-width:640px;max-width:860px;margin:0 auto}
+#pkStage svg,#sjStage svg{max-width:900px;margin:0 auto}
+.sq-l{stroke:var(--ink);stroke-width:1.5}.sq-l.enc{stroke:var(--data);stroke-width:2}
+.sq-ar{fill:var(--ink)}.sq-ar.enc{fill:var(--data)}
+.sq-t{fill:var(--ink);font:500 12.5px var(--f-body)}.sq-t.enc{fill:var(--data);font-weight:600}
+.sq-note{fill:var(--paper-2);stroke:var(--line)}.sq-note.key{fill:var(--data-soft);stroke:var(--data)}
+.sq-nt{fill:var(--ink);font:500 12px var(--f-body)}
+.pk-bar button{transition:flex-grow .45s ease,opacity .35s,background .35s,min-width .45s,padding .45s}
+.pk-bar button.pk-off{flex-grow:.0001 !important;min-width:0;padding:0;opacity:0;border-right-width:0}
+.pk-bar button.pk-flash{animation:pkf .7s ease}
+@keyframes pkf{0%{filter:brightness(1)}40%{filter:brightness(1.6)}100%{filter:brightness(1)}}
+.pk-row{transition:opacity .3s,box-shadow .3s}
+.pk-row.pk-dim{opacity:.28}
+.pk-mv{stroke:var(--paper);stroke-width:1}
+.pk-mv.pk-l2{fill:var(--muted)}.pk-mv.pk-l3{fill:var(--accent)}.pk-mv.pk-l4{fill:var(--node)}.pk-mv.pk-tun{fill:var(--pkt)}.pk-mv.pk-tls{fill:var(--data)}.pk-mv.pk-app,.pk-mv.pk-rest{fill:var(--bad)}.pk-mv.enc{fill:var(--data);opacity:.55}
+#pkMove{transform-box:fill-box}
+.pk-eye circle:first-child{fill:var(--paper);stroke:var(--muted);stroke-width:1.5}
+.pk-eye path{fill:none;stroke:var(--muted);stroke-width:1.5}.pk-eye circle:nth-child(3){fill:var(--muted)}
+.pk-eye.on circle:first-child{stroke:var(--pkt);fill:var(--pkt-soft)}.pk-eye.on path{stroke:var(--pkt)}
+.sj-n.on circle{stroke:var(--pkt);stroke-width:3;fill:var(--pkt-soft)}
+.sv-wire.sj-tls{stroke:var(--data);stroke-width:3}
+#sjTok rect{stroke:var(--paper);stroke-width:1.5}#sjTok text{font:700 12px var(--f-mono);fill:#fff}
+#sjTok.sj-plain rect{fill:var(--bad)}#sjTok.sj-enc rect{fill:var(--data)}
+tr.hlrow td{background:var(--pkt-soft)}
+ol.ladder{list-style:none;margin:0;padding:0;display:flex;flex-direction:column-reverse;gap:6px}
+ol.ladder li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:var(--paper);transition:border-color .3s,background .3s}
+ol.ladder .lv{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--f-mono);background:var(--paper-2);color:var(--muted);transition:background .3s,color .3s}
+ol.ladder li.cur{border-color:var(--pkt);background:var(--pkt-soft)}
+ol.ladder li.ok{border-color:var(--node)}ol.ladder li.ok .lv{background:var(--node);color:var(--paper)}
+details.err summary{align-items:flex-start}
+details.err summary .pill{flex:none;margin-top:2px}
+details.err code.em{white-space:normal;overflow-wrap:anywhere;font-size:12.5px;background:none;border:0;padding:0;color:var(--bad);font-weight:600}
+.obs4{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+.obs4 code{white-space:normal}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
@@ -4896,47 +4945,584 @@ function bestShow() {
 onShow.best = bestInit;
 if (current === "best" || (location.hash || "").slice(1) === "best") bestInit();
 
+/* ---------- Giao tiếp & mã hóa: phần animation ---------- */
+/* Bản đồ kết nối vẽ tay (gói tin chạy trên từng kết nối), sơ đồ tuần tự phát từng bước,
+   animation đóng gói / gửi / mở gói, và hành trình của một Secret. build.py chèn trước learn-wire.js. */
+
+const WM_W = 1000, WM_H = 560;
+const WM_BOX = [
+  { id: "kc", x: 20, y: 30, w: 130, h: 50, t: "kubectl / CI", cls: "sv-box", c: "kubectl" },
+  { id: "ext", x: 20, y: 500, w: 130, h: 56, t: "Client Internet", cls: "sv-box", c: "edge" },
+  { id: "ctrl", x: 260, y: 110, w: 140, h: 56, t: "controller-mgr", sub: "scheduler", cls: "sv-cp", c: "ctrl" },
+  { id: "api", x: 450, y: 80, w: 170, h: 64, t: "kube-apiserver", sub: ":6443", cls: "sv-cp", c: "kubectl" },
+  { id: "etcd", x: 680, y: 80, w: 120, h: 64, t: "etcd", sub: ":2379", cls: "sv-data", c: "etcd" },
+  { id: "etcd2", x: 850, y: 80, w: 115, h: 64, t: "etcd khác", sub: ":2380", cls: "sv-data", c: "raft" },
+  { id: "kl", x: 40, y: 260, w: 140, h: 56, t: "kubelet", sub: ":10250", cls: "sv-node", c: "kubelet" },
+  { id: "cr", x: 240, y: 260, w: 140, h: 56, t: "containerd", sub: "CRI socket", cls: "sv-node", c: "cri" },
+  { id: "cni", x: 440, y: 260, w: 120, h: 56, t: "CNI plugin", sub: "/opt/cni/bin", cls: "sv-node", c: "cni" },
+  { id: "kp", x: 40, y: 360, w: 140, h: 56, t: "kube-proxy", sub: "iptables / nft", cls: "sv-node", c: "svc" },
+  { id: "pa", x: 260, y: 360, w: 120, h: 56, t: "Pod A", sub: "10.244.1.12", cls: "sv-pkt", c: "pod" },
+  { id: "wh", x: 720, y: 230, w: 160, h: 50, t: "Webhook", sub: "metrics-server", cls: "sv-box", c: "hook" },
+  { id: "reg", x: 720, y: 300, w: 160, h: 50, t: "Registry", sub: ":443", cls: "sv-box", c: "reg" },
+  { id: "dns", x: 720, y: 370, w: 160, h: 50, t: "CoreDNS", sub: "10.96.0.10:53", cls: "sv-box", c: "dns" },
+  { id: "gw", x: 500, y: 503, w: 130, h: 50, t: "Gateway", sub: "kết thúc TLS", cls: "sv-box", c: "edge" },
+  { id: "pb", x: 720, y: 503, w: 160, h: 50, t: "Pod B", sub: "node khác", cls: "sv-pkt", c: "pod" }
+];
+/* đường đi (SVG path), vị trí số, hai chiều? */
+const WM_EDGE = {
+  kubectl: ["M150 55 H535 V80", [330, 55]],
+  etcd: ["M620 112 H680", [650, 112]],
+  raft: ["M800 112 H850", [825, 112], 1],
+  ctrl: ["M400 130 H450", [425, 130]],
+  kubelet: ["M100 260 V200 H500 V144", [300, 200]],
+  exec: ["M560 144 V215 H130 V260", [360, 215]],
+  cri: ["M180 288 H240", [210, 288]],
+  cni: ["M380 288 H440", [410, 288]],
+  reg: ["M310 316 V338 H660 V325 H720", [520, 338]],
+  sa: ["M380 372 H600 V144", [600, 250]],
+  dns: ["M380 395 H720", [540, 395]],
+  pod: ["M320 416 V470 H700 V515 H720", [520, 470], 1],
+  svc: ["M180 388 H260", [220, 388]],
+  hook: ["M620 130 H660 V255 H720", [660, 195]],
+  edge: ["M150 530 H720", [320, 530]]
+};
+const WM_PCLS = { ok: "enc", bad: "plain", warn: "loc" };
+const WM_TOUR = [
+  ["kubectl", 0, "kubectl gửi POST Deployment tới apiserver qua TLS. Danh tính: client certificate trong kubeconfig."],
+  ["hook", 0, "Nếu có admission webhook, apiserver gửi AdmissionReview qua HTTPS và chờ allowed: true."],
+  ["etcd", 0, "apiserver ghi Deployment vào etcd bằng gRPC Txn qua mTLS (protobuf k8s\\0)."],
+  ["raft", 0, "etcd leader nhân bản entry sang member khác qua Raft; đa số xác nhận thì mới trả lời apiserver."],
+  ["kubectl", 1, "apiserver trả 201 Created cho kubectl."],
+  ["ctrl", 1, "controller-manager nhận sự kiện ADDED qua watch, tạo ReplicaSet rồi Pod (POST qua cùng kết nối mTLS)."],
+  ["ctrl", 0, "scheduler thấy Pod chưa có node, chọn node01 và POST binding."],
+  ["kubelet", 1, "kubelet trên node01 nhận Pod qua watch của chính nó (mTLS, cert system:node:node01)."],
+  ["cri", 0, "kubelet gọi RunPodSandbox qua gRPC trên unix socket, không mã hóa nhưng không ra mạng."],
+  ["cni", 0, "containerd chạy CNI plugin với CNI_COMMAND=ADD; plugin trả JSON có IP 10.244.1.12."],
+  ["reg", 0, "containerd kéo image qua HTTPS và kiểm sha256 từng layer."],
+  ["kubelet", 0, "kubelet PATCH status Pod: Running, IP Pod. Endpoint được thêm vào Service."],
+  ["svc", 0, "kube-proxy thấy EndpointSlice mới và cập nhật rule DNAT trên mọi node."],
+  ["dns", 0, "Pod khác hỏi CoreDNS tên Service qua UDP 53, dạng rõ."],
+  ["pod", 0, "Gói tới IP Pod ở node khác đi qua VXLAN: mặc định không mã hóa, ai bắt gói trên dây cũng đọc được."]
+];
+
+let wmTok = 0, wmTourOn = false;
+function wmPkt(svg, path, o) {
+  return new Promise(res => {
+    if (RM || !svg.isConnected) { res(); return; }
+    const L = path.getTotalLength(), dur = o.dur || Math.max(700, Math.min(1700, L * 2.6));
+    const g = el("g", { class: "wpk " + o.cls }, svg);
+    el("rect", { x: -10, y: -7, width: 20, height: 14, rx: 3 }, g);
+    if (o.cls === "enc") el("path", { d: "M-3.5 -1 v-2 a3.5 3.5 0 0 1 7 0 v2 M-5 -1 h10 v6 h-10z", class: "wlk" }, g);
+    else el("path", { d: "M-6 -3 h12 M-6 0 h12 M-6 3 h8", class: "wln" }, g);
+    const t0 = performance.now();
+    const f = t => {
+      if (!g.isConnected) { res(); return; }
+      const p = ease(Math.min(1, (t - t0) / dur));
+      const pt = path.getPointAtLength((o.rev ? 1 - p : p) * L);
+      g.setAttribute("transform", "translate(" + pt.x + " " + pt.y + ")");
+      if (o.switchAt && (o.rev ? 1 - p : p) > o.switchAt && !g.dataset.sw) { g.dataset.sw = 1; g.setAttribute("class", "wpk plain"); g.querySelector("path").setAttribute("d", "M-6 -3 h12 M-6 0 h12 M-6 3 h8"); g.querySelector("path").setAttribute("class", "wln"); }
+      if (p < 1) requestAnimationFrame(f); else { g.remove(); res(); }
+    };
+    requestAnimationFrame(f);
+  });
+}
+function wmBuild(host) {
+  host.innerHTML = "";
+  const svg = el("svg", { viewBox: "0 0 " + WM_W + " " + WM_H, role: "img", "aria-label": "Bản đồ 15 kết nối trong cluster" }, host);
+  const defs = el("defs", null, svg);
+  const mk = el("marker", { id: "wmA", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, defs);
+  el("path", { d: "M0 0 L10 5 L0 10z", class: "wm-arrow" }, mk);
+  el("rect", { x: 240, y: 10, width: 740, height: 185, rx: 12, class: "sv-zonefill" }, svg);
+  txt(svg, 256, 32, "CONTROL PLANE", "sv-lbl");
+  el("rect", { x: 20, y: 225, width: 640, height: 225, rx: 12, class: "sv-zonefill" }, svg);
+  txt(svg, 36, 248, "MỖI NODE", "sv-lbl");
+  const eg = el("g", null, svg);
+  WIRE_CONNS.forEach(c => {
+    const e = WM_EDGE[c.id];
+    const p = el("path", { d: e[0], class: "sv-wire wm-e", id: "wmE-" + c.id, "marker-end": "url(#wmA)" }, eg);
+    if (e[2]) p.setAttribute("marker-start", "url(#wmA)");
+    if (c.id === "svc") p.setAttribute("stroke-dasharray", "5 4");
+    const hit = el("path", { d: e[0], class: "wm-hit", "data-conn": c.id }, eg);
+    hit.appendChild(document.createElementNS(SVGNS, "title")).textContent = c.n + ". " + c.t;
+  });
+  WM_BOX.forEach(b => { const g = box(svg, b); g.classList.add("comp"); g.setAttribute("data-conn", b.c); g.id = "wmB-" + b.id; });
+  WIRE_CONNS.forEach(c => {
+    const e = WM_EDGE[c.id], g = el("g", { class: "wm-n", "data-conn": c.id, id: "wmN-" + c.id, tabindex: 0, role: "button", "aria-label": c.n + ". " + c.t }, svg);
+    el("circle", { cx: e[1][0], cy: e[1][1], r: 11 }, g);
+    txt(g, e[1][0], e[1][1] + 4, String(c.n), "wm-nt", "middle");
+  });
+  el("g", { id: "wmPk" }, svg);
+  return svg;
+}
+function wmSelect(id) {
+  $$(".wm-e").forEach(p => p.classList.toggle("on", p.id === "wmE-" + id));
+  $$(".wm-n").forEach(g => g.classList.toggle("on", g.id === "wmN-" + id));
+  const c = WIRE_CONNS.find(x => x.id === id);
+  const ends = { kubectl: ["kc", "api"], etcd: ["api", "etcd"], raft: ["etcd", "etcd2"], ctrl: ["ctrl", "api"], kubelet: ["kl", "api"], exec: ["api", "kl"], cri: ["kl", "cr"], cni: ["cr", "cni"], reg: ["cr", "reg"], sa: ["pa", "api"], dns: ["pa", "dns"], pod: ["pa", "pb"], svc: ["kp", "pa"], hook: ["api", "wh"], edge: ["ext", "pb"] }[id] || [];
+  $$("#wmStage .comp").forEach(g => g.classList.toggle("lit", ends.includes(g.id.slice(4)) || (id === "edge" && g.id === "wmB-gw")));
+  return c;
+}
+async function wmLoop(id) {
+  const tok = ++wmTok;
+  const c = wmSelect(id);
+  const svg = $("#wmStage svg"); if (!svg || !c) return;
+  const path = $("#wmE-" + id), layer = $("#wmPk");
+  while (tok === wmTok && svg.isConnected && current === "wire" && wireCur === "map" && !RM) {
+    const cls = WM_PCLS[c.cr[0]];
+    await wmPkt(layer, path, { cls, switchAt: id === "edge" ? .62 : 0 });
+    if (tok !== wmTok) return;
+    await wmPkt(layer, path, { cls: id === "edge" ? "plain" : cls, rev: 1, switchAt: 0 });
+    await sleep(350);
+  }
+}
+async function wmTour() {
+  if (wmTourOn) { wmTourOn = false; wmTok++; $("#wmTour").textContent = "▶ Hành trình một lệnh kubectl"; return; }
+  wmTourOn = true; const tok = ++wmTok;
+  $("#wmTour").textContent = "■ Dừng";
+  const svg = $("#wmStage svg"), layer = $("#wmPk");
+  for (let i = 0; i < WM_TOUR.length; i++) {
+    if (tok !== wmTok || !svg.isConnected) break;
+    const [id, rev, cap] = WM_TOUR[i]; const c = wmSelect(id);
+    $("#wmCap").innerHTML = '<span class="stepnum">BƯỚC ' + (i + 1) + "/" + WM_TOUR.length + " · KẾT NỐI " + W_CIRC[c.n - 1] + "</span><br>" + kEsc(cap);
+    await wmPkt(layer, $("#wmE-" + id), { cls: WM_PCLS[c.cr[0]], rev, dur: 1300 });
+    await sleep(RM ? 900 : 700);
+  }
+  if (tok === wmTok) { wmTourOn = false; $("#wmTour").textContent = "▶ Hành trình một lệnh kubectl"; wmLoop(wireConn); }
+}
+
+/* ---------- sơ đồ tuần tự phát từng bước ---------- */
+/* step: [từ, tới, nhãn, mã hóa?]  ·  ["note", từ, tới, nhãn]  ·  ["self", actor, nhãn] */
+function seqStage(host, actors, steps, W) {
+  W = W || 760;
+  const xs = actors.map((_, i) => actors.length === 2 ? [170, W - 170][i] : 110 + i * ((W - 220) / (actors.length - 1)));
+  const H = 92 + steps.length * 46;
+  host.innerHTML = '<div class="stage sm seq"></div><div class="controls" style="margin-top:10px"><button class="btn primary" type="button" data-sq="play">▶ Phát</button><button class="btn" type="button" data-sq="next">Từng bước ›</button><button class="btn" type="button" data-sq="all">Hiện hết</button><span class="hint" data-sq="cap"></span></div>';
+  const svg = el("svg", { viewBox: "0 0 " + W + " " + H }, host.firstChild);
+  actors.forEach((a, i) => {
+    el("line", { x1: xs[i], y1: 58, x2: xs[i], y2: H - 10, class: "sv-life" }, svg);
+    box(svg, { x: xs[i] - 92, y: 10, w: 184, h: 44, t: a, cls: "sv-cp", tcls: "sv-t" });
+  });
+  const gs = steps.map((s, i) => {
+    const y = 92 + i * 46, g = el("g", { class: "sq-s", opacity: 0 }, svg);
+    if (s[0] === "note" || s[0] === "self") {
+      const a = s[0] === "note" ? Math.min(xs[s[1]], xs[s[2]]) : xs[s[1]], b = s[0] === "note" ? Math.max(xs[s[1]], xs[s[2]]) : xs[s[1]];
+      const lab = s[0] === "note" ? s[3] : s[2];
+      const w = Math.max(b - a + 60, Math.min(W - 20, lab.length * 6.6 + 24)), x = Math.max(10, Math.min(W - 10 - w, (a + b) / 2 - w / 2));
+      el("rect", { x, y: y - 16, width: w, height: 26, rx: 5, class: s[0] === "note" ? "sq-note key" : "sq-note" }, g);
+      txt(g, x + w / 2, y + 1, lab, "sq-nt", "middle");
+    } else {
+      const x1 = xs[s[0]], x2 = xs[s[1]];
+      el("line", { x1, y1: y, x2: x2 + (x2 > x1 ? -4 : 4), y2: y, class: "sq-l" + (s[3] ? " enc" : ""), "marker-end": "url(#sqA" + (s[3] ? "e" : "") + ")" }, g);
+      const t = txt(g, (x1 + x2) / 2, y - 8, (s[3] ? "🔒 " : "") + s[2], "sq-t" + (s[3] ? " enc" : ""), "middle");
+      g.dataset.x1 = x1; g.dataset.x2 = x2; g.dataset.y = y; g.dataset.e = s[3] ? 1 : 0;
+    }
+    return g;
+  });
+  const defs = el("defs", null, svg);
+  [["sqA", "sq-ar"], ["sqAe", "sq-ar enc"]].forEach(([id, cls]) => { const m = el("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 7, markerHeight: 7, orient: "auto" }, defs); el("path", { d: "M0 0 L10 5 L0 10z", class: cls }, m); });
+  let i = 0, playing = false;
+  const cap = host.querySelector('[data-sq="cap"]');
+  const showStep = async (k, anim) => {
+    const g = gs[k];
+    if (anim && g.dataset.x1 && !RM) {
+      const p = el("path", { d: "M" + g.dataset.x1 + " " + g.dataset.y + " H" + g.dataset.x2 }, svg); p.setAttribute("visibility", "hidden");
+      await wmPkt(svg, p, { cls: g.dataset.e === "1" ? "enc" : "plain", dur: 750 }); p.remove();
+    }
+    g.setAttribute("opacity", 1); g.classList.add("fade-in");
+    cap.textContent = "Bước " + (k + 1) + "/" + gs.length;
+  };
+  const reset = () => { gs.forEach(g => g.setAttribute("opacity", 0)); i = 0; cap.textContent = ""; };
+  host.addEventListener("click", async e => {
+    const b = e.target.closest("[data-sq]"); if (!b || !b.dataset.sq) return;
+    const a = b.dataset.sq;
+    if (a === "next") { if (i >= gs.length) reset(); await showStep(i++, true); }
+    else if (a === "all") { playing = false; gs.forEach(g => g.setAttribute("opacity", 1)); i = gs.length; cap.textContent = ""; }
+    else if (a === "play") {
+      if (playing) { playing = false; return; }
+      playing = true; reset(); b.textContent = "■ Dừng";
+      while (playing && i < gs.length && svg.isConnected) { await showStep(i++, true); await sleep(380); }
+      playing = false; b.textContent = "▶ Phát";
+    }
+  });
+  gs.forEach(g => g.setAttribute("opacity", 1));
+  i = gs.length;
+}
+const SEQ_TLS = [["kubelet (client)", "kube-apiserver :6443"], [
+  [0, 1, "ClientHello: TLS 1.3, cipher, key_share (ECDHE), SNI", 0],
+  [1, 0, "ServerHello: chọn cipher, key_share", 0],
+  ["note", 0, 1, "Hai bên tính ra cùng khóa phiên từ ECDHE. Từ đây mọi thứ đã mã hóa"],
+  [1, 0, "CertificateRequest: xin cert của client", 1],
+  [1, 0, "Certificate apiserver.crt + CertificateVerify + Finished", 1],
+  ["self", 0, "kiểm bằng ca.crt: chữ ký, SAN có địa chỉ đã gọi, còn hạn"],
+  [0, 1, "Certificate kubelet-client-current.pem + CertificateVerify + Finished", 1],
+  ["self", 1, "kiểm bằng --client-ca-file → user system:node:node01"],
+  [0, 1, "HTTP/2: PUT lease, watch Pod (AES-GCM)", 1],
+  ["self", 1, "authz (Node, RBAC) → admission → etcd"]
+]];
+const SEQ_BOOT = [["node04 (join, kubelet)", "kube-apiserver", "controller-manager"], [
+  [0, 1, "GET cluster-info (kube-public, ẩn danh)", 0],
+  [1, 0, "CA + chữ ký JWS bằng token", 0],
+  ["self", 0, "kiểm JWS; hash khóa CA khớp --discovery-token-ca-cert-hash"],
+  ["note", 0, 1, "Từ đây node04 tin CA: TLS kiểm được cert server"],
+  [0, 1, "Bearer abcdef.…: tạo CSR, CN system:node:node04", 1],
+  [1, 2, "watch: có CSR mới", 1],
+  ["self", 2, "csrapproving duyệt, csrsigning ký bằng ca.key"],
+  [2, 1, "ghi status.certificate", 1],
+  [1, 0, "cert đã ký", 1],
+  ["self", 0, "ghi kubelet-client-current.pem và kubelet.conf"],
+  [0, 1, "mọi request sau: mTLS bằng cert của chính node", 1]
+]];
+
+/* ---------- đóng gói → gửi → mở gói ---------- */
+let pkBusy = false;
+async function pkPlay(sc, layers) {
+  if (pkBusy) return; pkBusy = true;
+  const btn = $("#pkPlay"); if (btn) btn.disabled = true;
+  const segs = $$(".pk-bar button"), rows = $$(".pk-row"), eaves = wireEye === 0;
+  const encIdx = layers.map((l, i) => l[5] ? i : -1).filter(i => i >= 0);
+  const wrapAt = encIdx.length ? Math.min(...encIdx) - 1 : -1;
+  const say = t => { const c = $("#pkCap"); if (c) c.innerHTML = t; };
+  const svg = $("#pkStage svg");
+  const lit = i => { rows.forEach(r => r.classList.remove("hl")); if (rows[i]) rows[i].classList.add("hl"); };
+  segs.forEach(s => { s.classList.add("pk-off"); s.classList.remove("enc"); });
+  rows.forEach(r => r.classList.add("pk-dim"));
+  say("<b>1 · Đóng gói ở " + kEsc(sc.from) + ":</b> mỗi tầng bọc thêm header ra ngoài tầng bên trong.");
+  for (let i = layers.length - 1; i >= 0; i--) {
+    if (!svg || !svg.isConnected) break;
+    segs[i].classList.remove("pk-off"); rows[i].classList.remove("pk-dim"); lit(i);
+    if (i === wrapAt && eaves) { await sleep(300); say("<b>Mã hóa:</b> " + kEsc(layers[i][1]) + " mã hóa toàn bộ phần bên trong bằng khóa phiên."); encIdx.forEach(k => { segs[k].classList.add("enc", "pk-flash"); rows[k].classList.add("enc"); }); await sleep(700); }
+    await sleep(RM ? 40 : 420);
+  }
+  if (svg && svg.isConnected && !RM) {
+    say("<b>2 · Trên dây:</b> người bắt gói thấy " + kEsc(sc.see.charAt(0).toLowerCase() + sc.see.slice(1)));
+    const g = $("#pkMove"), eye = $("#pkEye");
+    g.setAttribute("opacity", 1);
+    const t0 = performance.now(), dur = 2200;
+    await new Promise(res => { const f = t => { const p = Math.min(1, (t - t0) / dur); g.setAttribute("transform", "translate(" + (140 + ease(p) * 420) + " 0)"); if (eye) eye.classList.toggle("on", p > .35 && p < .75); if (p < 1 && g.isConnected) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+    if (eye) eye.classList.remove("on");
+    g.setAttribute("opacity", 0);
+  }
+  say("<b>3 · Mở gói ở " + kEsc(sc.to) + ":</b> bỏ từng header từ ngoài vào, giải mã khi tới tầng mã hóa.");
+  for (let i = 0; i < layers.length - 1; i++) {
+    if (!svg || !svg.isConnected) break;
+    lit(i); await sleep(RM ? 40 : 360);
+    segs[i].classList.add("pk-off");
+    if (i === wrapAt) encIdx.forEach(k => segs[k].classList.remove("enc"));
+  }
+  lit(layers.length - 1);
+  say("<b>Xong:</b> " + kEsc(sc.to) + " nhận được " + kEsc(layers[layers.length - 1][1]) + " nguyên vẹn.");
+  await sleep(RM ? 100 : 1600);
+  segs.forEach((s, i) => { s.classList.remove("pk-off", "pk-flash"); s.classList.toggle("enc", eaves && !!layers[i][5]); });
+  rows.forEach(r => r.classList.remove("pk-dim", "hl"));
+  pkBusy = false; if (btn) btn.disabled = false;
+}
+function pkStageHTML(sc, layers) {
+  const tot = layers.reduce((a, l) => a + Math.max(l[2], 12), 0);
+  let x = -50, rects = "";
+  layers.forEach(l => { const w = Math.max(l[2], 12) / tot * 100; rects += '<rect x="' + x.toFixed(1) + '" y="40" width="' + w.toFixed(1) + '" height="22" class="pk-mv pk-' + l[0] + (wireEye === 0 && l[5] ? " enc" : "") + '"/>'; x += w; });
+  return '<div class="stage sm" id="pkStage"><svg viewBox="0 0 760 120">' +
+    '<line x1="140" y1="51" x2="620" y2="51" class="sv-wire"/>' +
+    '<rect x="10" y="26" width="130" height="50" rx="8" class="sv-node"/><text x="75" y="56" text-anchor="middle" class="sv-t">' + kEsc(sc.from) + "</text>" +
+    '<rect x="620" y="26" width="130" height="50" rx="8" class="sv-node"/><text x="685" y="56" text-anchor="middle" class="sv-t">' + kEsc(sc.to) + "</text>" +
+    '<g id="pkEye" class="pk-eye"><circle cx="380" cy="96" r="14"/><path d="M369 96 q11 -9 22 0 q-11 9 -22 0z"/><circle cx="380" cy="96" r="3"/><text x="402" y="100" class="sv-s">tcpdump trên dây</text></g>' +
+    '<g id="pkMove" opacity="0">' + rects + "</g></svg></div>" +
+    '<div class="controls"><button class="btn primary" type="button" id="pkPlay">▶ Đóng gói → gửi → mở gói</button><span class="hint" id="pkCap" aria-live="polite">Bấm để xem gói được bọc, đi trên dây và được mở ra.</span></div>';
+}
+
+/* ---------- hành trình một Secret ---------- */
+const SJ_ST = [["kubectl → apiserver", 1], ["apiserver (RAM)", 0], ["apiserver → etcd", 1], ["Đĩa etcd, snapshot", 0], ["apiserver → kubelet", 1], ["Node (tmpfs)", 0], ["Container", 0]];
+let sjOn = false, sjEnc = false;
+function sjHTML() {
+  let s = '<div class="stage sm" id="sjStage"><svg viewBox="0 0 1000 150">';
+  SJ_ST.forEach((st, i) => {
+    const x = 70 + i * 143;
+    if (i) s += '<line x1="' + (x - 143 + 22) + '" y1="70" x2="' + (x - 22) + '" y2="70" class="sv-wire"/>';
+    s += '<g class="sj-n" id="sjN' + i + '"><circle cx="' + x + '" cy="70" r="20" class="' + (st[1] ? "sv-data" : "sv-box") + '"/><text x="' + x + '" y="75" text-anchor="middle" class="sv-tb">' + (i + 1) + '</text><text x="' + x + '" y="120" text-anchor="middle" class="sv-s">' + kEsc(st[0]) + "</text></g>";
+  });
+  s += '<g id="sjTok" transform="translate(70 30)"><rect x="-46" y="-13" width="92" height="24" rx="6"/><text y="4" text-anchor="middle"></text></g></svg></div>' +
+    '<div class="controls"><button class="btn primary" type="button" id="sjPlay">▶ Theo dấu Secret</button><label class="check"><input type="checkbox" id="sjEnc"' + (sjEnc ? " checked" : "") + '> Đã bật EncryptionConfiguration</label><span class="hint" id="sjCap" aria-live="polite">Vòng tím: chặng truyền qua mạng có TLS. Thẻ đỏ: Secret ở dạng đọc được.</span></div>';
+  return s;
+}
+function sjTok(i) {
+  const st = SJ_ST[i], tok = $("#sjTok"); if (!tok) return;
+  const readable = !(st[1] || (i === 3 && sjEnc));
+  tok.setAttribute("class", readable ? "sj-plain" : "sj-enc");
+  tok.querySelector("text").textContent = readable ? "S3cr3t!" : (i === 3 ? "k8s:enc:…" : "▒▒ TLS ▒▒");
+  $$(".sj-n").forEach((n, k) => n.classList.toggle("on", k === i));
+  $$("#wireJourney tbody tr").forEach((r, k) => r.classList.toggle("hlrow", k === i));
+  const c = $("#sjCap"); if (c) c.textContent = (i + 1) + ". " + st[0] + ": " + (readable ? "đọc được nếu vào được chặng này" : i === 3 ? "đã mã hóa bằng aescbc, chỉ thấy tiền tố k8s:enc:aescbc:v1:key1:" : "được TLS che trên đường đi");
+}
+async function sjPlay() {
+  if (sjOn) return; sjOn = true;
+  const tok = $("#sjTok");
+  for (let i = 0; i < SJ_ST.length; i++) {
+    if (!tok || !tok.isConnected) break;
+    const x0 = 70 + Math.max(0, i - 1) * 143, x1 = 70 + i * 143, t0 = performance.now();
+    if (i && !RM) await new Promise(res => { const f = t => { const p = Math.min(1, (t - t0) / 650); tok.setAttribute("transform", "translate(" + (x0 + (x1 - x0) * ease(p)) + " 30)"); if (p < 1 && tok.isConnected) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+    tok.setAttribute("transform", "translate(" + x1 + " 30)");
+    sjTok(i); await sleep(1300);
+  }
+  sjOn = false;
+}
+
+/* ---------- Giao tiếp & mã hóa: sự cố, cách khắc phục và quan sát (observability) ---------- */
+/* c: id kết nối trong WIRE_CONNS · m: thông báo lỗi thật · s: triệu chứng · why: nguyên nhân · chk: lệnh kiểm tra · fix: cách sửa */
+const WIRE_ERRS = [
+  { c: "kubectl", m: "The connection to the server 10.0.0.10:6443 was refused - did you specify the right host or port?", s: "Mọi lệnh kubectl đều lỗi ngay lập tức.", why: "Không có tiến trình nào nghe ở 6443: kube-apiserver chết hoặc restart liên tục, thường do ai đó sửa sai /etc/kubernetes/manifests/kube-apiserver.yaml.",
+    chk: "ssh cp-1\nsudo crictl ps -a | grep kube-apiserver\nsudo crictl logs $(sudo crictl ps -a --name kube-apiserver -q | head -1) 2>&1 | tail -20\nsudo journalctl -u kubelet --since '10 min ago' | grep -i apiserver | tail", fix: "Đọc dòng lỗi cuối trong log (sai tên cờ, sai đường dẫn cert, YAML hỏng), sửa manifest. kubelet tự tạo lại static Pod sau khi file đổi.\nKhông có container nào: kiểm tra kubelet có chạy (systemctl status kubelet) và manifest có parse được không." },
+  { c: "kubectl", m: "Unable to connect to the server: dial tcp 10.0.0.10:6443: i/o timeout", s: "kubectl treo khoảng 30 giây rồi báo lỗi.", why: "Gói không tới được hoặc không có trả lời: sai IP trong kubeconfig, firewall, load balancer trước apiserver không có backend khỏe.",
+    chk: "kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}'\nnc -vz 10.0.0.10 6443\ncurl -k https://10.0.0.10:6443/livez", fix: "Sửa server trong kubeconfig, mở TCP 6443, hoặc sửa health check của load balancer (nên kiểm /readyz)." },
+  { c: "kubectl", m: "Unable to connect to the server: tls: failed to verify certificate: x509: certificate signed by unknown authority", s: "Kết nối được nhưng kubectl từ chối tin server.", why: "certificate-authority-data trong kubeconfig không phải CA đã ký apiserver.crt (kubeconfig của cluster khác, hoặc cluster dựng lại với CA mới).",
+    chk: "kubectl config view --raw --minify -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d | openssl x509 -noout -subject -fingerprint\nsudo openssl x509 -in /etc/kubernetes/pki/ca.crt -noout -subject -fingerprint", fix: "Lấy lại kubeconfig đúng: sudo cp /etc/kubernetes/admin.conf ~/.kube/config. Đừng dùng --insecure-skip-tls-verify để chữa cháy." },
+  { c: "kubectl", m: "tls: failed to verify certificate: x509: certificate is valid for 10.96.0.1, 10.0.0.10, not 10.0.0.100", s: "Gọi qua IP hoặc tên mới (load balancer, VIP) thì lỗi, gọi IP cũ thì được.", why: "Tên/IP đang gọi không có trong SAN của apiserver.crt.",
+    chk: "sudo openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -ext subjectAltName", fix: "Thêm vào apiServer.certSANs trong ClusterConfiguration, xóa apiserver.crt/key, chạy kubeadm init phase certs apiserver --config kc.yaml, khởi động lại kube-apiserver (xem tab Chứng chỉ kubeadm)." },
+  { c: "kubectl", m: "x509: certificate has expired or is not yet valid: current time 2027-03-02T08:00:00Z is after 2027-03-01T07:12:44Z", s: "Cluster chạy đúng 1 năm thì kubectl và cả control plane cùng lỗi.", why: "Cert lá do kubeadm tạo có hạn 1 năm. \"not yet valid\" thì là đồng hồ máy lệch.",
+    chk: "sudo kubeadm certs check-expiration\ndate -u; timedatectl", fix: "sudo kubeadm certs renew all\nKhởi động lại apiserver, controller-manager, scheduler, etcd (static Pod không tự nạp cert mới)\nsudo cp /etc/kubernetes/admin.conf ~/.kube/config\nĐồng hồ lệch: bật chrony/NTP." },
+  { c: "kubectl", m: "error: You must be logged in to the server (Unauthorized)", s: "Kết nối TLS được nhưng mọi lệnh trả 401.", why: "Xác thực thất bại: client cert hết hạn hoặc không do CA của cluster ký, token sai hoặc hết hạn, OIDC token cũ.",
+    chk: "kubectl config view --raw --minify -o jsonpath='{.users[0].user.client-certificate-data}' | base64 -d | openssl x509 -noout -subject -issuer -enddate\nkubectl auth whoami", fix: "Cấp lại cert (CSR, Lab 24) hoặc lấy token mới. Phân biệt với 403: 401 là chưa biết bạn là ai." },
+  { c: "kubectl", m: "Error from server (Forbidden): pods is forbidden: User \"jane\" cannot list resource \"pods\" in API group \"\" in the namespace \"dev\"", s: "Lệnh trả 403 kèm đúng tên user và quyền bị thiếu.", why: "Xác thực đã xong; RBAC không có Role/RoleBinding cho verb và resource đó.",
+    chk: "kubectl auth can-i list pods -n dev --as jane\nkubectl get rolebinding,clusterrolebinding -A -o wide | grep jane", fix: "kubectl create role pod-reader -n dev --verb=get,list,watch --resource=pods\nkubectl create rolebinding jane-read -n dev --role=pod-reader --user=jane" },
+  { c: "kubectl", m: "Error from server (TooManyRequests): the server has received too many requests and has asked us to try again later", s: "Lệnh lúc được lúc không, controller chậm hẳn khi tải cao.", why: "API Priority and Fairness (APF) từ chối request vì hàng đợi của flow schema đầy; thường do một client gọi list/watch dồn dập.",
+    chk: "kubectl get --raw /metrics | grep apiserver_flowcontrol_rejected_requests_total\nkubectl get flowschemas,prioritylevelconfigurations", fix: "Tìm client gây tải (audit log, user-agent), giảm tần suất hoặc dùng informer thay cho list liên tục; điều chỉnh PriorityLevelConfiguration nếu cần." },
+
+  { c: "etcd", m: "Error: context deadline exceeded", s: "etcdctl treo vài giây rồi báo lỗi, dù etcd đang chạy.", why: "etcdctl thiếu hoặc sai --cacert/--cert/--key (dùng nhầm CA của cluster thay vì etcd CA), hoặc sai endpoint.",
+    chk: "sudo grep -E 'listen-client|cert-file|trusted-ca' /etc/kubernetes/manifests/etcd.yaml", fix: "sudo etcdctl --endpoints=https://127.0.0.1:2379 --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt --key=/etc/kubernetes/pki/etcd/server.key endpoint health" },
+  { c: "etcd", m: "\"Unable to connect to the server\" … grpc: addrConn.createTransport failed to connect to {Addr: \"127.0.0.1:2379\"} … connect: connection refused", s: "Trong log kube-apiserver; apiserver restart liên tục, kubectl báo connection refused.", why: "etcd không chạy hoặc không nghe ở địa chỉ apiserver dùng: manifest etcd hỏng, data-dir sai sau khi restore, đĩa đầy.",
+    chk: "sudo crictl ps -a | grep etcd\nsudo crictl logs $(sudo crictl ps -a --name etcd -q | head -1) 2>&1 | tail\ndf -h /var/lib/etcd", fix: "Sửa etcd.yaml (đường dẫn hostPath của data-dir phải khớp --data-dir sau khi restore), giải phóng đĩa." },
+  { c: "etcd", m: "etcdserver: mvcc: database space exceeded", s: "Mọi lệnh ghi đều lỗi, đọc vẫn được.", why: "Database etcd vượt --quota-backend-bytes (mặc định 2 GiB), etcd bật alarm NOSPACE và chỉ cho đọc.",
+    chk: "etcdctl … endpoint status -w table\netcdctl … alarm list", fix: "rev=$(etcdctl … endpoint status -w json | jq '.[0].Status.header.revision')\netcdctl … compact $rev\netcdctl … defrag\netcdctl … alarm disarm\nSau đó tìm nguồn ghi nhiều (Event, CRD) và cân nhắc tăng quota." },
+  { c: "etcd", m: "etcdserver: request timed out / etcdserver: leader changed", s: "apiserver chậm, lệnh ghi thỉnh thoảng lỗi.", why: "etcd không kịp fsync WAL (đĩa chậm, đĩa dùng chung với tải khác) hoặc mạng giữa member chập chờn, leader bị bầu lại liên tục.",
+    chk: "kubectl get --raw /metrics | grep etcd_request_duration_seconds_count | head -3\ncurl -s http://127.0.0.1:2381/metrics | grep -E 'wal_fsync_duration_seconds_(sum|count)|leader_changes_seen_total'", fix: "Đưa etcd lên SSD/NVMe riêng, p99 wal_fsync dưới 10ms; giảm tải ghi; kiểm tra độ trễ mạng giữa control plane." },
+
+  { c: "raft", m: "rejected connection on peer endpoint … tls: failed to verify certificate: x509: certificate is valid for 10.0.0.11, not 10.0.0.12", s: "Member mới không vào được cluster etcd, log báo lỗi TLS ở cổng 2380.", why: "peer.crt của member không có IP mà member khác dùng để gọi.",
+    chk: "sudo openssl x509 -in /etc/kubernetes/pki/etcd/peer.crt -noout -ext subjectAltName", fix: "Tạo lại cert peer cho đúng IP: sudo kubeadm init phase certs etcd-peer (sau khi xóa peer.crt/key cũ), khởi động lại etcd." },
+  { c: "raft", m: "etcdserver: no leader / etcdserver: unhealthy cluster", s: "Mất quyền ghi toàn cluster, apiserver trả lỗi 500.", why: "Mất đa số member (ví dụ 2/3 control plane tắt): Raft không bầu được leader.",
+    chk: "etcdctl … endpoint status --cluster -w table\netcdctl … member list -w table", fix: "Đưa member về lại. Mất vĩnh viễn đa số: khôi phục từ snapshot thành cluster mới (etcdutl snapshot restore) rồi thêm lại member." },
+
+  { c: "ctrl", m: "Deployment tạo xong nhưng không có ReplicaSet, không có Pod", s: "kubectl get rs trống, Events không có gì.", why: "kube-controller-manager không chạy hoặc không tới được apiserver (cert trong controller-manager.conf hết hạn, manifest sai).",
+    chk: "kubectl -n kube-system get pod -l component=kube-controller-manager\nkubectl -n kube-system logs -l component=kube-controller-manager --tail=20\nkubectl -n kube-system get lease kube-controller-manager", fix: "Sửa manifest /etc/kubernetes/manifests/kube-controller-manager.yaml hoặc gia hạn cert, chờ Pod Running." },
+  { c: "ctrl", m: "Pod đứng Pending, không có event FailedScheduling", s: "kubectl describe pod không có dòng Scheduled nào; spec.nodeName trống.", why: "kube-scheduler không chạy hoặc Pod chỉ định schedulerName của scheduler không tồn tại.",
+    chk: "kubectl -n kube-system get pod -l component=kube-scheduler\nkubectl get pod web -o jsonpath='{.spec.schedulerName}'", fix: "Sửa manifest kube-scheduler, hoặc sửa schedulerName. Nếu có event FailedScheduling thì scheduler vẫn chạy: đọc lý do (tài nguyên, taint, affinity)." },
+  { c: "ctrl", m: "leaderelection lost / failed to renew lease kube-system/kube-scheduler: timed out waiting for the condition", s: "controller-manager hoặc scheduler tự thoát và restart.", why: "Không gia hạn được Lease kịp: apiserver hoặc etcd quá chậm.",
+    chk: "kubectl -n kube-system logs -l component=kube-scheduler --previous | tail", fix: "Xử lý độ trễ của apiserver/etcd (xem các lỗi etcd ở trên)." },
+
+  { c: "kubelet", m: "Node NotReady: Kubelet stopped posting node status", s: "kubectl get nodes báo NotReady; sau vài phút Pod trên node bị đuổi.", why: "kubelet chết, không tới được apiserver, hoặc không gia hạn được Lease trong kube-node-lease.",
+    chk: "ssh node01\nsudo systemctl status kubelet\nsudo journalctl -u kubelet -n 50 --no-pager\nkubectl get lease -n kube-node-lease node01 -o jsonpath='{.spec.renewTime}'", fix: "sudo systemctl enable --now kubelet. Đọc dòng lỗi đầu tiên trong journal: cấu hình, swap, cert, CRI." },
+  { c: "kubelet", m: "part of the existing bootstrap client certificate in /etc/kubernetes/kubelet.conf is expired", s: "kubelet không khởi động, node NotReady.", why: "Cert client của kubelet hết hạn mà không xoay vòng được (node tắt quá lâu, tắt rotateCertificates).",
+    chk: "sudo openssl x509 -in /var/lib/kubelet/pki/kubelet-client-current.pem -noout -enddate", fix: "Trên control plane: kubeadm kubeconfig user --org system:nodes --client-name system:node:node01 > kubelet.conf\nChép vào node01 thay /etc/kubernetes/kubelet.conf, xóa /var/lib/kubelet/pki/kubelet-client*, restart kubelet. Khi có kubelet-client-current.pem mới, trỏ kubelet.conf về file đó." },
+  { c: "kubelet", m: "failed to run Kubelet: running with swap on is not supported, please disable swap", s: "kubelet thoát ngay sau khi start.", why: "Node bật swap trong khi kubelet có failSwapOn: true (mặc định).",
+    chk: "swapon --show", fix: "sudo swapoff -a và bỏ dòng swap trong /etc/fstab (hoặc cấu hình hỗ trợ swap của kubelet nếu cố ý dùng)." },
+
+  { c: "exec", m: "Error from server: error dialing backend: dial tcp 10.0.0.21:10250: i/o timeout", s: "get pods chạy, nhưng logs, exec, port-forward, top đều lỗi.", why: "apiserver không tới được kubelet :10250 (firewall, IP node trong Node.status sai, kubelet chết).",
+    chk: "kubectl get node node01 -o jsonpath='{.status.addresses}'\nnc -vz 10.0.0.21 10250   # chạy trên control plane", fix: "Mở TCP 10250 từ control plane tới node; sửa --node-ip của kubelet nếu node có nhiều card mạng." },
+  { c: "exec", m: "error: unable to upgrade connection: Forbidden (user=kube-apiserver-kubelet-client, verb=create, resource=nodes, subresource=proxy)", s: "exec và port-forward bị từ chối, logs có thể vẫn được.", why: "kubelet hỏi apiserver (SubjectAccessReview) và user của apiserver thiếu quyền nodes/proxy.",
+    chk: "kubectl auth can-i create nodes/proxy --as kube-apiserver-kubelet-client", fix: "Khôi phục ClusterRoleBinding cho user này tới ClusterRole system:kubelet-api-admin." },
+  { c: "exec", m: "Failed to scrape node … x509: cannot validate certificate for 10.0.0.21 because it doesn't contain any IP SANs", s: "kubectl top báo Metrics API not available; log metrics-server có dòng này.", why: "metrics-server kiểm cert server của kubelet, mà cert đó tự ký và không có IP SAN.",
+    chk: "kubectl -n kube-system logs deploy/metrics-server | tail", fix: "Lab: thêm --kubelet-insecure-tls cho metrics-server.\nProduction: serverTLSBootstrap: true trong cấu hình kubelet, rồi kubectl certificate approve các CSR kubelet-serving." },
+
+  { c: "cri", m: "validate CRI v1 runtime API for endpoint \"unix:///run/containerd/containerd.sock\": rpc error: code = Unimplemented desc = unknown service runtime.v1.RuntimeService", s: "kubelet không chạy được, kubeadm preflight cũng báo lỗi.", why: "Plugin CRI của containerd bị tắt (gói containerd của Docker để disabled_plugins = [\"cri\"]).",
+    chk: "grep disabled_plugins /etc/containerd/config.toml", fix: "containerd config default | sudo tee /etc/containerd/config.toml\nĐặt SystemdCgroup = true, rồi sudo systemctl restart containerd kubelet" },
+  { c: "cri", m: "connect: no such file or directory (unix:///run/containerd/containerd.sock)", s: "crictl và kubelet đều không nói chuyện được với runtime.", why: "containerd không chạy hoặc kubelet trỏ sai socket.",
+    chk: "sudo systemctl status containerd\ngrep containerRuntimeEndpoint /var/lib/kubelet/config.yaml\ncat /etc/crictl.yaml", fix: "sudo systemctl enable --now containerd; sửa containerRuntimeEndpoint cho đúng." },
+
+  { c: "cni", m: "container runtime network not ready: NetworkReady=false reason:NetworkPluginNotReady message:Network plugin returns error: cni plugin not initialized", s: "Node NotReady ngay sau khi kubeadm init/join; CoreDNS Pending.", why: "Chưa cài CNI, hoặc /etc/cni/net.d trống vì Pod của CNI trên node đó chưa chạy.",
+    chk: "ls /etc/cni/net.d /opt/cni/bin\nkubectl -n calico-system get pod -o wide   # hoặc kube-system với Flannel/Cilium", fix: "Cài CNI (Lab 40); nếu đã cài, xem vì sao Pod CNI trên node đó lỗi." },
+  { c: "cni", m: "Failed to create pod sandbox: … failed to setup network for sandbox \"…\": plugin type=\"calico\" failed (add): …", s: "Pod đứng ContainerCreating, Event FailedCreatePodSandBox.", why: "CNI plugin chạy nhưng lỗi: không tới được apiserver/datastore, hết IP trong IPAM, cấu hình sai.",
+    chk: "kubectl describe pod web | tail\nsudo journalctl -u containerd | grep -i cni | tail", fix: "Sửa theo dòng sau \"failed (add)\": ví dụ \"no IP addresses available in range set\" là hết IP trong podCIDR của node." },
+
+  { c: "reg", m: "Failed to pull image \"nginx:1.277\": … not found", s: "ErrImagePull rồi ImagePullBackOff.", why: "Sai tên hoặc tag image.", chk: "kubectl describe pod web | grep -A3 Failed\nsudo crictl pull nginx:1.277", fix: "kubectl set image deploy/web nginx=nginx:1.27" },
+  { c: "reg", m: "pull access denied, repository does not exist or may require authorization: … 401 Unauthorized", s: "ImagePullBackOff với registry private.", why: "Thiếu imagePullSecrets, Secret ở namespace khác, hoặc thông tin đăng nhập sai.",
+    chk: "kubectl get pod web -o jsonpath='{.spec.imagePullSecrets}'\nkubectl get secret regcred -n <ns-của-pod>", fix: "kubectl create secret docker-registry regcred --docker-server=… --docker-username=… --docker-password=… -n <ns>\nThêm imagePullSecrets vào Pod hoặc vào ServiceAccount." },
+  { c: "reg", m: "failed to do request: … x509: certificate signed by unknown authority", s: "Kéo image từ registry nội bộ lỗi TLS.", why: "containerd không tin CA của registry.",
+    chk: "ls /etc/containerd/certs.d/", fix: "/etc/containerd/certs.d/registry.local:5000/hosts.toml với ca = \"/etc/containerd/certs.d/registry.local:5000/ca.crt\" (kiểm config_path trong config.toml trỏ tới certs.d)." },
+  { c: "reg", m: "toomanyrequests: You have reached your pull rate limit", s: "Docker Hub từ chối khi nhiều node kéo cùng lúc.", why: "Giới hạn lượt kéo ẩn danh theo IP.", chk: "kubectl get events -A | grep -i toomanyrequests", fix: "Dùng mirror/registry cache nội bộ, đăng nhập Docker Hub qua imagePullSecrets, hoặc dùng registry khác." },
+
+  { c: "sa", m: "pods is forbidden: User \"system:serviceaccount:default:default\" cannot list resource \"pods\" in API group \"\" in the namespace \"default\"", s: "Ứng dụng gọi API nhận 403.", why: "Token hợp lệ nhưng ServiceAccount chưa được cấp quyền.",
+    chk: "kubectl auth can-i list pods --as=system:serviceaccount:default:default", fix: "Tạo ServiceAccount riêng, Role tối thiểu, RoleBinding; đặt serviceAccountName trong Pod (Lab 23)." },
+  { c: "sa", m: "Unauthorized (401) từ trong Pod sau một thời gian chạy", s: "Ứng dụng chạy được vài giờ hoặc vài ngày rồi bị 401.", why: "Ứng dụng đọc file token một lần lúc khởi động; kubelet đã đổi token mới, token cũ hết hạn.",
+    chk: "kubectl get --raw /metrics | grep serviceaccount_stale_tokens_total", fix: "Dùng client-go hoặc thư viện chính thức mới (tự đọc lại file token), hoặc tự đọc lại file định kỳ." },
+
+  { c: "dns", m: ";; connection timed out; no servers could be reached", s: "nslookup trong Pod treo; gọi bằng IP thì được.", why: "Không tới được CoreDNS: CoreDNS chết, kube-proxy hỏng, hoặc NetworkPolicy egress chưa mở UDP/TCP 53.",
+    chk: "kubectl -n kube-system get pod -l k8s-app=kube-dns -o wide\nkubectl -n kube-system get endpointslices -l kubernetes.io/service-name=kube-dns\nkubectl get networkpolicy -n <ns>", fix: "Sửa CoreDNS; thêm egress tới namespace kube-system, label k8s-app: kube-dns, cổng 53 UDP và TCP." },
+  { c: "dns", m: "** server can't find web.default.svc.cluster.local: NXDOMAIN", s: "DNS trả lời nhưng không có tên đó.", why: "Service không tồn tại, sai namespace, hoặc gọi tên ngắn từ namespace khác.",
+    chk: "kubectl get svc -A | grep web", fix: "Gọi đúng web.<namespace> hoặc FQDN web.<namespace>.svc.cluster.local." },
+  { c: "dns", m: "[FATAL] plugin/loop: Loop (127.0.0.1:55953 -> :53) detected for zone \".\"", s: "CoreDNS CrashLoopBackOff.", why: "Node dùng systemd-resolved: /etc/resolv.conf của node trỏ 127.0.0.53, CoreDNS forward về chính nó.",
+    chk: "cat /etc/resolv.conf   # trên node\ngrep resolvConf /var/lib/kubelet/config.yaml", fix: "resolvConf: /run/systemd/resolve/resolv.conf trong cấu hình kubelet, restart kubelet, xóa Pod CoreDNS." },
+
+  { c: "pod", m: "Pod cùng node gọi nhau được, khác node thì timeout", s: "Chỉ lưu lượng qua node khác bị mất.", why: "Firewall chặn đường overlay hoặc BGP giữa các node: UDP 4789 (Calico VXLAN), UDP 8472 (Flannel, Cilium), IP protocol 4 (IPIP), TCP 179 (BGP).",
+    chk: "sudo tcpdump -ni eth0 udp port 4789 or udp port 8472 or ip proto 4\nkubectl -n calico-system get pod -o wide", fix: "Mở cổng/giao thức tương ứng giữa các node (security group trên cloud)." },
+  { c: "pod", m: "calico/node is not ready: BIRD is not ready: BGP not established with 10.0.0.12", s: "Pod calico-node 0/1 Ready.", why: "Phiên BGP giữa hai node không lên: TCP 179 bị chặn hoặc Calico tự chọn sai địa chỉ IP của node.",
+    chk: "kubectl -n calico-system logs ds/calico-node -c calico-node | grep -i bgp | tail", fix: "Mở TCP 179; đặt nodeAddressAutodetectionV4 (ví dụ interface: eth1) trong Installation." },
+  { c: "pod", m: "Request nhỏ chạy, response lớn (hoặc TLS handshake) treo", s: "curl tải trang nhỏ được, file lớn đứng im.", why: "MTU của Pod lớn hơn đường đi thật trừ phần bọc overlay: gói lớn bị rớt.",
+    chk: "kubectl exec web -- cat /sys/class/net/eth0/mtu\nip link show   # trên node", fix: "Đặt MTU của CNI = MTU mạng node − overhead (VXLAN 50, IPIP 20, WireGuard 60)." },
+  { c: "pod", m: "Kết nối timeout sau khi áp NetworkPolicy", s: "Timeout (gói bị bỏ), không phải refused.", why: "Policy default-deny chặn, hoặc selector của policy cho phép không khớp label.",
+    chk: "kubectl get netpol -n <ns> -o yaml\nkubectl get pod --show-labels -n <ns>", fix: "Thêm rule ingress/egress đúng podSelector, namespaceSelector và cổng (Lab 17)." },
+
+  { c: "svc", m: "curl: (7) Failed to connect to web port 80 after 0 ms: Connection refused", s: "Gọi Service bị từ chối ngay.", why: "Service không có endpoint (selector không khớp label Pod, Pod chưa Ready), nên kube-proxy cài rule REJECT.",
+    chk: "kubectl get endpointslices -l kubernetes.io/service-name=web\nkubectl get svc web -o jsonpath='{.spec.selector}'; kubectl get pod --show-labels", fix: "Sửa selector hoặc label; kiểm readinessProbe nếu Pod chạy mà không Ready." },
+  { c: "svc", m: "Service có endpoint nhưng curl ClusterIP timeout", s: "Gọi thẳng IP Pod được, qua ClusterIP thì không.", why: "kube-proxy không chạy hoặc không cài được rule trên node đó; sai targetPort thì thường là refused.",
+    chk: "kubectl -n kube-system get pod -l k8s-app=kube-proxy -o wide\nkubectl -n kube-system logs ds/kube-proxy | tail\nsudo iptables -t nat -L KUBE-SERVICES -n | grep <ClusterIP>", fix: "Sửa ConfigMap kube-proxy (mode, clusterCIDR), restart DaemonSet." },
+
+  { c: "hook", m: "Internal error occurred: failed calling webhook \"webhook.cert-manager.io\": failed to call webhook: Post \"https://cert-manager-webhook.cert-manager.svc:443/validate?timeout=10s\": dial tcp 10.96.42.7:443: connect: connection refused", s: "Tạo hoặc sửa object bị chặn hết, kể cả object không liên quan trực tiếp.", why: "Pod webhook chưa chạy hoặc không có endpoint, mà failurePolicy là Fail.",
+    chk: "kubectl get validatingwebhookconfigurations,mutatingwebhookconfigurations\nkubectl -n cert-manager get pod,endpointslices", fix: "Đưa Pod webhook chạy lại. Khẩn cấp: tạm đổi failurePolicy sang Ignore hoặc xóa webhook configuration (nhớ khôi phục)." },
+  { c: "hook", m: "failed calling webhook … x509: certificate signed by unknown authority", s: "Webhook chạy nhưng apiserver không tin nó.", why: "caBundle trong webhook configuration không khớp CA đã ký cert của webhook (cert xoay vòng mà caBundle không cập nhật).",
+    chk: "kubectl get validatingwebhookconfiguration <tên> -o jsonpath='{.webhooks[0].clientConfig.caBundle}' | base64 -d | openssl x509 -noout -subject -enddate", fix: "Cập nhật caBundle (cert-manager cainjector làm tự động qua annotation cert-manager.io/inject-ca-from)." },
+  { c: "hook", m: "error: Metrics API not available", s: "kubectl top lỗi; HPA báo unable to get metrics.", why: "APIService v1beta1.metrics.k8s.io không Available.",
+    chk: "kubectl get apiservice v1beta1.metrics.k8s.io\nkubectl -n kube-system logs deploy/metrics-server | tail", fix: "Sửa metrics-server (thường do cert kubelet, xem lỗi kết nối ⑥)." },
+  { c: "hook", m: "Namespace đứng Terminating mãi", s: "kubectl delete ns treo; status có điều kiện NamespaceDeletionDiscoveryFailure.", why: "Một APIService không Available nên namespace controller không liệt kê hết được tài nguyên để xóa.",
+    chk: "kubectl get ns <ns> -o jsonpath='{.status.conditions}'\nkubectl get apiservice | grep False", fix: "Sửa hoặc xóa APIService hỏng; namespace sẽ tự xóa xong." },
+
+  { c: "edge", m: "404 Not Found từ Gateway/Ingress controller", s: "Trả lời đến từ controller, không từ ứng dụng.", why: "Không route nào khớp host/path, hoặc HTTPRoute chưa được Gateway nhận.",
+    chk: "kubectl get httproute web -o jsonpath='{.status.parents[*].conditions}'\nkubectl describe ingress web", fix: "Sửa hostnames/path; kiểm parentRefs, allowedRoutes của listener; Ingress phải có ingressClassName đúng." },
+  { c: "edge", m: "503 Service Unavailable / no healthy upstream", s: "Route khớp nhưng backend không có Pod.", why: "Service backend không có endpoint, hoặc backendRef sai tên/cổng, hoặc thiếu ReferenceGrant khi khác namespace.",
+    chk: "kubectl get endpointslices -l kubernetes.io/service-name=<svc>\nkubectl get httproute web -o yaml | grep -A5 ResolvedRefs", fix: "Sửa backendRef, thêm ReferenceGrant, kiểm readiness của Pod." },
+  { c: "edge", m: "Trình duyệt báo chứng chỉ sai: \"Kubernetes Ingress Controller Fake Certificate\"", s: "HTTPS chạy nhưng cert mặc định của controller.", why: "Secret TLS không tồn tại, sai namespace, sai kiểu, hoặc host không khớp phần tls.hosts.",
+    chk: "kubectl get secret shop-tls -o jsonpath='{.type}'\nopenssl s_client -connect shop.lab:443 -servername shop.lab </dev/null | openssl x509 -noout -subject", fix: "Tạo Secret kubernetes.io/tls cùng namespace với Ingress (hoặc Gateway + ReferenceGrant); khớp hosts." }
+];
+
+const WIRE_LADDER = [
+  ["DNS", "Tên có ra IP không?", "nslookup web.dev / dig", "NXDOMAIN, timed out"],
+  ["Định tuyến + TCP", "Mở được kết nối tới IP:cổng không?", "nc -vz IP PORT / curl -v", "refused (không ai nghe, không endpoint), timeout (bị chặn, mất gói)"],
+  ["TLS", "Bắt tay xong không, cert có hợp lệ?", "openssl s_client -connect IP:PORT -servername TÊN", "unknown authority, not valid for, expired"],
+  ["Xác thực", "Server có biết bạn là ai không?", "kubectl auth whoami", "401 Unauthorized"],
+  ["Phân quyền", "Bạn có được làm việc đó không?", "kubectl auth can-i VERB RESOURCE --as …", "403 Forbidden"],
+  ["Admission", "Có webhook hay chính sách nào chặn không?", "kubectl apply --dry-run=server", "admission webhook denied, failed calling webhook, violates PodSecurity"],
+  ["Ứng dụng", "Ứng dụng có trả lời đúng không?", "kubectl logs, curl -v tới IP Pod", "5xx, lỗi trong log"]
+];
+
+const WIRE_OBS_COMP = [
+  ["kube-apiserver", "https://:6443/metrics, /livez, /readyz?verbose", "crictl logs, /var/log/pods/kube-system_kube-apiserver-*", "apiserver_request_total{code}, apiserver_request_duration_seconds, apiserver_flowcontrol_rejected_requests_total, apiserver_admission_webhook_admission_duration_seconds, apiserver_client_certificate_expiration_seconds"],
+  ["etcd", "http://127.0.0.1:2381/metrics, /health", "crictl logs (Pod etcd)", "etcd_server_has_leader, etcd_server_leader_changes_seen_total, etcd_disk_wal_fsync_duration_seconds, etcd_disk_backend_commit_duration_seconds, etcd_mvcc_db_total_size_in_bytes, etcd_network_peer_round_trip_time_seconds"],
+  ["controller-manager", "https://127.0.0.1:10257/metrics, /healthz", "crictl logs", "workqueue_depth{name}, workqueue_retries_total, leader_election_master_status"],
+  ["scheduler", "https://127.0.0.1:10259/metrics, /healthz", "crictl logs", "scheduler_pending_pods{queue}, scheduler_schedule_attempts_total{result}, scheduler_scheduling_attempt_duration_seconds"],
+  ["kubelet", "https://:10250/metrics, /metrics/cadvisor, /metrics/resource, /metrics/probes; http://127.0.0.1:10248/healthz", "journalctl -u kubelet", "kubelet_running_pods, kubelet_pleg_relist_duration_seconds, kubelet_runtime_operations_errors_total, kubelet_certificate_manager_client_ttl_seconds, kubelet_volume_stats_available_bytes"],
+  ["containerd", "crictl info, crictl stats", "journalctl -u containerd", "(qua kubelet) kubelet_runtime_operations_duration_seconds{operation_type}"],
+  ["kube-proxy", "http://127.0.0.1:10249/metrics, :10256/healthz", "kubectl -n kube-system logs ds/kube-proxy", "kubeproxy_sync_proxy_rules_duration_seconds, kubeproxy_sync_proxy_rules_last_timestamp_seconds"],
+  ["CoreDNS", ":9153/metrics, :8080/health, :8181/ready", "kubectl -n kube-system logs -l k8s-app=kube-dns (bật plugin log để ghi từng query)", "coredns_dns_requests_total, coredns_dns_responses_total{rcode}, coredns_dns_request_duration_seconds, coredns_forward_requests_total"],
+  ["Mạng node", "node_exporter :9100", "dmesg, conntrack -S", "node_nf_conntrack_entries / node_nf_conntrack_entries_limit, node_network_receive_drop_total"]
+];
+
+const WIRE_ALERTS = [
+  ["Tỉ lệ lỗi 5xx của apiserver", "sum(rate(apiserver_request_total{code=~\"5..\"}[5m])) / sum(rate(apiserver_request_total[5m]))", "> 1–3%"],
+  ["Độ trễ p99 của apiserver (bỏ watch)", "histogram_quantile(0.99, sum by (le, verb) (rate(apiserver_request_duration_seconds_bucket{verb!~\"WATCH|CONNECT\"}[5m])))", "> 1s"],
+  ["etcd mất leader", "max(etcd_server_has_leader) == 0", "bất kỳ"],
+  ["etcd đổi leader liên tục", "increase(etcd_server_leader_changes_seen_total[1h])", "> 3"],
+  ["etcd fsync WAL chậm", "histogram_quantile(0.99, rate(etcd_disk_wal_fsync_duration_seconds_bucket[5m]))", "> 0.01 (10ms)"],
+  ["Cert client sắp hết hạn", "histogram_quantile(0.01, sum by (le) (rate(apiserver_client_certificate_expiration_seconds_bucket[5m])))", "< 7 ngày (604800)"],
+  ["Cert kubelet sắp hết hạn", "kubelet_certificate_manager_client_ttl_seconds", "< 604800"],
+  ["Webhook chậm", "histogram_quantile(0.99, sum by (le, name) (rate(apiserver_admission_webhook_admission_duration_seconds_bucket[5m])))", "> 1s"],
+  ["Pod không xếp lịch được", "sum(scheduler_pending_pods{queue=\"unschedulable\"})", "> 0 trong 15 phút"],
+  ["CoreDNS SERVFAIL", "sum(rate(coredns_dns_responses_total{rcode=\"SERVFAIL\"}[5m]))", "> 0 kéo dài"],
+  ["Bảng conntrack sắp đầy", "node_nf_conntrack_entries / node_nf_conntrack_entries_limit", "> 0.8"],
+  ["kube-proxy không đồng bộ rule", "time() - kubeproxy_sync_proxy_rules_last_timestamp_seconds", "> 300"]
+];
+
+let errConn = "all", errQ = "";
+function wireErrHTML() {
+  const conns = WIRE_CONNS.filter(c => WIRE_ERRS.some(e => e.c === c.id));
+  let h = '<div class="panel col"><h4>Chẩn đoán một kết nối theo tầng</h4><p class="small muted">Đi từ dưới lên, dừng ở tầng đầu tiên hỏng. Thông báo lỗi gần như luôn cho biết tầng nào: refused/timeout là mạng, x509 là TLS, 401 là xác thực, 403 là phân quyền.</p><ol class="ladder" id="wLadder">' +
+    WIRE_LADDER.map((r, i) => '<li id="wLad' + i + '"><span class="lv">' + (i + 1) + '</span><div><b>' + kEsc(r[0]) + '</b> · <span class="small">' + kEsc(r[1]) + '</span><br><code>' + kEsc(r[2]) + '</code><br><span class="small muted">Hỏng thì thấy: ' + kEsc(r[3]) + "</span></div></li>").join("") +
+    '</ol><div class="controls"><button class="btn" type="button" id="wLadPlay">▶ Đi qua từng tầng</button></div></div>';
+  h += '<div class="panel col"><h4>Thông báo lỗi → nguyên nhân → cách sửa</h4><div class="formrow"><input type="search" id="errQ" placeholder="Dán thông báo lỗi hoặc gõ từ khóa: x509, refused, 403, NotReady…" value="' + kEsc(errQ) + '" style="flex:1;min-width:220px" aria-label="Tìm lỗi"></div>' +
+    '<div class="chips" id="errChips"><button type="button" data-ec="all" aria-pressed="' + (errConn === "all") + '">Tất cả · ' + WIRE_ERRS.length + "</button>" + conns.map(c => '<button type="button" data-ec="' + c.id + '" aria-pressed="' + (errConn === c.id) + '">' + W_CIRC[c.n - 1] + " " + kEsc(c.t.split(" (")[0].replace("kube-apiserver", "apiserver")) + "</button>").join("") + '</div><div id="errList"></div></div>';
+  return h;
+}
+function wireErrList() {
+  const q = errQ.trim().toLowerCase();
+  const words = q.split(/\s+/).filter(w => w.length > 1);
+  const list = WIRE_ERRS.filter(e => (errConn === "all" || e.c === errConn) && (!words.length || words.every(w => (e.m + " " + e.s + " " + e.why + " " + e.fix).toLowerCase().includes(w)) || (q.length > 12 && (e.m.toLowerCase().includes(q) || q.includes(e.m.toLowerCase().slice(0, 30))))));
+  const box = $("#errList"); if (!box) return;
+  box.innerHTML = list.length ? list.map((e, i) => {
+    const c = WIRE_CONNS.find(x => x.id === e.c);
+    return '<details class="bp err"' + (list.length === 1 || (i === 0 && q) ? " open" : "") + '><summary><span class="pill cp">' + W_CIRC[c.n - 1] + '</span><code class="em">' + kEsc(e.m) + '</code></summary><div class="body">' +
+      '<div class="detail"><div class="kv"><div><div class="k">Triệu chứng</div>' + kEsc(e.s) + '</div><div><div class="k">Nguyên nhân</div>' + kEsc(e.why) + "</div></div></div>" +
+      '<div class="k" style="font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Kiểm tra</div>' + wCode(e.chk) +
+      '<div class="k" style="font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--node)">Khắc phục</div>' + wCode(e.fix) +
+      '<p class="small"><button type="button" class="linkbtn" data-conn="' + c.id + '">Xem kết nối ' + W_CIRC[c.n - 1] + " " + kEsc(c.t) + "</button></p></div></details>";
+  }).join("") : '<p class="muted">Không có lỗi khớp. Thử từ khóa ngắn hơn (x509, refused, timeout, 403).</p>';
+  wireCopy();
+}
+async function wireLadderPlay() {
+  const items = $$("#wLadder li"); items.forEach(li => li.classList.remove("ok", "cur"));
+  for (let i = 0; i < items.length; i++) { if (!items[i].isConnected) return; items[i].classList.add("cur"); await sleep(700); items[i].classList.remove("cur"); items[i].classList.add("ok"); }
+}
+
+function wireObsHTML() {
+  let h = '<div class="grid obs4">' + [
+    ["Metrics", "Số đo theo thời gian: tỉ lệ lỗi, độ trễ, hàng đợi. Mọi thành phần có /metrics dạng Prometheus. kubectl top dùng metrics-server (chỉ CPU/RAM hiện tại).", "kubectl top node; kubectl top pod -A --sort-by=memory"],
+    ["Logs", "Từng dòng sự kiện của tiến trình. Container ghi stdout/stderr; kubelet lưu ở /var/log/pods. Dịch vụ systemd (kubelet, containerd) ghi vào journald.", "kubectl logs web --previous; journalctl -u kubelet"],
+    ["Events", "Object Event do controller, scheduler, kubelet ghi: Scheduled, Pulled, BackOff, FailedMount… Mặc định chỉ giữ 1 giờ (--event-ttl).", "kubectl events -n dev --for pod/web; kubectl get events -A --sort-by=.lastTimestamp"],
+    ["Audit log", "apiserver ghi ai làm gì, lúc nào, kết quả ra sao. Trả lời câu hỏi \"ai xóa Deployment này?\".", "--audit-policy-file, --audit-log-path"],
+    ["Traces", "apiserver, etcd và kubelet xuất được trace OpenTelemetry để thấy một request mất thời gian ở đâu.", "--tracing-config-file (apiserver), tracing trong cấu hình kubelet"],
+    ["Mạng", "Thấy gói tin và rule: tcpdump trong network namespace của Pod, conntrack, rule iptables/nftables; Hubble nếu dùng Cilium.", "kubectl debug node/node01 -it --image=busybox:1.36"]
+  ].map(c => '<div class="panel col"><h4>' + kEsc(c[0]) + '</h4><p class="small">' + kEsc(c[1]) + "</p><code>" + kEsc(c[2]) + "</code></div>").join("") + "</div>";
+  h += '<div class="panel"><h4>Mỗi thành phần: xem sức khỏe, log và metric ở đâu</h4><div class="tbl"><table><thead><tr><th>Thành phần</th><th>Endpoint</th><th>Log</th><th>Metric nên theo dõi</th></tr></thead><tbody>' +
+    WIRE_OBS_COMP.map(r => "<tr><td><b>" + kEsc(r[0]) + '</b></td><td class="small"><code>' + kEsc(r[1]) + '</code></td><td class="small">' + kEsc(r[2]) + '</td><td class="small">' + r[3].split(", ").map(m => "<code>" + kEsc(m) + "</code>").join(" ") + "</td></tr>").join("") + "</tbody></table></div></div>";
+  h += '<div class="split even"><div class="panel col"><h4>Xem nhanh trên cluster (không cần Prometheus)</h4>' + wCode(`# apiserver và các thành phần nó phụ thuộc
+kubectl get --raw '/readyz?verbose'
+kubectl get --raw /metrics | grep -E '^apiserver_request_total' | sort -t' ' -k2 -nr | head
+# metric của kubelet và cAdvisor qua apiserver proxy
+kubectl get --raw /api/v1/nodes/node01/proxy/metrics/resource | head
+kubectl get --raw /api/v1/nodes/node01/proxy/stats/summary | head -40
+# etcd (trên control plane)
+curl -s http://127.0.0.1:2381/metrics | grep -E 'etcd_server_has_leader|leader_changes'
+# Event và log
+kubectl events -A --types=Warning
+kubectl logs -n kube-system -l component=kube-apiserver --tail=50
+kubectl logs deploy/web --all-containers --prefix --since=10m
+sudo crictl logs <container-id>          # khi apiserver chết, kubectl không dùng được`) + "</div>" +
+    '<div class="panel col"><h4>Nhìn vào kết nối mạng</h4>' + wCode(`# shell gỡ lỗi trên node, filesystem của node ở /host
+kubectl debug node/node01 -it --image=busybox:1.36
+# container gỡ lỗi chung namespace với container nginx của Pod
+kubectl debug -it web --image=busybox:1.36 --target=nginx
+# tcpdump trong network namespace của Pod (trên node)
+PID=$(sudo crictl inspect $(sudo crictl ps --name nginx -q) | grep -m1 '"pid"' | tr -dc 0-9)
+sudo nsenter -t $PID -n tcpdump -ni eth0 port 80
+# bảng NAT và kết nối đang theo dõi
+sudo conntrack -L -d 10.96.120.15
+sudo conntrack -S                       # insert_failed, drop tăng = conntrack đầy
+# Cilium: xem gói bị policy chặn
+hubble observe --verdict DROPPED --namespace dev`) + "</div></div>";
+  h += '<div class="panel"><h4>Cảnh báo nên có (PromQL)</h4><div class="tbl"><table><thead><tr><th>Cảnh báo</th><th>Biểu thức</th><th>Ngưỡng gợi ý</th></tr></thead><tbody>' +
+    WIRE_ALERTS.map(r => "<tr><td><b>" + kEsc(r[0]) + '</b></td><td class="small"><code>' + kEsc(r[1]) + "</code></td><td>" + kEsc(r[2]) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Bộ kube-prometheus-stack (Prometheus Operator, kube-state-metrics, node_exporter) cài sẵn phần lớn cảnh báo này. kube-state-metrics bổ sung trạng thái object: kube_pod_container_status_waiting_reason, kube_deployment_status_replicas_unavailable, kube_node_status_condition.</p></div>';
+  h += '<div class="split even"><div class="panel col"><h4>Bật audit log</h4>' + wCode(`# /etc/kubernetes/audit/policy.yaml
+apiVersion: audit.k8s.io/v1
+kind: Policy
+omitStages: ["RequestReceived"]
+rules:
+  - level: None                      # bỏ nhiễu: health check, watch của hệ thống
+    nonResourceURLs: ["/healthz*", "/livez*", "/readyz*"]
+  - level: Metadata                  # Secret: chỉ ghi ai, khi nào; KHÔNG ghi nội dung
+    resources: [{group: "", resources: ["secrets", "configmaps"]}]
+  - level: RequestResponse           # thay đổi workload: ghi cả object
+    verbs: ["create", "update", "patch", "delete"]
+    resources: [{group: "apps"}, {group: "", resources: ["pods", "services"]}]
+  - level: Metadata                  # còn lại
+
+# kube-apiserver.yaml
+#   - --audit-policy-file=/etc/kubernetes/audit/policy.yaml
+#   - --audit-log-path=/var/log/kubernetes/audit/audit.log
+#   - --audit-log-maxage=7
+#   - --audit-log-maxbackup=3
+#   - --audit-log-maxsize=100
+# + volumeMounts/volumes hostPath cho cả hai thư mục`) + "</div>" +
+    '<div class="panel col"><h4>Đọc audit log</h4>' + wCode(`sudo tail -1 /var/log/kubernetes/audit/audit.log | jq '{user: .user.username, verb, uri: .requestURI, code: .responseStatus.code, ip: .sourceIPs[0]}'
+{
+  "user": "jane",
+  "verb": "delete",
+  "uri": "/apis/apps/v1/namespaces/dev/deployments/web",
+  "code": 200,
+  "ip": "192.168.1.20"
+}
+# ai đã xóa Deployment web?
+sudo jq -c 'select(.verb=="delete" and (.requestURI|test("deployments/web")))
+  | [.requestReceivedTimestamp, .user.username]' /var/log/kubernetes/audit/audit.log`) + '<p class="small muted">Audit level Request/RequestResponse cho Secret sẽ ghi nội dung Secret vào file log: luôn để Secret ở Metadata.</p></div></div>';
+  return h;
+}
+
 /* ---------- Giao tiếp & mã hóa: các thành phần nói gì với nhau, đóng gói và mã hóa ra sao ---------- */
 /* Nguồn của mục "Giao tiếp & mã hóa" trong learn.html. build.py chèn file này vào trang.
    Mẫu gói tin đánh dấu "bắt thật" lấy từ cluster lab (k3s v1.34, Flannel VXLAN); phần còn lại theo cluster kubeadm. */
-
-const WIRE_MAP = `flowchart LR
-  kc["kubectl / CI"]
-  ext["Client Internet"]
-  subgraph CP ["Control plane"]
-    api["kube-apiserver<br/>:6443"]
-    etcd[("etcd<br/>:2379")]
-    e2[("etcd khác<br/>:2380")]
-    cm["controller-manager<br/>scheduler"]
-  end
-  subgraph N ["Mỗi node"]
-    kl["kubelet<br/>:10250"]
-    cr["containerd<br/>CRI socket"]
-    cni["CNI plugin"]
-    kp["kube-proxy"]
-    pa["Pod A"]
-  end
-  pb["Pod B<br/>ở node khác"]
-  dns["CoreDNS"]
-  reg[("Registry")]
-  wh["Webhook<br/>metrics-server"]
-  gw["Gateway<br/>Ingress"]
-  kc -->|"1 · HTTPS"| api
-  api -->|"2 · gRPC mTLS"| etcd
-  etcd <-->|"3 · Raft mTLS"| e2
-  cm -->|"4 · watch mTLS"| api
-  kl -->|"5 · mTLS"| api
-  api -->|"6 · logs, exec"| kl
-  kl -->|"7 · gRPC unix"| cr
-  cr -->|"8 · exec + JSON"| cni
-  cr -->|"9 · HTTPS"| reg
-  pa -->|"10 · HTTPS + JWT"| api
-  pa -->|"11 · UDP 53"| dns
-  pa <-->|"12 · IP / VXLAN"| pb
-  kp -.->|"13 · rule DNAT"| pa
-  api -->|"14 · AdmissionReview"| wh
-  ext -->|"15 · HTTPS"| gw
-  gw -->|"15 · HTTP"| pb`;
 
 const WIRE_CONNS = [
   {
@@ -5269,7 +5855,7 @@ openssl s_client -connect shop.example.com:443 -servername shop.example.com </de
 /* layer: [nhóm, tên, số byte, các trường, giải thích, đã mã hóa trên dây?] */
 const WIRE_PKTS = [
   {
-    id: "kubectl", t: "kubectl → apiserver", sub: "kubectl create deploy web, đi qua mạng tới 10.0.0.10:6443",
+    id: "kubectl", from: "kubectl", to: "kube-apiserver", t: "kubectl → apiserver", sub: "kubectl create deploy web, đi qua mạng tới 10.0.0.10:6443",
     see: "IP hai đầu, cổng 6443, SNI lúc bắt tay, kích thước và nhịp gói.", hide: "Verb, đường dẫn API, object, danh tính client (TLS 1.3 mã hóa cả chứng chỉ).",
     layers: [
       ["l2", "Ethernet", 14, "dst 52:54:00:1a:2b:3c (gateway) · src 3c:22:fb:7e:01:9a · type 0x0800", "Chỉ có nghĩa trong một chặng mạng; mỗi router ghi lại.", false],
@@ -5282,7 +5868,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "etcd", t: "apiserver → etcd: ghi Secret", sub: "kubectl create secret generic db --from-literal=password='S3cr3t!' — etcd riêng ở 10.0.0.21",
+    id: "etcd", from: "kube-apiserver", to: "etcd", t: "apiserver → etcd: ghi Secret", sub: "kubectl create secret generic db --from-literal=password='S3cr3t!' — etcd riêng ở 10.0.0.21",
     variants: ["Chưa mã hóa lúc lưu", "Có EncryptionConfiguration (aescbc)"],
     see: "IP, cổng 2379, kích thước.", hide: "Key, value (nhờ mTLS). Nhưng trên đĩa etcd thì xem dòng value.",
     layers: v => [
@@ -5300,7 +5886,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "vxlan", t: "Pod → Pod khác node (VXLAN)", sub: "Bắt thật trên cluster lab: Pod cli ở node01 gọi Pod web ở node02, CNI Flannel",
+    id: "vxlan", from: "Pod cli (node01)", to: "Pod web (node02)", t: "Pod → Pod khác node (VXLAN)", sub: "Bắt thật trên cluster lab: Pod cli ở node01 gọi Pod web ở node02, CNI Flannel",
     see: "Mọi thứ: IP node, IP Pod, URL, header, token, body.", hide: "Không có gì.",
     layers: [
       ["l2", "Ethernet ngoài", 14, "dst 12:0f:5a:67:2a:19 (node02) · src 42:64:5d:26:14:ed (node01)", "", false],
@@ -5314,7 +5900,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "wg", t: "Pod → Pod khác node (WireGuard)", sub: "Cùng request như trên nếu bật WireGuard của CNI (Calico: wireguardEnabled: true)",
+    id: "wg", from: "Pod cli (node01)", to: "Pod web (node02)", t: "Pod → Pod khác node (WireGuard)", sub: "Cùng request như trên nếu bật WireGuard của CNI (Calico: wireguardEnabled: true)",
     see: "IP hai node, cổng WireGuard, kích thước gói.", hide: "IP Pod, cổng, URL, header, token, body.",
     layers: [
       ["l2", "Ethernet", 14, "node01 → node02", "", false],
@@ -5328,7 +5914,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "svc", t: "Pod → Service ClusterIP", sub: "curl http://web (ClusterIP 10.96.120.15:80) — kube-proxy đã cài rule DNAT trên node nguồn",
+    id: "svc", from: "Pod (node01)", to: "Pod web", t: "Pod → Service ClusterIP", sub: "curl http://web (ClusterIP 10.96.120.15:80) — kube-proxy đã cài rule DNAT trên node nguồn",
     variants: ["Lúc rời Pod", "Sau DNAT trên node nguồn"],
     see: "Mọi thứ (không mã hóa).", hide: "Không có gì. ClusterIP chỉ tồn tại trong node nguồn.",
     layers: v => [
@@ -5339,7 +5925,7 @@ const WIRE_PKTS = [
     ]
   },
   {
-    id: "dns", t: "Pod → CoreDNS", sub: "nslookup web.default từ Pod ở node01",
+    id: "dns", from: "Pod (node01)", to: "CoreDNS", t: "Pod → CoreDNS", sub: "nslookup web.default từ Pod ở node01",
     see: "Mọi thứ: tên đang hỏi và câu trả lời.", hide: "Không có gì.",
     layers: [
       ["l3", "IPv4", 20, "10.244.1.12 → 10.96.0.10 (kube-dns) → DNAT tới 10.244.0.5 (Pod CoreDNS)", "", false],
@@ -5349,36 +5935,6 @@ const WIRE_PKTS = [
     ]
   }
 ];
-
-const WIRE_TLS_SEQ = `sequenceDiagram
-  participant K as kubelet (client)
-  participant A as kube-apiserver :6443
-  K->>A: ClientHello: TLS 1.3, cipher, key_share (ECDHE), SNI
-  A->>K: ServerHello: chọn cipher, key_share
-  Note over K,A: Hai bên tự tính cùng một khóa phiên từ ECDHE.<br/>Từ đây mọi thứ đã mã hóa.
-  A->>K: CertificateRequest (danh sách CA chấp nhận)
-  A->>K: Certificate apiserver.crt + CertificateVerify + Finished
-  K->>K: kiểm chữ ký bằng ca.crt, SAN có địa chỉ đã gọi, còn hạn
-  K->>A: Certificate kubelet-client-current.pem + CertificateVerify + Finished
-  A->>A: kiểm bằng --client-ca-file
-  Note over A: user = CN system:node:node01<br/>groups = O system:nodes
-  K->>A: HTTP/2: PUT lease, watch Pod (AES-GCM)
-  A->>A: authn xong → authz (Node, RBAC) → admission → etcd`;
-
-const WIRE_BOOT_SEQ = `sequenceDiagram
-  participant N as node04 (kubeadm join, kubelet)
-  participant A as kube-apiserver
-  participant C as controller-manager
-  N->>A: GET configmap cluster-info<br/>(kube-public, ẩn danh)
-  A-->>N: kubeconfig có CA<br/>+ chữ ký JWS bằng token
-  N->>N: kiểm JWS bằng token<br/>hash khóa CA khớp<br/>--discovery-token-ca-cert-hash
-  Note over N: từ đây node04 tin CA,<br/>kiểm được cert server
-  N->>A: Bearer abcdef.0123456789abcdef<br/>tạo CSR: signer kube-apiserver-client-kubelet<br/>CN system:node:node04
-  C->>C: csrapproving tự duyệt<br/>csrsigning ký bằng ca.key
-  A-->>N: status.certificate
-  N->>N: ghi kubelet-client-current.pem<br/>và kubelet.conf
-  N->>A: mọi request sau đó: mTLS bằng cert mới
-  Note over N,C: gần hết hạn: kubelet tự gửi CSR mới (rotateCertificates)`;
 
 const WIRE_IDS = [
   ["Client certificate (x509)", "Trong bắt tay TLS (message Certificate)", "Chữ ký do CA trong <code>--client-ca-file</code>, còn hạn", "user = CN, groups = O. Ví dụ <code>kubernetes-admin</code> / <code>kubeadm:cluster-admins</code>"],
@@ -5427,7 +5983,7 @@ const WIRE_PROVIDERS = [
   ["kms v2", "Envelope encryption: khóa dữ liệu (DEK) mã hóa object, khóa chính (KEK) nằm trong KMS bên ngoài", "Khuyên dùng cho production: khóa chính không nằm trên đĩa control plane"]
 ];
 
-const WIRE_TABS = [["map", "Bản đồ kết nối"], ["pkt", "Mổ một gói tin"], ["tls", "TLS và danh tính"], ["pki", "Chứng chỉ kubeadm"], ["rest", "Mã hóa lúc lưu"], ["cheat", "Bảng tra nhanh"]];
+const WIRE_TABS = [["map", "Bản đồ kết nối"], ["pkt", "Mổ một gói tin"], ["tls", "TLS và danh tính"], ["pki", "Chứng chỉ kubeadm"], ["rest", "Mã hóa lúc lưu"], ["err", "Sự cố & khắc phục"], ["obs", "Quan sát (observability)"], ["cheat", "Bảng tra nhanh"]];
 let wireCur = "map", wireConn = "kubectl", wirePkt = "kubectl", wireVar = 0, wireEye = 0;
 
 const wCode = (t, cls) => '<div class="codewrap"><pre class="code' + (cls ? " " + cls : "") + '">' + kEsc(t) + "</pre></div>";
@@ -5445,14 +6001,22 @@ function wireInit() {
     $("#wireBody").addEventListener("click", e => {
       const c = e.target.closest("[data-conn]"); if (c) {
         const jump = wireCur !== "map" || innerWidth < 920; wireConn = c.dataset.conn; store.set("wireConn", wireConn);
-        if (wireCur === "map" && $("#wireDetail")) wireMapDetail(); else { wireCur = "map"; store.set("wire", "map"); wireShow(); }
+        if (wireCur === "map" && $("#wireDetail")) { if (wmTourOn) wmTour(); wireMapDetail(); wmLoop(wireConn); } else { wireCur = "map"; store.set("wire", "map"); wireShow(); }
         if (jump) $("#wireDetail").scrollIntoView({ block: "start" }); return;
       }
       const p = e.target.closest("[data-pk]"); if (p) { wirePkt = p.dataset.pk; wireVar = 0; wireCur = "pkt"; store.set("wire", "pkt"); wireShow(); return; }
       const v = e.target.closest("[data-var]"); if (v) { wireVar = +v.dataset.var; wireShow(); return; }
       const y = e.target.closest("[data-eye]"); if (y) { wireEye = +y.dataset.eye; wireShow(); return; }
+      if (e.target.closest("#wmTour")) { wmTour(); return; }
+      if (e.target.closest("#pkPlay")) { const sc = WIRE_PKTS.find(p => p.id === wirePkt) || WIRE_PKTS[0]; pkPlay(sc, typeof sc.layers === "function" ? sc.layers(wireVar) : sc.layers); return; }
+      if (e.target.closest("#sjPlay")) { sjPlay(); return; }
+      if (e.target.closest("#wLadPlay")) { wireLadderPlay(); return; }
+      const ec = e.target.closest("[data-ec]"); if (ec) { errConn = ec.dataset.ec; $$("#errChips button").forEach(b => b.setAttribute("aria-pressed", b.dataset.ec === errConn ? "true" : "false")); wireErrList(); return; }
       const s = e.target.closest("[data-seg]"); if (s) { const r = $("#pkRow" + s.dataset.seg); if (r) { $$(".pk-row.hl").forEach(x => x.classList.remove("hl")); r.classList.add("hl"); r.scrollIntoView({ block: "nearest" }); } }
     });
+    $("#wireBody").addEventListener("input", e => { if (e.target.id === "errQ") { errQ = e.target.value; wireErrList(); } });
+    $("#wireBody").addEventListener("change", e => { if (e.target.id === "sjEnc") { sjEnc = e.target.checked; sjTok(0); } });
+    $("#wireBody").addEventListener("keydown", e => { const n = e.target.closest(".wm-n"); if (n && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); n.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
     wireCur = store.get("wire", "map"); wireConn = store.get("wireConn", "kubectl");
   }
   wireShow();
@@ -5486,6 +6050,7 @@ function wirePktHTML() {
   h += '<p class="small muted" style="margin:0">' + kEsc(sc.sub) + "</p>";
   h += '<div class="formrow"><div class="seg" role="group" aria-label="Góc nhìn"><button type="button" data-eye="0" aria-pressed="' + eaves + '">Người bắt gói trên dây</button><button type="button" data-eye="1" aria-pressed="' + !eaves + '">Bên nhận, đã giải mã</button></div>' +
     (sc.variants ? '<div class="seg" role="group" aria-label="Biến thể">' + sc.variants.map((v, i) => '<button type="button" data-var="' + i + '" aria-pressed="' + (i === wireVar) + '">' + kEsc(v) + "</button>").join("") + "</div>" : "") + "</div>";
+  h += pkStageHTML(sc, layers);
   const total = layers.reduce((a, l) => a + l[2], 0);
   h += '<div class="pk-bar" role="group" aria-label="Gói tin theo thứ tự byte">' + layers.map((l, i) => {
     const hid = eaves && l[5];
@@ -5509,13 +6074,18 @@ function wireShow() {
   let h = "";
   if (wireCur === "map") {
     const c = WIRE_CONNS.find(x => x.id === wireConn) || WIRE_CONNS[0];
-    h += '<div class="panel col"><h4>Ai nói chuyện với ai</h4><p class="small muted">Mô hình hub-and-spoke: mọi thành phần gọi vào kube-apiserver, chỉ apiserver chạm vào etcd. Số trên mũi tên khớp danh sách bên dưới.</p>' + mmd(WIRE_MAP) + "</div>";
+    h += '<div class="panel col"><h4>Ai nói chuyện với ai</h4><p class="small muted">Mô hình hub-and-spoke: mọi thành phần gọi vào kube-apiserver, chỉ apiserver chạm vào etcd. Bấm một số, một đường hoặc một thành phần để xem gói tin chạy trên kết nối đó.</p><div class="stage" id="wmStage"></div>' +
+      '<div class="controls"><button class="btn primary" type="button" id="wmTour">▶ Hành trình một lệnh kubectl</button><span class="wm-leg"><i class="enc"></i>đã mã hóa (TLS/mTLS)</span><span class="wm-leg"><i class="plain"></i>dạng rõ trên mạng</span><span class="wm-leg"><i class="loc"></i>cục bộ trong node</span></div><p class="hint" id="wmCap" aria-live="polite" style="margin:0">Hành trình chạy lần lượt các kết nối khi tạo một Deployment, từ kubectl tới Pod chạy trên node.</p></div>';
     h += '<div class="wire-split"><div class="panel col wire-list" role="list">' + WIRE_CONNS.map(x => '<button type="button" role="listitem" data-conn="' + x.id + '" aria-pressed="' + (x.id === c.id) + '"><span class="n">' + W_CIRC[x.n - 1] + '</span><span class="t">' + kEsc(x.t) + '<small>' + kEsc(x.p + " · " + x.tr) + '</small></span><span class="pill ' + x.cr[0] + '">' + kEsc(x.cr[1].split(",")[0]) + "</span></button>").join("") + "</div>" + wireConnHTML(c) + "</div>";
   } else if (wireCur === "pkt") {
     h += wirePktHTML();
+  } else if (wireCur === "err") {
+    h += wireErrHTML();
+  } else if (wireCur === "obs") {
+    h += wireObsHTML();
   } else if (wireCur === "tls") {
-    h += '<div class="panel col"><h4>Bắt tay TLS 1.3 hai chiều (mTLS)</h4>' + mmd(WIRE_TLS_SEQ) + '<p class="small muted">apiserver xin cert client nhưng không bắt buộc: client không có cert vẫn kết nối được và xác thực bằng token trong header. Khóa phiên mới cho mỗi kết nối (forward secrecy): lộ ca.key sau này cũng không giải mã được gói đã bắt trước đó.</p></div>' +
-      '<div class="panel col"><h4>Node mới vào cluster: TLS bootstrap</h4>' + mmd(WIRE_BOOT_SEQ) + "</div>";
+    h += '<div class="panel col"><h4>Bắt tay TLS 1.3 hai chiều (mTLS)</h4><p class="small muted">Mũi tên đen: dạng rõ. Mũi tên tím có khóa: đã mã hóa bằng khóa phiên.</p><div id="sqTls"></div><p class="small muted">apiserver xin cert client nhưng không bắt buộc: client không có cert vẫn kết nối được và xác thực bằng token trong header. Khóa phiên mới cho mỗi kết nối (forward secrecy): lộ ca.key sau này cũng không giải mã được gói đã bắt trước đó.</p></div>' +
+      '<div class="panel col"><h4>Node mới vào cluster: TLS bootstrap</h4><div id="sqBoot"></div></div>';
     h += '<div class="panel"><h4>Danh tính nằm ở đâu trong gói tin</h4><div class="tbl"><table><thead><tr><th>Cách</th><th>Nằm ở</th><th>apiserver kiểm</th><th>Thành user / group</th></tr></thead><tbody>' + WIRE_IDS.map(r => "<tr><td><b>" + r[0] + "</b></td><td>" + r[1] + "</td><td>" + r[2] + "</td><td>" + r[3] + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Kubernetes không có object User: user chỉ là chuỗi lấy từ cert hoặc token. Thứ tự xử lý một request: xác thực (authn) → phân quyền (Node, RBAC) → admission → validate → lưu etcd.</p></div>';
     h += '<div class="split even"><div class="panel col"><h4>JWT của ServiceAccount: ký, không mã hóa</h4>' + wCode(`eyJhbGciOiJSUzI1NiIsImtpZCI6Il9uSkF3b2lf….eyJhdWQiOlsiaHR0cHM6Ly9rdWJl….Qx7f0c…
 └──── header (base64url) ────┘ └──── payload (base64url) ────┘ └ chữ ký RS256 ┘
@@ -5552,7 +6122,7 @@ sudo mv /etc/kubernetes/pki/apiserver.{crt,key} /tmp/
 sudo kubeadm init phase certs apiserver --config kc.yaml
 # rồi khởi động lại kube-apiserver như trên và kiểm SAN bằng openssl`) + '<p class="small muted">Duyệt cert cho user mới bằng CSR: xem Lab 24.</p></div></div>';
   } else if (wireCur === "rest") {
-    h += '<div class="panel"><h4>Hành trình của một Secret</h4><div class="tbl"><table><thead><tr><th>#</th><th>Chặng</th><th>Dạng dữ liệu</th><th>Được bảo vệ bằng</th></tr></thead><tbody>' + WIRE_JOURNEY.map(r => "<tr><td>" + r[0] + "</td><td><b>" + kEsc(r[1]) + "</b></td><td>" + kEsc(r[2]) + "</td><td>" + (r[4] ? '<span class="pill ' + r[4] + '">' + kEsc(r[3]) + "</span>" : kEsc(r[3])) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Chặng yếu nhất mặc định là 4: etcd và mọi bản sao lưu của nó. EncryptionConfiguration chỉ vá chặng đó; chặng 6 và 7 cần RBAC chặt (ai được get secret, ai được exec) và hệ thống quản lý bí mật bên ngoài nếu cần.</p></div>';
+    h += '<div class="panel col"><h4>Hành trình của một Secret</h4>' + sjHTML() + '<div class="tbl"><table id="wireJourney"><thead><tr><th>#</th><th>Chặng</th><th>Dạng dữ liệu</th><th>Được bảo vệ bằng</th></tr></thead><tbody>' + WIRE_JOURNEY.map(r => "<tr><td>" + r[0] + "</td><td><b>" + kEsc(r[1]) + "</b></td><td>" + kEsc(r[2]) + "</td><td>" + (r[4] ? '<span class="pill ' + r[4] + '">' + kEsc(r[3]) + "</span>" : kEsc(r[3])) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Chặng yếu nhất mặc định là 4: etcd và mọi bản sao lưu của nó. EncryptionConfiguration chỉ vá chặng đó; chặng 6 và 7 cần RBAC chặt (ai được get secret, ai được exec) và hệ thống quản lý bí mật bên ngoài nếu cần.</p></div>';
     h += '<div class="split even"><div class="panel col"><h4>Bật mã hóa Secret trong etcd</h4>' + wCode(`# 1. Tạo khóa 32 byte và file cấu hình trên MỌI control plane
 head -c 32 /dev/urandom | base64
 sudo mkdir -p /etc/kubernetes/enc
@@ -5599,9 +6169,14 @@ kubectl get secrets -A -o json | kubectl replace -f -`) + "</div>" +
       ["30000-32767 TCP/UDP", "mọi node", "NodePort"], ["4789 UDP · 179 TCP · 51820 UDP", "mọi node", "Calico VXLAN · BGP · WireGuard (tùy chế độ)"], ["53 UDP/TCP", "Pod CoreDNS", "mọi Pod"]
     ].map(r => "<tr><td><code>" + kEsc(r[0]) + "</code></td><td>" + kEsc(r[1]) + "</td><td>" + kEsc(r[2]) + "</td></tr>").join("") + "</tbody></table></div></div>";
   }
+  wmTok++; wmTourOn = false;
   box.innerHTML = h;
   wireCopy();
   mmdRender(box);
+  if (wireCur === "map") { wmBuild($("#wmStage")); wmLoop(wireConn); }
+  if (wireCur === "tls") { seqStage($("#sqTls"), SEQ_TLS[0], SEQ_TLS[1]); seqStage($("#sqBoot"), SEQ_BOOT[0], SEQ_BOOT[1]); }
+  if (wireCur === "rest") sjTok(0);
+  if (wireCur === "err") wireErrList();
 }
 onShow.wire = wireInit;
 if (current === "wire" || (location.hash || "").slice(1) === "wire") wireInit();

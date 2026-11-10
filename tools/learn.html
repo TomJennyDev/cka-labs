@@ -303,6 +303,55 @@ td.num,th.num{font-variant-numeric:tabular-nums}
 #wireCheat td{font-size:13.5px}
 #wireBody td code{white-space:normal}
 .pk-x{letter-spacing:0}
+/* animation của mục giao tiếp */
+.wm-e{transition:stroke .3s,stroke-width .3s}
+.wm-arrow{fill:var(--muted)}
+.wm-hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
+.wm-n{cursor:pointer}
+.wm-n circle{fill:var(--paper);stroke:var(--accent);stroke-width:1.6}
+.wm-nt{fill:var(--accent);font:700 11.5px var(--f-mono)}
+.wm-n.on circle{fill:var(--pkt);stroke:var(--pkt)}.wm-n.on .wm-nt{fill:var(--paper)}
+.wm-n:focus-visible circle{stroke:var(--pkt);stroke-width:3}
+.wpk rect{stroke:var(--paper);stroke-width:1.5}
+.wpk.enc rect{fill:var(--data)}.wpk.plain rect{fill:var(--bad)}.wpk.loc rect{fill:var(--pkt)}
+.wlk,.wln{fill:none;stroke:var(--paper);stroke-width:1.6;stroke-linecap:round}
+.wm-leg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.wm-leg i{width:16px;height:11px;border-radius:3px;display:inline-block}
+.wm-leg i.enc{background:var(--data)}.wm-leg i.plain{background:var(--bad)}.wm-leg i.loc{background:var(--pkt)}
+.seq svg{min-width:640px;max-width:860px;margin:0 auto}
+#pkStage svg,#sjStage svg{max-width:900px;margin:0 auto}
+.sq-l{stroke:var(--ink);stroke-width:1.5}.sq-l.enc{stroke:var(--data);stroke-width:2}
+.sq-ar{fill:var(--ink)}.sq-ar.enc{fill:var(--data)}
+.sq-t{fill:var(--ink);font:500 12.5px var(--f-body)}.sq-t.enc{fill:var(--data);font-weight:600}
+.sq-note{fill:var(--paper-2);stroke:var(--line)}.sq-note.key{fill:var(--data-soft);stroke:var(--data)}
+.sq-nt{fill:var(--ink);font:500 12px var(--f-body)}
+.pk-bar button{transition:flex-grow .45s ease,opacity .35s,background .35s,min-width .45s,padding .45s}
+.pk-bar button.pk-off{flex-grow:.0001 !important;min-width:0;padding:0;opacity:0;border-right-width:0}
+.pk-bar button.pk-flash{animation:pkf .7s ease}
+@keyframes pkf{0%{filter:brightness(1)}40%{filter:brightness(1.6)}100%{filter:brightness(1)}}
+.pk-row{transition:opacity .3s,box-shadow .3s}
+.pk-row.pk-dim{opacity:.28}
+.pk-mv{stroke:var(--paper);stroke-width:1}
+.pk-mv.pk-l2{fill:var(--muted)}.pk-mv.pk-l3{fill:var(--accent)}.pk-mv.pk-l4{fill:var(--node)}.pk-mv.pk-tun{fill:var(--pkt)}.pk-mv.pk-tls{fill:var(--data)}.pk-mv.pk-app,.pk-mv.pk-rest{fill:var(--bad)}.pk-mv.enc{fill:var(--data);opacity:.55}
+#pkMove{transform-box:fill-box}
+.pk-eye circle:first-child{fill:var(--paper);stroke:var(--muted);stroke-width:1.5}
+.pk-eye path{fill:none;stroke:var(--muted);stroke-width:1.5}.pk-eye circle:nth-child(3){fill:var(--muted)}
+.pk-eye.on circle:first-child{stroke:var(--pkt);fill:var(--pkt-soft)}.pk-eye.on path{stroke:var(--pkt)}
+.sj-n.on circle{stroke:var(--pkt);stroke-width:3;fill:var(--pkt-soft)}
+.sv-wire.sj-tls{stroke:var(--data);stroke-width:3}
+#sjTok rect{stroke:var(--paper);stroke-width:1.5}#sjTok text{font:700 12px var(--f-mono);fill:#fff}
+#sjTok.sj-plain rect{fill:var(--bad)}#sjTok.sj-enc rect{fill:var(--data)}
+tr.hlrow td{background:var(--pkt-soft)}
+ol.ladder{list-style:none;margin:0;padding:0;display:flex;flex-direction:column-reverse;gap:6px}
+ol.ladder li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:var(--paper);transition:border-color .3s,background .3s}
+ol.ladder .lv{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--f-mono);background:var(--paper-2);color:var(--muted);transition:background .3s,color .3s}
+ol.ladder li.cur{border-color:var(--pkt);background:var(--pkt-soft)}
+ol.ladder li.ok{border-color:var(--node)}ol.ladder li.ok .lv{background:var(--node);color:var(--paper)}
+details.err summary{align-items:flex-start}
+details.err summary .pill{flex:none;margin-top:2px}
+details.err code.em{white-space:normal;overflow-wrap:anywhere;font-size:12.5px;background:none;border:0;padding:0;color:var(--bad);font-weight:600}
+.obs4{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+.obs4 code{white-space:normal}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
