@@ -394,6 +394,31 @@ details.err code.em{display:block}
 @media (min-width:720px){.sig6{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:640px){#errChips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}#errChips button{flex:none}
   ol.ladder li{grid-template-columns:30px minmax(0,1fr)}ol.ladder .sig{grid-column:2;text-align:left}}
+/* mô phỏng lỗi Pod */
+.tb-stage svg{min-width:760px}
+.tb-st circle{fill:var(--paper);stroke:var(--line);stroke-width:2;transition:fill .3s,stroke .3s}
+.tb-n{fill:var(--muted);font:700 12px var(--f-mono)}
+.tb-x{stroke:var(--paper);stroke-width:3;stroke-linecap:round;opacity:0}
+.tb-st.ok circle{fill:var(--node-soft);stroke:var(--node)}.tb-st.ok .tb-n{fill:var(--node)}
+.tb-st.bad circle{fill:var(--bad);stroke:var(--bad);animation:tbshake .4s 2}.tb-st.bad .tb-n{opacity:0}.tb-st.bad .tb-x{opacity:1}.tb-st.bad .tb-l{fill:var(--bad)}
+@keyframes tbshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.tb-st{transform-box:fill-box}
+#tbTok rect{fill:var(--accent);stroke:var(--paper);stroke-width:2}#tbTok text{fill:#fff;font:700 11px var(--f-mono)}
+#tbTok.ok rect{fill:var(--node)}#tbTok.bad rect{fill:var(--bad)}
+#tbBack{fill:var(--pkt);font-weight:600}
+.tb-chips{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr))}
+.tb-chips button{text-align:left;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:9px 11px;cursor:pointer;display:flex;flex-direction:column;gap:2px;color:var(--ink)}
+.tb-chips button b{font:700 12.5px var(--f-mono);color:var(--bad)}
+.tb-chips button span{font-size:13px}
+.tb-chips button[aria-pressed="true"]{border-color:var(--bad);background:var(--bad-soft)}
+.seg .cnt{font:600 10.5px var(--f-mono);color:var(--muted)}
+.tb-term{min-height:190px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.55;padding:12px}
+.tb-term .bad{color:var(--term-bad)}.tb-term .ok{color:var(--term-ok)}.tb-term .p{color:var(--term-acc)}
+.tb-h{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tb-h.ok{color:var(--node)}
+.tb-fix{display:flex;flex-direction:column;gap:12px}
+.tb-fix,.tb-chips button{overflow-wrap:anywhere;min-width:0}
+.tb-fix .take{font-size:16px;font-weight:600;border-left:4px solid var(--bad);padding-left:12px;line-height:1.45}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
@@ -1466,11 +1491,17 @@ k api-resources --api-group=cert-manager.io</pre></div>
 <section class="view" data-view="trouble" hidden>
   <header class="vh">
     <p class="eyebrow">Troubleshooting · 30%</p>
-    <h2>Cây chẩn đoán: từ triệu chứng tới cách sửa</h2>
-    <p class="lead">Domain nặng nhất. Chọn triệu chứng, chạy lệnh được gợi ý, chọn điều bạn thấy. Mỗi nhánh kết thúc bằng cách sửa cụ thể.</p>
+    <h2>Troubleshooting: thấy lỗi, biết sửa</h2>
+    <p class="lead">Domain nặng nhất. Xem Pod hỏng ở chặng nào, đọc đúng dòng lỗi, rồi sửa.</p>
   </header>
+  <div class="panel col">
+    <h3>Mô phỏng lỗi Pod</h3>
+    <p class="hint" style="margin:0">Chọn một lỗi: Pod đi qua từng chặng và dừng ở chặng hỏng. Xem <code>get pod -w</code> và Events như trên cluster thật, rồi bấm Áp dụng cách sửa.</p>
+    <div id="tbSim" class="col" style="gap:14px"></div>
+  </div>
   <div class="domap" data-dom="trouble"></div>
   <div class="panel">
+    <h3>Cây chẩn đoán</h3>
     <div class="crumbs" id="trCrumbs"></div>
     <div id="trNode" aria-live="polite"></div>
   </div>
