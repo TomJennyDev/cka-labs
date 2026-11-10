@@ -1,3 +1,4 @@
+const wCodeLater = t => '<div class="codewrap"><pre class="code">' + kEsc(t) + '</pre></div>';
 /* ---------- Giao tiếp & mã hóa: sự cố, cách khắc phục và quan sát (observability) ---------- */
 /* c: id kết nối trong WIRE_CONNS · m: thông báo lỗi thật · s: triệu chứng · why: nguyên nhân · chk: lệnh kiểm tra · fix: cách sửa */
 const WIRE_ERRS = [
@@ -113,6 +114,9 @@ const WIRE_ERRS = [
     chk: "kubectl get secret shop-tls -o jsonpath='{.type}'\nopenssl s_client -connect shop.lab:443 -servername shop.lab </dev/null | openssl x509 -noout -subject", fix: "Tạo Secret kubernetes.io/tls cùng namespace với Ingress (hoặc Gateway + ReferenceGrant); khớp hosts." }
 ];
 
+const WIRE_ERR_K = ["apiserver không chạy (refused :6443)", "Không tới được :6443 (timeout)", "kubeconfig mang sai CA", "Tên hoặc IP không có trong SAN", "Chứng chỉ hết hạn hoặc đồng hồ lệch", "401: xác thực thất bại", "403: RBAC không cho phép", "429: APF từ chối vì quá tải", "etcdctl sai cert hoặc endpoint", "etcd không chạy, apiserver không lên", "etcd hết dung lượng (NOSPACE)", "etcd chậm, leader đổi liên tục", "Peer cert thiếu IP trong SAN", "Mất đa số member, không có leader", "Có Deployment, không có ReplicaSet", "Pod Pending, không có event nào", "Mất leader election, tự restart", "Node NotReady", "Cert client của kubelet hết hạn", "kubelet không chạy vì swap", "logs/exec timeout tới :10250", "exec bị Forbidden (nodes/proxy)", "metrics-server không tin cert kubelet", "Plugin CRI của containerd bị tắt", "Sai socket hoặc containerd không chạy", "Chưa có CNI, node NotReady", "CNI lỗi khi tạo Pod (ContainerCreating)", "Sai tên hoặc tag image", "Registry private: thiếu imagePullSecret", "Registry dùng CA riêng", "Docker Hub giới hạn lượt kéo", "ServiceAccount thiếu quyền (403)", "Token cũ hết hạn trong ứng dụng (401)", "Không tới được CoreDNS", "Tên không tồn tại (NXDOMAIN)", "CoreDNS crash vì vòng lặp DNS", "Khác node thì không gọi được nhau", "Calico BGP không lên", "MTU sai: gói lớn bị treo", "NetworkPolicy chặn (timeout)", "Service không có endpoint (refused)", "ClusterIP timeout: kube-proxy hỏng", "Webhook chết chặn mọi lệnh tạo", "Webhook sai caBundle", "Metrics API không có", "Namespace kẹt Terminating", "404 từ Gateway hoặc Ingress", "503: route không có backend", "Sai cert TLS (Fake Certificate)"];
+WIRE_ERRS.forEach((e, i) => { e.k = WIRE_ERR_K[i]; });
+
 const WIRE_LADDER = [
   ["DNS", "Tên có ra IP không?", "nslookup web.dev / dig", "NXDOMAIN, timed out"],
   ["Định tuyến + TCP", "Mở được kết nối tới IP:cổng không?", "nc -vz IP PORT / curl -v", "refused (không ai nghe, không endpoint), timeout (bị chặn, mất gói)"],
@@ -153,22 +157,22 @@ const WIRE_ALERTS = [
 let errConn = "all", errQ = "";
 function wireErrHTML() {
   const conns = WIRE_CONNS.filter(c => WIRE_ERRS.some(e => e.c === c.id));
-  let h = '<div class="panel col"><h4>Chẩn đoán một kết nối theo tầng</h4><p class="small muted">Đi từ dưới lên, dừng ở tầng đầu tiên hỏng. Thông báo lỗi gần như luôn cho biết tầng nào: refused/timeout là mạng, x509 là TLS, 401 là xác thực, 403 là phân quyền.</p><ol class="ladder" id="wLadder">' +
-    WIRE_LADDER.map((r, i) => '<li id="wLad' + i + '"><span class="lv">' + (i + 1) + '</span><div><b>' + kEsc(r[0]) + '</b> · <span class="small">' + kEsc(r[1]) + '</span><br><code>' + kEsc(r[2]) + '</code><br><span class="small muted">Hỏng thì thấy: ' + kEsc(r[3]) + "</span></div></li>").join("") +
-    '</ol><div class="controls"><button class="btn" type="button" id="wLadPlay">▶ Đi qua từng tầng</button></div></div>';
-  h += '<div class="panel col"><h4>Thông báo lỗi → nguyên nhân → cách sửa</h4><div class="formrow"><input type="search" id="errQ" placeholder="Dán thông báo lỗi hoặc gõ từ khóa: x509, refused, 403, NotReady…" value="' + kEsc(errQ) + '" style="flex:1;min-width:220px" aria-label="Tìm lỗi"></div>' +
-    '<div class="chips" id="errChips"><button type="button" data-ec="all" aria-pressed="' + (errConn === "all") + '">Tất cả · ' + WIRE_ERRS.length + "</button>" + conns.map(c => '<button type="button" data-ec="' + c.id + '" aria-pressed="' + (errConn === c.id) + '">' + W_CIRC[c.n - 1] + " " + kEsc(c.t.split(" (")[0].replace("kube-apiserver", "apiserver")) + "</button>").join("") + '</div><div id="errList"></div></div>';
+  let h = '<div class="panel col"><h4>Đọc lỗi là biết tầng nào hỏng</h4><p class="hint" style="margin:0">Đi từ tầng 1 lên, dừng ở tầng đầu tiên hỏng.</p><ol class="ladder" id="wLadder">' +
+    WIRE_LADDER.map((r, i) => '<li id="wLad' + i + '" title="' + kEsc(r[1] + " · " + r[2]) + '"><span class="lv">' + (i + 1) + '</span><b>' + kEsc(r[0]) + '</b><span class="sig">' + kEsc(r[3]) + "</span></li>").join("") +
+    '</ol><div class="controls"><button class="btn" type="button" id="wLadPlay">▶ Đi qua từng tầng</button></div>' + wDet("Lệnh kiểm tra từng tầng", '<div class="tbl"><table><tbody>' + WIRE_LADDER.map((r, i) => "<tr><td>" + (i + 1) + "</td><td><b>" + kEsc(r[0]) + "</b><br><span class=\"small muted\">" + kEsc(r[1]) + "</span></td><td><code>" + kEsc(r[2]) + "</code></td></tr>").join("") + "</tbody></table></div>") + "</div>";
+  h += '<div class="panel col"><h4>49 lỗi hay gặp</h4><div class="formrow"><input type="search" id="errQ" placeholder="Dán thông báo lỗi hoặc gõ: x509, refused, 403, NotReady…" value="' + kEsc(errQ) + '" style="flex:1;min-width:220px" aria-label="Tìm lỗi"></div>' +
+    '<div class="chips" id="errChips"><button type="button" data-ec="all" aria-pressed="' + (errConn === "all") + '">Tất cả · ' + WIRE_ERRS.length + "</button>" + conns.map(c => '<button type="button" data-ec="' + c.id + '" aria-pressed="' + (errConn === c.id) + '" title="' + kEsc(c.t) + '">' + W_CIRC[c.n - 1] + " " + kEsc(c.t.split(" (")[0].replace("kube-apiserver", "apiserver").split(",")[0]) + "</button>").join("") + '</div><div id="errList"></div></div>';
   return h;
 }
 function wireErrList() {
   const q = errQ.trim().toLowerCase();
   const words = q.split(/\s+/).filter(w => w.length > 1);
-  const list = WIRE_ERRS.filter(e => (errConn === "all" || e.c === errConn) && (!words.length || words.every(w => (e.m + " " + e.s + " " + e.why + " " + e.fix).toLowerCase().includes(w)) || (q.length > 12 && (e.m.toLowerCase().includes(q) || q.includes(e.m.toLowerCase().slice(0, 30))))));
+  const list = WIRE_ERRS.filter(e => (errConn === "all" || e.c === errConn) && (!words.length || words.every(w => (e.k + " " + e.m + " " + e.s + " " + e.why + " " + e.fix).toLowerCase().includes(w)) || (q.length > 12 && (e.m.toLowerCase().includes(q) || q.includes(e.m.toLowerCase().slice(0, 30))))));
   const box = $("#errList"); if (!box) return;
   box.innerHTML = list.length ? list.map((e, i) => {
     const c = WIRE_CONNS.find(x => x.id === e.c);
-    return '<details class="bp err"' + (list.length === 1 || (i === 0 && q) ? " open" : "") + '><summary><span class="pill cp">' + W_CIRC[c.n - 1] + '</span><code class="em">' + kEsc(e.m) + '</code></summary><div class="body">' +
-      '<div class="detail"><div class="kv"><div><div class="k">Triệu chứng</div>' + kEsc(e.s) + '</div><div><div class="k">Nguyên nhân</div>' + kEsc(e.why) + "</div></div></div>" +
+    return '<details class="bp err"' + (list.length === 1 || (i === 0 && q) ? " open" : "") + '><summary><span class="pill cp">' + W_CIRC[c.n - 1] + '</span><span>' + kEsc(e.k) + '</span></summary><div class="body">' +
+      '<code class="em">' + kEsc(e.m) + '</code><p style="margin:0"><b>Vì sao:</b> ' + kEsc(e.why) + "</p>" +
       '<div class="k" style="font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Kiểm tra</div>' + wCode(e.chk) +
       '<div class="k" style="font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--node)">Khắc phục</div>' + wCode(e.fix) +
       '<p class="small"><button type="button" class="linkbtn" data-conn="' + c.id + '">Xem kết nối ' + W_CIRC[c.n - 1] + " " + kEsc(c.t) + "</button></p></div></details>";
@@ -180,18 +184,24 @@ async function wireLadderPlay() {
   for (let i = 0; i < items.length; i++) { if (!items[i].isConnected) return; items[i].classList.add("cur"); await sleep(700); items[i].classList.remove("cur"); items[i].classList.add("ok"); }
 }
 
+let obsComp = 0;
+function obsCompHTML() {
+  const r = WIRE_OBS_COMP[obsComp];
+  return '<div class="obs-card"><div><span>Sức khỏe, metric</span><code>' + kEsc(r[1]) + '</code></div><div><span>Log</span>' + kEsc(r[2]) + '</div><div><span>Metric nên theo dõi</span>' + r[3].split(", ").map(m => "<code>" + kEsc(m) + "</code>").join(" ") + "</div></div>";
+}
 function wireObsHTML() {
-  let h = '<div class="grid obs4">' + [
-    ["Metrics", "Số đo theo thời gian: tỉ lệ lỗi, độ trễ, hàng đợi. Mọi thành phần có /metrics dạng Prometheus. kubectl top dùng metrics-server (chỉ CPU/RAM hiện tại).", "kubectl top node; kubectl top pod -A --sort-by=memory"],
-    ["Logs", "Từng dòng sự kiện của tiến trình. Container ghi stdout/stderr; kubelet lưu ở /var/log/pods. Dịch vụ systemd (kubelet, containerd) ghi vào journald.", "kubectl logs web --previous; journalctl -u kubelet"],
-    ["Events", "Object Event do controller, scheduler, kubelet ghi: Scheduled, Pulled, BackOff, FailedMount… Mặc định chỉ giữ 1 giờ (--event-ttl).", "kubectl events -n dev --for pod/web; kubectl get events -A --sort-by=.lastTimestamp"],
-    ["Audit log", "apiserver ghi ai làm gì, lúc nào, kết quả ra sao. Trả lời câu hỏi \"ai xóa Deployment này?\".", "--audit-policy-file, --audit-log-path"],
-    ["Traces", "apiserver, etcd và kubelet xuất được trace OpenTelemetry để thấy một request mất thời gian ở đâu.", "--tracing-config-file (apiserver), tracing trong cấu hình kubelet"],
-    ["Mạng", "Thấy gói tin và rule: tcpdump trong network namespace của Pod, conntrack, rule iptables/nftables; Hubble nếu dùng Cilium.", "kubectl debug node/node01 -it --image=busybox:1.36"]
-  ].map(c => '<div class="panel col"><h4>' + kEsc(c[0]) + '</h4><p class="small">' + kEsc(c[1]) + "</p><code>" + kEsc(c[2]) + "</code></div>").join("") + "</div>";
-  h += '<div class="panel"><h4>Mỗi thành phần: xem sức khỏe, log và metric ở đâu</h4><div class="tbl"><table><thead><tr><th>Thành phần</th><th>Endpoint</th><th>Log</th><th>Metric nên theo dõi</th></tr></thead><tbody>' +
-    WIRE_OBS_COMP.map(r => "<tr><td><b>" + kEsc(r[0]) + '</b></td><td class="small"><code>' + kEsc(r[1]) + '</code></td><td class="small">' + kEsc(r[2]) + '</td><td class="small">' + r[3].split(", ").map(m => "<code>" + kEsc(m) + "</code>").join(" ") + "</td></tr>").join("") + "</tbody></table></div></div>";
-  h += '<div class="split even"><div class="panel col"><h4>Xem nhanh trên cluster (không cần Prometheus)</h4>' + wCode(`# apiserver và các thành phần nó phụ thuộc
+  let h = '<div class="panel col">' + wTl(["<b>Metrics</b> cho biết có vấn đề, <b>logs và events</b> cho biết vì sao.", "Mỗi thành phần có <code>/metrics</code>, <code>/healthz</code> hoặc <code>/readyz</code> riêng.", "<b>Audit log</b> trả lời: ai đã làm gì, lúc nào."]) + "</div>";
+  h += '<div class="sig6">' + [
+    ["Metrics", "Con số theo thời gian", "kubectl top pod -A"], ["Logs", "Dòng log của tiến trình", "kubectl logs web --previous"], ["Events", "Chuyện vừa xảy ra, giữ 1 giờ", "kubectl events --types=Warning"],
+    ["Audit", "Ai làm gì, lúc nào", "--audit-log-path"], ["Traces", "Request chậm ở đâu", "--tracing-config-file"], ["Mạng", "Gói tin, conntrack, NAT", "kubectl debug node/node01"]
+  ].map(c => '<div class="sg"><b>' + c[0] + "</b><span>" + kEsc(c[1]) + "</span><code>" + kEsc(c[2]) + "</code></div>").join("") + "</div>";
+  h += '<div class="panel col"><h4>Mỗi thành phần xem ở đâu</h4><div class="chips" id="obsChips">' + WIRE_OBS_COMP.map((r, i) => '<button type="button" data-obs="' + i + '" aria-pressed="' + (i === obsComp) + '">' + kEsc(r[0]) + "</button>").join("") + '</div><div id="obsCard">' + obsCompHTML() + "</div></div>";
+  h += '<div class="panel col">' + wDet("Lệnh xem nhanh (không cần Prometheus)", W_OBS_CMD1) + wDet("Nhìn vào kết nối mạng", W_OBS_CMD2) +
+    wDet("12 cảnh báo nên có (PromQL)", '<div class="tbl"><table><thead><tr><th>Cảnh báo</th><th>Biểu thức</th><th>Ngưỡng</th></tr></thead><tbody>' + WIRE_ALERTS.map(r => "<tr><td><b>" + kEsc(r[0]) + '</b></td><td class="small"><code>' + kEsc(r[1]) + "</code></td><td>" + kEsc(r[2]) + "</td></tr>").join("") + "</tbody></table></div>") +
+    wDet("Bật audit log", W_OBS_AUDIT1) + wDet("Đọc audit log: ai đã xóa Deployment?", W_OBS_AUDIT2) + "</div>";
+  return h;
+}
+const W_OBS_CMD1 = wCodeLater(`# apiserver và các thành phần nó phụ thuộc
 kubectl get --raw '/readyz?verbose'
 kubectl get --raw /metrics | grep -E '^apiserver_request_total' | sort -t' ' -k2 -nr | head
 # metric của kubelet và cAdvisor qua apiserver proxy
@@ -203,8 +213,8 @@ curl -s http://127.0.0.1:2381/metrics | grep -E 'etcd_server_has_leader|leader_c
 kubectl events -A --types=Warning
 kubectl logs -n kube-system -l component=kube-apiserver --tail=50
 kubectl logs deploy/web --all-containers --prefix --since=10m
-sudo crictl logs <container-id>          # khi apiserver chết, kubectl không dùng được`) + "</div>" +
-    '<div class="panel col"><h4>Nhìn vào kết nối mạng</h4>' + wCode(`# shell gỡ lỗi trên node, filesystem của node ở /host
+sudo crictl logs <container-id>          # khi apiserver chết, kubectl không dùng được`);
+const W_OBS_CMD2 = wCodeLater(`# shell gỡ lỗi trên node, filesystem của node ở /host
 kubectl debug node/node01 -it --image=busybox:1.36
 # container gỡ lỗi chung namespace với container nginx của Pod
 kubectl debug -it web --image=busybox:1.36 --target=nginx
@@ -215,10 +225,8 @@ sudo nsenter -t $PID -n tcpdump -ni eth0 port 80
 sudo conntrack -L -d 10.96.120.15
 sudo conntrack -S                       # insert_failed, drop tăng = conntrack đầy
 # Cilium: xem gói bị policy chặn
-hubble observe --verdict DROPPED --namespace dev`) + "</div></div>";
-  h += '<div class="panel"><h4>Cảnh báo nên có (PromQL)</h4><div class="tbl"><table><thead><tr><th>Cảnh báo</th><th>Biểu thức</th><th>Ngưỡng gợi ý</th></tr></thead><tbody>' +
-    WIRE_ALERTS.map(r => "<tr><td><b>" + kEsc(r[0]) + '</b></td><td class="small"><code>' + kEsc(r[1]) + "</code></td><td>" + kEsc(r[2]) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Bộ kube-prometheus-stack (Prometheus Operator, kube-state-metrics, node_exporter) cài sẵn phần lớn cảnh báo này. kube-state-metrics bổ sung trạng thái object: kube_pod_container_status_waiting_reason, kube_deployment_status_replicas_unavailable, kube_node_status_condition.</p></div>';
-  h += '<div class="split even"><div class="panel col"><h4>Bật audit log</h4>' + wCode(`# /etc/kubernetes/audit/policy.yaml
+hubble observe --verdict DROPPED --namespace dev`);
+const W_OBS_AUDIT1 = wCodeLater(`# /etc/kubernetes/audit/policy.yaml
 apiVersion: audit.k8s.io/v1
 kind: Policy
 omitStages: ["RequestReceived"]
@@ -238,8 +246,8 @@ rules:
 #   - --audit-log-maxage=7
 #   - --audit-log-maxbackup=3
 #   - --audit-log-maxsize=100
-# + volumeMounts/volumes hostPath cho cả hai thư mục`) + "</div>" +
-    '<div class="panel col"><h4>Đọc audit log</h4>' + wCode(`sudo tail -1 /var/log/kubernetes/audit/audit.log | jq '{user: .user.username, verb, uri: .requestURI, code: .responseStatus.code, ip: .sourceIPs[0]}'
+# + volumeMounts/volumes hostPath cho cả hai thư mục`);
+const W_OBS_AUDIT2 = wCodeLater(`sudo tail -1 /var/log/kubernetes/audit/audit.log | jq '{user: .user.username, verb, uri: .requestURI, code: .responseStatus.code, ip: .sourceIPs[0]}'
 {
   "user": "jane",
   "verb": "delete",
@@ -249,6 +257,4 @@ rules:
 }
 # ai đã xóa Deployment web?
 sudo jq -c 'select(.verb=="delete" and (.requestURI|test("deployments/web")))
-  | [.requestReceivedTimestamp, .user.username]' /var/log/kubernetes/audit/audit.log`) + '<p class="small muted">Audit level Request/RequestResponse cho Secret sẽ ghi nội dung Secret vào file log: luôn để Secret ở Metadata.</p></div></div>';
-  return h;
-}
+  | [.requestReceivedTimestamp, .user.username]' /var/log/kubernetes/audit/audit.log`) + '<p class="small muted">Để Secret ở level Metadata: level Request trở lên sẽ ghi nội dung Secret vào file log.</p>';

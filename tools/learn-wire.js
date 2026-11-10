@@ -468,6 +468,26 @@ const wCode = (t, cls) => '<div class="codewrap"><pre class="code' + (cls ? " " 
 const wLabs = ls => ls.map(n => '<a class="pill cp" style="text-decoration:none" href="index.html#lab-' + String(n).padStart(2, "0") + '">Lab ' + String(n).padStart(2, "0") + "</a>").join(" ");
 const W_CIRC = "①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮";
 const W_LOCK = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true" style="vertical-align:-1px"><path fill="currentColor" d="M17 9h-1V7a4 4 0 1 0-8 0v2H7a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2Zm-7-2a2 2 0 1 1 4 0v2h-4V7Z"/></svg>';
+const wTl = items => '<ul class="tldr">' + items.map(x => "<li>" + x + "</li>").join("") + "</ul>";
+const wDet = (t, body, open) => '<details class="bp more"' + (open ? " open" : "") + "><summary>" + t + '</summary><div class="body">' + body + "</div></details>";
+const WIRE_K = {
+  kubectl: "Mọi lệnh kubectl là một request HTTPS tới apiserver; danh tính nằm trong cert hoặc token.",
+  etcd: "Chỉ apiserver nói với etcd, qua mTLS. Dữ liệu trong etcd không được mã hóa nếu chưa bật.",
+  raft: "Các etcd đồng bộ bằng Raft qua mTLS; cần đa số member mới ghi được.",
+  ctrl: "Controller và scheduler chỉ watch apiserver rồi ghi kết quả lại vào apiserver.",
+  kubelet: "kubelet tự gọi lên apiserver (mTLS) để nhận Pod, báo trạng thái và heartbeat mỗi 10 giây.",
+  exec: "Chiều ngược duy nhất: apiserver gọi kubelet :10250 cho logs, exec, port-forward.",
+  cri: "kubelet ra lệnh cho containerd bằng gRPC trên unix socket, không đi qua mạng.",
+  cni: "containerd chạy file CNI kèm JSON để Pod có IP; không có kết nối mạng nào.",
+  reg: "Image tải qua HTTPS và được kiểm sha256 từng layer.",
+  sa: "Pod gọi API bằng token JWT: được ký, không được mã hóa.",
+  dns: "Pod hỏi CoreDNS qua UDP 53, dạng rõ.",
+  pod: "Gói Pod ↔ Pod mặc định không mã hóa, kể cả khi bọc VXLAN.",
+  svc: "kube-proxy không chuyển gói; nó chỉ cài rule DNAT ClusterIP → IP Pod.",
+  hook: "apiserver gọi webhook qua HTTPS trước khi lưu; webhook chết có thể chặn cả cluster.",
+  edge: "TLS kết thúc ở Gateway; đoạn Gateway → Pod là HTTP nếu không cấu hình thêm."
+};
+WIRE_CONNS.forEach(c => { c.k = WIRE_K[c.id]; });
 const W_GROUP = { l2: "Tầng 2", l3: "Tầng 3", l4: "Tầng 4", tun: "Đóng gói", tls: "TLS / mã hóa", app: "Ứng dụng", rest: "Dữ liệu lưu" };
 
 function wireInit() {
@@ -486,6 +506,10 @@ function wireInit() {
       const v = e.target.closest("[data-var]"); if (v) { wireVar = +v.dataset.var; wireShow(); return; }
       const y = e.target.closest("[data-eye]"); if (y) { wireEye = +y.dataset.eye; wireShow(); return; }
       if (e.target.closest("#wmTour")) { wmTour(); return; }
+      const pk = e.target.closest("[data-pki]"); if (pk) { const r = WIRE_PKI[+pk.dataset.pki]; $$(".pki-c").forEach(b => b.classList.toggle("on", b === pk)); $("#pkiInfo").innerHTML = "<b><code>" + kEsc(r[0]) + "</code></b><br>" + kEsc(r[3]) + '<br><span class="small muted">' + kEsc(r[2]) + " · ký bởi " + kEsc(r[1]) + " · hạn " + kEsc(r[4]) + "</span>"; return; }
+      const ge = e.target.closest("[data-go-err]"); if (ge) { errConn = ge.dataset.ec; errQ = ""; wireCur = "err"; store.set("wire", "err"); wireShow(); window.scrollTo(0, $("#errList").getBoundingClientRect().top + scrollY - 140); return; }
+      const ob = e.target.closest("[data-obs]"); if (ob) { obsComp = +ob.dataset.obs; $$("#obsChips button").forEach(b => b.setAttribute("aria-pressed", b === ob ? "true" : "false")); $("#obsCard").innerHTML = obsCompHTML(); return; }
+      const row = e.target.closest(".pk-row"); if (row) { const on = !row.classList.contains("hl"); $$(".pk-row.hl").forEach(x => x.classList.remove("hl")); if (on) row.classList.add("hl"); return; }
       if (e.target.closest("#pkPlay")) { const sc = WIRE_PKTS.find(p => p.id === wirePkt) || WIRE_PKTS[0]; pkPlay(sc, typeof sc.layers === "function" ? sc.layers(wireVar) : sc.layers); return; }
       if (e.target.closest("#sjPlay")) { sjPlay(); return; }
       if (e.target.closest("#wLadPlay")) { wireLadderPlay(); return; }
@@ -501,15 +525,24 @@ function wireInit() {
 }
 
 function wireConnHTML(c) {
-  const kv = [["Trao đổi những gì", c.what], ["Định dạng", c.fmt], ["Mã hóa trên đường đi", c.sec], ["Ai xác thực ai", c.auth], ["Cấu hình ở đâu (kubeadm)", c.cfg]];
-  return '<div class="panel col" id="wireDetail"><div><p class="stepnum">KẾT NỐI ' + W_CIRC[c.n - 1] + "</p><h3>" + kEsc(c.t) + '</h3><div class="pk-pills"><span class="pill">' + kEsc(c.p) + '</span><span class="pill">' + kEsc(c.tr) + '</span><span class="pill">' + kEsc(c.fm) + '</span><span class="pill ' + c.cr[0] + '">' + (c.cr[0] === "ok" ? W_LOCK + " " : "") + kEsc(c.cr[1]) + "</span></div></div>" +
-    '<div class="detail"><div class="kv">' + kv.map(r => '<div><div class="k">' + r[0] + "</div><div>" + r[1] + "</div></div>").join("") + "</div></div>" +
-    '<h4 style="margin-top:6px">Mẫu gói tin (đã giải mã)</h4>' + wCode(c.sample) +
-    "<h4>Xem tận mắt</h4>" + wCode(c.see) +
-    '<h4>Bẫy hay gặp</h4><ul class="tight">' + c.traps.map(x => "<li>" + x + "</li>").join("") + "</ul>" +
-    '<p class="small">' + (c.pk ? '<button type="button" class="btn" data-pk="' + c.pk + '">Mổ gói này theo từng tầng →</button> ' : "") + "Luyện trên cluster: " + wLabs(c.labs) + "</p></div>";
+  const tile = (k, v, cls) => '<div class="ft' + (cls ? " " + cls : "") + '"><span>' + k + "</span><b>" + v + "</b></div>";
+  return '<div class="panel col" id="wireDetail"><div><p class="stepnum">KẾT NỐI ' + W_CIRC[c.n - 1] + "</p><h3>" + kEsc(c.t) + '</h3></div><p class="take">' + kEsc(c.k) + "</p>" +
+    '<div class="facts4">' + tile("Cổng", kEsc(c.p)) + tile("Giao thức", kEsc(c.tr)) + tile("Mã hóa", (c.cr[0] === "ok" ? W_LOCK + " " : "") + kEsc(c.cr[1]), c.cr[0]) + tile("Xác thực", kEsc(c.au)) + "</div>" +
+    (c.pk ? '<p style="margin:0"><button type="button" class="btn" data-pk="' + c.pk + '">▶ Xem gói này đi qua từng tầng</button></p>' : "") +
+    wDet("Trao đổi những gì", "<p>" + c.what + '</p><p class="small muted">' + c.fmt + "</p>") +
+    wDet("Mã hóa và xác thực chi tiết", "<p>" + c.sec + "</p><p>" + c.auth + '</p><p class="small muted">Cấu hình: ' + c.cfg + "</p>") +
+    wDet("Mẫu gói tin (đã giải mã)", wCode(c.sample)) +
+    wDet("Lệnh xem tận mắt", wCode(c.see)) +
+    wDet("Bẫy hay gặp (" + c.traps.length + ")", '<ul class="tight">' + c.traps.map(x => "<li>" + x + "</li>").join("") + "</ul>") +
+    '<p class="small" style="margin:0">Luyện: ' + wLabs(c.labs) + ' · <button type="button" class="linkbtn" data-ec="' + c.id + '" data-go-err="1">Lỗi hay gặp ở kết nối này</button></p></div>';
 }
 
+function pkiTreeHTML() {
+  const grp = { ca: [], etcd: [], fp: [], other: [] };
+  WIRE_PKI.forEach((r, i) => { if (r[1] === "tự ký") return; const g = /^etcd\/ca$/.test(r[1]) ? "etcd" : r[1] === "front-proxy-ca" ? "fp" : /^ca/.test(r[1]) ? "ca" : "other"; grp[g].push(i); });
+  const col = (t, sub, cls, ids) => '<div class="pki-col ' + cls + '"><div class="pki-ca">' + W_LOCK + " <b>" + t + "</b><small>" + sub + "</small></div>" + ids.map(i => '<button type="button" class="pki-c" data-pki="' + i + '">' + kEsc(WIRE_PKI[i][0].split(" → ")[0]) + "</button>").join("") + "</div>";
+  return '<div class="pki-tree">' + col("CA cluster", "ca.crt · 10 năm", "c1", grp.ca) + col("CA etcd", "etcd/ca.crt · 10 năm", "c2", grp.etcd) + col("CA front-proxy", "front-proxy-ca.crt", "c3", grp.fp) + col("Không qua CA", "cặp khóa, tự ký", "c4", grp.other) + "</div>";
+}
 function wireMapDetail() {
   const c = WIRE_CONNS.find(x => x.id === wireConn) || WIRE_CONNS[0];
   $$(".wire-list button").forEach(x => x.setAttribute("aria-pressed", x.dataset.conn === c.id ? "true" : "false"));
@@ -533,7 +566,7 @@ function wirePktHTML() {
   h += '<div class="pk-bar" role="group" aria-label="Gói tin theo thứ tự byte">' + layers.map((l, i) => {
     const hid = eaves && l[5];
     return '<button type="button" data-seg="' + i + '" class="pk-' + l[0] + (hid ? " enc" : "") + '" style="flex-grow:' + Math.max(l[2], 12) + '" title="' + kEsc(l[1] + " · " + l[2] + " byte") + '"><span>' + (hid ? W_LOCK : kEsc(l[1].split(" ")[0])) + "</span></button>";
-  }).join("") + '</div><p class="small muted" style="margin:0">Byte đầu tiên bên trái. Tổng khoảng ' + total + " byte. Bấm một đoạn để tới tầng đó.</p>";
+  }).join("") + '</div><p class="small muted" style="margin:0">Byte đầu tiên bên trái. Tổng khoảng ' + total + " byte. Bấm một tầng để xem giải thích.</p>";
   h += '<div class="pk-rows">' + layers.map((l, i) => {
     const hid = eaves && l[5];
     const st = l[0] === "rest" ? (l[6] ? '<span class="pill ok">' + W_LOCK + " trên đĩa: đã mã hóa</span>" : '<span class="pill bad">trên đĩa: đọc được</span>') : "";
@@ -552,7 +585,7 @@ function wireShow() {
   let h = "";
   if (wireCur === "map") {
     const c = WIRE_CONNS.find(x => x.id === wireConn) || WIRE_CONNS[0];
-    h += '<div class="panel col"><h4>Ai nói chuyện với ai</h4><p class="small muted">Mô hình hub-and-spoke: mọi thành phần gọi vào kube-apiserver, chỉ apiserver chạm vào etcd. Bấm một số, một đường hoặc một thành phần để xem gói tin chạy trên kết nối đó.</p><div class="stage" id="wmStage"></div>' +
+    h += '<div class="panel col"><h4>Ai nói chuyện với ai</h4>' + wTl(["Mọi thứ đi qua <b>kube-apiserver</b>; chỉ apiserver chạm vào etcd.", "Control plane ↔ node: <b>mTLS</b> bằng chứng chỉ.", "Mạng Pod, DNS, Service: <b>không mã hóa</b> mặc định."]) + '<p class="hint" style="margin:0">Bấm một số trên sơ đồ để xem gói tin chạy trên kết nối đó.</p><div class="stage" id="wmStage"></div>' +
       '<div class="controls"><button class="btn primary" type="button" id="wmTour">▶ Hành trình một lệnh kubectl</button><span class="wm-leg"><i class="enc"></i>đã mã hóa (TLS/mTLS)</span><span class="wm-leg"><i class="plain"></i>dạng rõ trên mạng</span><span class="wm-leg"><i class="loc"></i>cục bộ trong node</span></div><p class="hint" id="wmCap" aria-live="polite" style="margin:0">Hành trình chạy lần lượt các kết nối khi tạo một Deployment, từ kubectl tới Pod chạy trên node.</p></div>';
     h += '<div class="wire-split"><div class="panel col wire-list" role="list">' + WIRE_CONNS.map(x => '<button type="button" role="listitem" data-conn="' + x.id + '" aria-pressed="' + (x.id === c.id) + '"><span class="n">' + W_CIRC[x.n - 1] + '</span><span class="t">' + kEsc(x.t) + '<small>' + kEsc(x.p + " · " + x.tr) + '</small></span><span class="pill ' + x.cr[0] + '">' + kEsc(x.cr[1].split(",")[0]) + "</span></button>").join("") + "</div>" + wireConnHTML(c) + "</div>";
   } else if (wireCur === "pkt") {
@@ -562,46 +595,55 @@ function wireShow() {
   } else if (wireCur === "obs") {
     h += wireObsHTML();
   } else if (wireCur === "tls") {
-    h += '<div class="panel col"><h4>Bắt tay TLS 1.3 hai chiều (mTLS)</h4><p class="small muted">Mũi tên đen: dạng rõ. Mũi tên tím có khóa: đã mã hóa bằng khóa phiên.</p><div id="sqTls"></div><p class="small muted">apiserver xin cert client nhưng không bắt buộc: client không có cert vẫn kết nối được và xác thực bằng token trong header. Khóa phiên mới cho mỗi kết nối (forward secrecy): lộ ca.key sau này cũng không giải mã được gói đã bắt trước đó.</p></div>' +
+    h += '<div class="panel col">' + wTl(["Bắt tay xong là mọi thứ <b>mã hóa</b> bằng khóa phiên mới cho mỗi kết nối.", "<b>mTLS</b>: cả hai bên đưa chứng chỉ; apiserver lấy <b>CN = user, O = group</b>.", "Token JWT chỉ <b>được ký</b>, ai đọc file token là đọc được nội dung."]) + "</div>";
+    h += '<div class="panel col"><h4>Bắt tay TLS 1.3 hai chiều (mTLS)</h4><p class="hint" style="margin:0">Mũi tên đen: dạng rõ. Mũi tên tím có khóa: đã mã hóa. Bấm Phát để xem từng bước.</p><div id="sqTls"></div></div>' +
       '<div class="panel col"><h4>Node mới vào cluster: TLS bootstrap</h4><div id="sqBoot"></div></div>';
-    h += '<div class="panel"><h4>Danh tính nằm ở đâu trong gói tin</h4><div class="tbl"><table><thead><tr><th>Cách</th><th>Nằm ở</th><th>apiserver kiểm</th><th>Thành user / group</th></tr></thead><tbody>' + WIRE_IDS.map(r => "<tr><td><b>" + r[0] + "</b></td><td>" + r[1] + "</td><td>" + r[2] + "</td><td>" + r[3] + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Kubernetes không có object User: user chỉ là chuỗi lấy từ cert hoặc token. Thứ tự xử lý một request: xác thực (authn) → phân quyền (Node, RBAC) → admission → validate → lưu etcd.</p></div>';
-    h += '<div class="split even"><div class="panel col"><h4>JWT của ServiceAccount: ký, không mã hóa</h4>' + wCode(`eyJhbGciOiJSUzI1NiIsImtpZCI6Il9uSkF3b2lf….eyJhdWQiOlsiaHR0cHM6Ly9rdWJl….Qx7f0c…
+    h += '<div class="panel col">' + wDet("Danh tính nằm ở đâu trong gói tin (6 cách)", '<div class="tbl"><table><thead><tr><th>Cách</th><th>Nằm ở</th><th>apiserver kiểm</th><th>Thành user / group</th></tr></thead><tbody>' + WIRE_IDS.map(r => "<tr><td><b>" + r[0] + "</b></td><td>" + r[1] + "</td><td>" + r[2] + "</td><td>" + r[3] + "</td></tr>").join("") + '</tbody></table></div><p class="small muted">Thứ tự xử lý một request: xác thực → phân quyền (Node, RBAC) → admission → validate → lưu etcd.</p>') +
+      wDet("Giải phẫu token JWT của ServiceAccount", wCode(`eyJhbGciOiJSUzI1NiIsImtpZCI6Il9uSkF3b2lf….eyJhdWQiOlsiaHR0cHM6Ly9rdWJl….Qx7f0c…
 └──── header (base64url) ────┘ └──── payload (base64url) ────┘ └ chữ ký RS256 ┘
 
 header   {"alg":"RS256","kid":"_nJAwoi_yJG9a-CeSKGxMHcbgZ86VyJhSvv_oq3vzFY"}
 payload  {"sub":"system:serviceaccount:default:default",
           "aud":["https://kubernetes.default.svc.cluster.local"],
           "kubernetes.io":{"namespace":"default","pod":{"name":"web-66d47686b4-4wzmh",…}}, "exp":…}
-chữ ký   = RSA(sa.key, sha256(header "." payload))`) + '<p class="small muted">Ai cũng giải base64 được để đọc payload. Chữ ký chỉ chứng minh token do cluster cấp và chưa bị sửa. Lấy được file token là dùng được quyền của ServiceAccount.</p></div>' +
-      '<div class="panel col"><h4>Mã hóa đối xứng và bất đối xứng dùng ở đâu</h4><div class="tbl"><table><tbody>' + [
+chữ ký   = RSA(sa.key, sha256(header "." payload))`)) +
+      wDet("Mã hóa đối xứng, bất đối xứng, băm: dùng ở đâu", '<div class="tbl"><table><tbody>' + [
         ["Bất đối xứng (RSA, ECDSA, Ed25519)", "Chữ ký trên chứng chỉ, CertificateVerify khi bắt tay, chữ ký JWT"],
         ["Trao đổi khóa (ECDHE X25519, Curve25519)", "Sinh khóa phiên TLS, WireGuard"],
         ["Đối xứng có xác thực (AES-GCM, ChaCha20-Poly1305)", "Dữ liệu trong kết nối TLS và WireGuard"],
         ["Đối xứng lúc lưu (AES-CBC, AES-GCM, XSalsa20)", "EncryptionConfiguration cho Secret trong etcd"],
         ["Băm (SHA-256)", "Digest image, --discovery-token-ca-cert-hash, annotation checksum/config"],
         ["Không phải mã hóa", "base64 trong Secret JSON, base64url trong JWT: chỉ là cách viết bytes thành chữ"]
-      ].map(r => "<tr><td><b>" + kEsc(r[0]) + "</b></td><td>" + kEsc(r[1]) + "</td></tr>").join("") + "</tbody></table></div></div></div>";
+      ].map(r => "<tr><td><b>" + kEsc(r[0]) + "</b></td><td>" + kEsc(r[1]) + "</td></tr>").join("") + "</tbody></table></div>") +
+      wDet("Vì sao lộ ca.key sau này vẫn không giải mã được gói cũ", '<p>Khóa phiên sinh từ ECDHE và bị bỏ sau mỗi kết nối (forward secrecy). ca.key chỉ dùng để ký, không dùng để mã hóa dữ liệu.</p>') + "</div>";
   } else if (wireCur === "pki") {
-    h += '<div class="panel"><h4>Thư mục /etc/kubernetes/pki và các kubeconfig</h4><p class="small muted">kubeadm tạo ba CA độc lập: cluster (<code>ca</code>), etcd (<code>etcd/ca</code>) và aggregation (<code>front-proxy-ca</code>). Một cert chỉ được tin ở nơi tin CA đã ký nó.</p><div class="tbl"><table><thead><tr><th>File</th><th>Ký bởi</th><th>Subject</th><th>Dùng cho</th><th>Hạn</th></tr></thead><tbody>' +
-      WIRE_PKI.map(r => "<tr><td><code>" + kEsc(r[0]) + "</code></td><td>" + kEsc(r[1]) + '</td><td class="small">' + kEsc(r[2]) + "</td><td>" + kEsc(r[3]) + "</td><td>" + kEsc(r[4]) + "</td></tr>").join("") + "</tbody></table></div></div>";
-    h += '<div class="split even"><div class="panel col"><h4>Kiểm tra và gia hạn</h4>' + wCode(`sudo kubeadm certs check-expiration
+    h += '<div class="panel col">' + wTl(["kubeadm tạo <b>3 CA riêng</b>: cluster, etcd, front-proxy.", "CA sống <b>10 năm</b>, cert lá <b>1 năm</b>.", "Cert chỉ được tin ở nơi tin CA đã ký nó."]) + "</div>";
+    h += '<div class="panel col"><h4>Ai ký cho ai</h4><p class="hint" style="margin:0">Bấm một chứng chỉ để xem nó là ai và dùng vào việc gì.</p>' + pkiTreeHTML() + '<div id="pkiInfo" class="pki-info" aria-live="polite"></div></div>';
+    h += '<div class="panel col">' + wDet("Kiểm tra và gia hạn", wCode(`sudo kubeadm certs check-expiration
 sudo openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout \\
   -subject -issuer -dates -ext subjectAltName
 sudo kubeadm certs renew all
 # static Pod không tự nạp cert mới: khởi động lại apiserver, controller-manager, scheduler, etcd
 sudo mv /etc/kubernetes/manifests/*.yaml /tmp/ && sleep 20 && sudo mv /tmp/kube-*.yaml /tmp/etcd.yaml /etc/kubernetes/manifests/
 sudo cp /etc/kubernetes/admin.conf ~/.kube/config
-# kubeadm upgrade apply tự gia hạn các cert này`) + "</div>" +
-      '<div class="panel col"><h4>Thêm tên hoặc IP vào cert của apiserver</h4>' + wCode(`kubectl -n kube-system get cm kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' > kc.yaml
+# kubeadm upgrade apply tự gia hạn các cert này`)) + wDet("Thêm tên hoặc IP vào cert của apiserver", wCode(`kubectl -n kube-system get cm kubeadm-config -o jsonpath='{.data.ClusterConfiguration}' > kc.yaml
 # thêm vào kc.yaml:
 #   apiServer:
 #     certSANs: ["lb.lab", "10.0.0.100"]
 sudo mv /etc/kubernetes/pki/apiserver.{crt,key} /tmp/
 sudo kubeadm init phase certs apiserver --config kc.yaml
-# rồi khởi động lại kube-apiserver như trên và kiểm SAN bằng openssl`) + '<p class="small muted">Duyệt cert cho user mới bằng CSR: xem Lab 24.</p></div></div>';
+# rồi khởi động lại kube-apiserver như trên và kiểm SAN bằng openssl`)) + wDet("Bảng đầy đủ 17 file", '<div class="tbl"><table><thead><tr><th>File</th><th>Ký bởi</th><th>Subject</th><th>Dùng cho</th><th>Hạn</th></tr></thead><tbody>' +
+      WIRE_PKI.map(r => "<tr><td><code>" + kEsc(r[0]) + "</code></td><td>" + kEsc(r[1]) + '</td><td class="small">' + kEsc(r[2]) + "</td><td>" + kEsc(r[3]) + "</td><td>" + kEsc(r[4]) + "</td></tr>").join("") + "</tbody></table></div>") + "</div>";
   } else if (wireCur === "rest") {
-    h += '<div class="panel col"><h4>Hành trình của một Secret</h4>' + sjHTML() + '<div class="tbl"><table id="wireJourney"><thead><tr><th>#</th><th>Chặng</th><th>Dạng dữ liệu</th><th>Được bảo vệ bằng</th></tr></thead><tbody>' + WIRE_JOURNEY.map(r => "<tr><td>" + r[0] + "</td><td><b>" + kEsc(r[1]) + "</b></td><td>" + kEsc(r[2]) + "</td><td>" + (r[4] ? '<span class="pill ' + r[4] + '">' + kEsc(r[3]) + "</span>" : kEsc(r[3])) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted" style="margin-top:10px">Chặng yếu nhất mặc định là 4: etcd và mọi bản sao lưu của nó. EncryptionConfiguration chỉ vá chặng đó; chặng 6 và 7 cần RBAC chặt (ai được get secret, ai được exec) và hệ thống quản lý bí mật bên ngoài nếu cần.</p></div>';
-    h += '<div class="split even"><div class="panel col"><h4>Bật mã hóa Secret trong etcd</h4>' + wCode(`# 1. Tạo khóa 32 byte và file cấu hình trên MỌI control plane
+    h += '<div class="panel col">' + wTl(["Mặc định Secret nằm trong etcd ở <b>dạng đọc được</b>; base64 không phải mã hóa.", "TLS chỉ che <b>trên đường đi</b>; đĩa etcd và snapshot vẫn lộ.", "Bật <b>EncryptionConfiguration</b> để apiserver mã hóa trước khi ghi."]) + "</div>";
+    h += '<div class="panel col"><h4>Hành trình của một Secret</h4>' + sjHTML() + wDet("Bảng 7 chặng", '<div class="tbl"><table id="wireJourney"><thead><tr><th>#</th><th>Chặng</th><th>Dạng dữ liệu</th><th>Được bảo vệ bằng</th></tr></thead><tbody>' + WIRE_JOURNEY.map(r => "<tr><td>" + r[0] + "</td><td><b>" + kEsc(r[1]) + "</b></td><td>" + kEsc(r[2]) + "</td><td>" + (r[4] ? '<span class="pill ' + r[4] + '">' + kEsc(r[3]) + "</span>" : kEsc(r[3])) + "</td></tr>").join("") + "</tbody></table></div>") + "</div>";
+    h += '<div class="panel col"><h4>Trước và sau khi bật (hexdump từ etcd)</h4><div class="split even"><div class="col"><span class="pill bad">Trước: thấy S3cr3t!</span>' + wCode(`00000000  6b 38 73 00 0a 0c 0a 02  76 31 12 06 53 65 63 72  |k8s.....v1..Secr|
+00000010  65 74 12 cd 01 0a ad 01  0a 02 64 62 12 00 1a 07  |et........db....|
+000000c0  7b 7d 7d 42 00 12 13 0a  08 70 61 73 73 77 6f 72  |{}}B.....passwor|
+000000d0  64 12 07 53 33 63 72 33  74 21 1a 06 4f 70 61 71  |d..S3cr3t!..Opaq|`) + '</div><div class="col"><span class="pill ok">' + W_LOCK + ' Sau: chỉ thấy k8s:enc:aescbc</span>' + wCode(`00000000  6b 38 73 3a 65 6e 63 3a  61 65 73 63 62 63 3a 76  |k8s:enc:aescbc:v|
+00000010  31 3a 6b 65 79 31 3a 9c  41 e0 7d 2b 5a 13 c8 f0  |1:key1:.A.}+Z...|
+00000020  3e 77 a1 0b 64 d2 19 8e  c4 55 0f 6a b3 27 e9 41  |>w..d....U.j.'.A|`) + "</div></div></div>";
+    h += '<div class="panel col">' + wDet("Các bước bật mã hóa (hay ra trong đề)", wCode(`# 1. Tạo khóa 32 byte và file cấu hình trên MỌI control plane
 head -c 32 /dev/urandom | base64
 sudo mkdir -p /etc/kubernetes/enc
 sudo tee /etc/kubernetes/enc/enc.yaml <<'EOF'
@@ -623,21 +665,13 @@ EOF
 #   volumes:      {name: enc, hostPath: {path: /etc/kubernetes/enc, type: DirectoryOrCreate}}
 
 # 3. Chờ apiserver chạy lại, rồi ghi lại mọi Secret cũ để chúng được mã hóa
-kubectl get secrets -A -o json | kubectl replace -f -`) + "</div>" +
-      '<div class="panel col"><h4>Kiểm tra bằng etcdctl</h4>' + wCode(`sudo etcdctl --endpoints=https://127.0.0.1:2379 \\
+kubectl get secrets -A -o json | kubectl replace -f -`)) + wDet("Lệnh kiểm tra bằng etcdctl", wCode(`sudo etcdctl --endpoints=https://127.0.0.1:2379 \\
   --cacert=/etc/kubernetes/pki/etcd/ca.crt \\
   --cert=/etc/kubernetes/pki/apiserver-etcd-client.crt \\
   --key=/etc/kubernetes/pki/apiserver-etcd-client.key \\
-  get /registry/secrets/default/db --print-value-only | hexdump -C | head -4`) +
-      '<p class="small"><b>Trước</b> (bắt thật trên cluster lab):</p>' + wCode(`00000000  6b 38 73 00 0a 0c 0a 02  76 31 12 06 53 65 63 72  |k8s.....v1..Secr|
-00000010  65 74 12 cd 01 0a ad 01  0a 02 64 62 12 00 1a 07  |et........db....|
-000000c0  7b 7d 7d 42 00 12 13 0a  08 70 61 73 73 77 6f 72  |{}}B.....passwor|
-000000d0  64 12 07 53 33 63 72 33  74 21 1a 06 4f 70 61 71  |d..S3cr3t!..Opaq|`) +
-      '<p class="small"><b>Sau</b> khi bật aescbc và replace:</p>' + wCode(`00000000  6b 38 73 3a 65 6e 63 3a  61 65 73 63 62 63 3a 76  |k8s:enc:aescbc:v|
-00000010  31 3a 6b 65 79 31 3a 9c  41 e0 7d 2b 5a 13 c8 f0  |1:key1:.A.}+Z...|
-00000020  3e 77 a1 0b 64 d2 19 8e  c4 55 0f 6a b3 27 e9 41  |>w..d....U.j.'.A|`) +
-      '<p class="small muted">Xoay khóa: thêm key2 lên đầu danh sách, khởi động lại apiserver, replace mọi Secret, rồi mới bỏ key1. Xóa key1 trước là mất Secret.</p></div></div>';
-    h += '<div class="panel"><h4>Các provider</h4><div class="tbl"><table><thead><tr><th>Provider</th><th>Thuật toán</th><th>Ghi chú</th></tr></thead><tbody>' + WIRE_PROVIDERS.map(r => "<tr><td><code>" + kEsc(r[0]) + "</code></td><td>" + kEsc(r[1]) + "</td><td>" + kEsc(r[2]) + "</td></tr>").join("") + "</tbody></table></div></div>";
+  get /registry/secrets/default/db --print-value-only | hexdump -C | head -4`)) +
+      wDet("Xoay khóa", "<p>Thêm key2 lên đầu danh sách → khởi động lại apiserver → replace mọi Secret → mới bỏ key1. Xóa key1 trước là mất Secret.</p>") +
+      wDet("So sánh các provider", '<div class="tbl"><table><thead><tr><th>Provider</th><th>Thuật toán</th><th>Ghi chú</th></tr></thead><tbody>' + WIRE_PROVIDERS.map(r => "<tr><td><code>" + kEsc(r[0]) + "</code></td><td>" + kEsc(r[1]) + "</td><td>" + kEsc(r[2]) + "</td></tr>").join("") + "</tbody></table></div>") + "</div>";
   } else {
     h += '<div class="panel"><div class="tbl"><table id="wireCheat"><thead><tr><th>#</th><th>Kết nối</th><th>Cổng</th><th>Vận chuyển</th><th>Định dạng</th><th>Mã hóa</th><th>Xác thực</th></tr></thead><tbody>' +
       WIRE_CONNS.map(c => '<tr><td>' + W_CIRC[c.n - 1] + '</td><td><button type="button" class="linkbtn" data-conn="' + c.id + '">' + kEsc(c.t) + "</button></td><td><code>" + kEsc(c.p) + "</code></td><td>" + kEsc(c.tr) + "</td><td>" + kEsc(c.fm) + '</td><td><span class="pill ' + c.cr[0] + '">' + kEsc(c.cr[1]) + "</span></td><td>" + kEsc(c.au) + "</td></tr>").join("") + "</tbody></table></div></div>";

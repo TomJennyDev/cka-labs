@@ -352,6 +352,48 @@ details.err summary .pill{flex:none;margin-top:2px}
 details.err code.em{white-space:normal;overflow-wrap:anywhere;font-size:12.5px;background:none;border:0;padding:0;color:var(--bad);font-weight:600}
 .obs4{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
 .obs4 code{white-space:normal}
+/* gọn chữ: tóm tắt trước, chi tiết bấm mới mở */
+ul.tldr{list-style:none;margin:0;padding:0;display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))}
+ul.tldr li{background:var(--accent-soft);border-radius:8px;padding:10px 12px 10px 34px;position:relative;font-size:14.5px;line-height:1.45}
+ul.tldr li::before{content:"✓";position:absolute;left:12px;top:9px;font-weight:800;color:var(--accent)}
+details.more{border-top:1px solid var(--line);padding:10px 0}
+details.more:first-of-type{border-top:0}
+details.more summary{font-size:14.5px}
+p.take{font-size:17px;line-height:1.45;font-weight:600;margin:0;border-left:4px solid var(--pkt);padding-left:12px}
+.facts4{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:8px}
+.facts4 .ft{background:var(--paper-2);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.facts4 .ft span{font:600 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.facts4 .ft b{font-size:14px;overflow-wrap:anywhere}
+.facts4 .ft.ok{background:var(--node-soft)}.facts4 .ft.ok b{color:var(--node)}
+.facts4 .ft.bad{background:var(--bad-soft)}.facts4 .ft.bad b{color:var(--bad)}
+.facts4 .ft.warn{background:var(--pkt-soft)}.facts4 .ft.warn b{color:var(--pkt)}
+.pk-row>p{display:none}
+.pk-row.hl>p{display:block}
+.pk-row{cursor:pointer}
+.pki-tree{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr))}
+.pki-col{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;border-top-width:4px}
+.pki-col.c1{border-top-color:var(--accent)}.pki-col.c2{border-top-color:var(--data)}.pki-col.c3{border-top-color:var(--node)}.pki-col.c4{border-top-color:var(--muted)}
+.pki-ca{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;padding-bottom:4px}
+.pki-ca small{width:100%;font:11.5px var(--f-mono);color:var(--muted)}
+.pki-c{text-align:left;font:500 12.5px var(--f-mono);border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:6px 8px;cursor:pointer;overflow-wrap:anywhere}
+.pki-c:hover{border-color:var(--accent)}.pki-c.on{background:var(--pkt-soft);border-color:var(--pkt)}
+.pki-info{min-height:22px;font-size:14px}
+.sig6{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))}
+.sig6 .sg{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.sig6 .sg b{font-family:var(--f-display);font-size:18px}
+.sig6 .sg span{font-size:13px;color:var(--muted)}
+.sig6 .sg code{white-space:normal;font-size:11.5px;margin-top:auto}
+.obs-card{display:grid;gap:8px}
+.obs-card>div{background:var(--paper-2);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.obs-card span{width:100%;font:600 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.obs-card code{white-space:normal}
+ol.ladder li{grid-template-columns:30px auto minmax(0,1fr);align-items:center;padding:7px 12px}
+ol.ladder .sig{font-size:12.5px;color:var(--muted);text-align:right}
+details.err summary>span:last-child{font-weight:600}
+details.err code.em{display:block}
+@media (min-width:720px){.sig6{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){#errChips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}#errChips button{flex:none}
+  ol.ladder li{grid-template-columns:30px minmax(0,1fr)}ol.ladder .sig{grid-column:2;text-align:left}}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
@@ -822,7 +864,7 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
   <header class="vh">
     <p class="eyebrow">Nền tảng · bên trong các kết nối</p>
     <h2>Giao tiếp &amp; mã hóa: gói tin chứa gì, ai đọc được</h2>
-    <p class="lead">Mỗi mũi tên trong cluster là một kết nối có cổng, giao thức, định dạng dữ liệu, cách mã hóa và cách xác thực riêng. Chọn một kết nối để xem nó trao đổi gì, mẫu gói tin sau khi giải mã và lệnh để tự xem trên cluster. Các mẫu ghi "bắt thật" được bắt trên cluster lab.</p>
+    <p class="lead">Mỗi mũi tên là một kết nối. Bấm vào để xem gói tin chạy, nó chứa gì và ai đọc được.</p>
   </header>
   <div class="seg" id="wireTabs" role="group" aria-label="Chọn chủ đề"></div>
   <div id="wireBody" class="col" style="gap:16px" aria-live="polite"></div>
