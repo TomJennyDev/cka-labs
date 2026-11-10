@@ -41,7 +41,7 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--paper-2);border:
 .xnav{display:flex;gap:4px;margin-left:6px}.xnav a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:6px;white-space:nowrap}.xnav a[aria-current="page"]{color:var(--ink);background:var(--paper-2)}
 @media (max-width:560px){.xnav{margin-left:0}.xnav a{padding:6px 7px;font-size:13px}.top .meta,.brand .tag{display:none!important}.top{gap:8px}}
 .plan li>div{min-width:0;overflow-wrap:anywhere}
-.mmd{overflow-x:auto;text-align:center;padding:4px 0}
+.mmd{overflow-x:auto;text-align:center;padding:4px 0;contain:paint}
 .mmd pre.mermaid{background:none;margin:0;font:12px/1.5 var(--f-mono);color:var(--ink);text-align:left;white-space:pre-wrap}
 .mmd svg{height:auto}
 @media (max-width:640px){.mmd svg{min-width:560px}}
@@ -266,6 +266,43 @@ td.num,th.num{font-variant-numeric:tabular-nums}
 .nodemem i{position:absolute;inset:0 auto 0 0;background:var(--pkt);opacity:.7;transition:width .3s}
 .nodemem .th{position:absolute;top:0;bottom:0;width:2px;background:var(--bad)}
 
+/* ---------- giao tiếp & mã hóa ---------- */
+.wire-split{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+@media (min-width:920px){.wire-split{grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr)}.wire-list{position:sticky;top:120px}}
+.wire-list{gap:2px;padding:10px}
+#wireDetail .kv>div{overflow-wrap:anywhere;min-width:0}
+.wire-list button{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;border:0;background:none;color:var(--ink);font:500 13.5px/1.35 var(--f-body);padding:8px;border-radius:7px;cursor:pointer}
+.wire-list button:hover{background:var(--paper-2)}
+.wire-list button[aria-pressed="true"]{background:var(--accent-soft)}
+.wire-list .n{font:600 14px var(--f-mono);color:var(--accent)}
+.wire-list .t{min-width:0;overflow-wrap:anywhere}
+.wire-list small{display:block;font:11.5px var(--f-mono);color:var(--muted);margin-top:2px}
+.pk-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pk-pills .pill{white-space:normal}
+.pk-bar{display:flex;height:46px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+.pk-bar button{flex-basis:0;min-width:24px;border:0;border-right:2px solid var(--paper);font:600 10.5px var(--f-mono);cursor:pointer;padding:0 3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pk-bar button:last-child{border-right:0}
+.pk-bar span{display:block;overflow:hidden;text-overflow:ellipsis}
+.pk-l2{background:var(--paper-2);color:var(--muted)}
+.pk-l3{background:var(--accent-soft);color:var(--accent)}
+.pk-l4{background:var(--node-soft);color:var(--node)}
+.pk-tun{background:var(--pkt-soft);color:var(--pkt)}
+.pk-tls{background:var(--data-soft);color:var(--data)}
+.pk-app,.pk-rest{background:var(--bad-soft);color:var(--bad)}
+.pk-bar .enc{background:repeating-linear-gradient(135deg,var(--data-soft) 0 6px,var(--paper) 6px 10px);color:var(--data)}
+.pk-rows{display:flex;flex-direction:column;gap:8px}
+.pk-row{border:1px solid var(--line);border-left-width:6px;border-radius:8px;padding:10px 12px;background:var(--paper);display:flex;flex-direction:column;gap:6px;min-width:0}
+.pk-row.pk-l2{border-left-color:var(--muted)}.pk-row.pk-l3{border-left-color:var(--accent)}.pk-row.pk-l4{border-left-color:var(--node)}.pk-row.pk-tun{border-left-color:var(--pkt)}.pk-row.pk-tls{border-left-color:var(--data)}.pk-row.pk-app,.pk-row.pk-rest{border-left-color:var(--bad)}
+.pk-row.enc{border-left-color:var(--data)}
+.pk-row.hl{box-shadow:0 0 0 2px var(--pkt)}
+.pk-h{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.pk-f{margin:0;font:12.5px/1.55 var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.pk-x{color:var(--data);letter-spacing:1px}
+.pk-row p{margin:0}
+.linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-align:left;text-decoration:underline}
+#wireCheat td{font-size:13.5px}
+#wireBody td code{white-space:normal}
+.pk-x{letter-spacing:0}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
@@ -729,6 +766,17 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
     <div class="dots" id="mechDots"></div>
   </div>
   <div class="panel stepbox" id="mechStep" aria-live="polite"></div>
+</section>
+
+<!-- ============ GIAO TIẾP & MÃ HÓA ============ -->
+<section class="view" data-view="wire" hidden>
+  <header class="vh">
+    <p class="eyebrow">Nền tảng · bên trong các kết nối</p>
+    <h2>Giao tiếp &amp; mã hóa: gói tin chứa gì, ai đọc được</h2>
+    <p class="lead">Mỗi mũi tên trong cluster là một kết nối có cổng, giao thức, định dạng dữ liệu, cách mã hóa và cách xác thực riêng. Chọn một kết nối để xem nó trao đổi gì, mẫu gói tin sau khi giải mã và lệnh để tự xem trên cluster. Các mẫu ghi "bắt thật" được bắt trên cluster lab.</p>
+  </header>
+  <div class="seg" id="wireTabs" role="group" aria-label="Chọn chủ đề"></div>
+  <div id="wireBody" class="col" style="gap:16px" aria-live="polite"></div>
 </section>
 
 <!-- ============ 04 NETWORK ============ -->
@@ -1585,10 +1633,10 @@ function addCopy(wrap, pre) {
 
 /* ---------- modules / nav ---------- */
 const MODULES = [
-  { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "arch", n: "01", t: "Kiến trúc cluster" }, { id: "flow", n: "02", t: "Một Pod ra đời" }, { id: "linux", n: "03", t: "Bên trong Linux" }, { id: "mech", n: "04", t: "Cơ chế động" },
-  { g: "Domain thi" }, { id: "network", n: "05", t: "Mạng & Service" }, { id: "kinds", n: "06", t: "Workload resources" }, { id: "workloads", n: "07", t: "Rolling update & Scheduling" }, { id: "probes", n: "08", t: "Probes & tự phục hồi" }, { id: "storage", n: "09", t: "Storage" }, { id: "security", n: "10", t: "RBAC & bảo mật" }, { id: "ops", n: "11", t: "Vận hành cluster" }, { id: "trouble", n: "12", t: "Troubleshooting" },
-  { g: "Thực chiến" }, { id: "labs", n: "13", t: "Bài tập theo domain" }, { id: "best", n: "14", t: "Best practices & cấu trúc dự án" }, { id: "perf", n: "15", t: "Hiệu năng & QoS" }, { id: "cases", n: "16", t: "Use case thực tế" }, { id: "quiz", n: "17", t: "Quiz" },
-  { g: "Tra cứu" }, { id: "concepts", n: "18", t: "Thư viện khái niệm" }, { id: "commands", n: "19", t: "Lệnh & terminal" }
+  { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "arch", n: "01", t: "Kiến trúc cluster" }, { id: "flow", n: "02", t: "Một Pod ra đời" }, { id: "linux", n: "03", t: "Bên trong Linux" }, { id: "mech", n: "04", t: "Cơ chế động" }, { id: "wire", n: "05", t: "Giao tiếp & mã hóa" },
+  { g: "Domain thi" }, { id: "network", n: "06", t: "Mạng & Service" }, { id: "kinds", n: "07", t: "Workload resources" }, { id: "workloads", n: "08", t: "Rolling update & Scheduling" }, { id: "probes", n: "09", t: "Probes & tự phục hồi" }, { id: "storage", n: "10", t: "Storage" }, { id: "security", n: "11", t: "RBAC & bảo mật" }, { id: "ops", n: "12", t: "Vận hành cluster" }, { id: "trouble", n: "13", t: "Troubleshooting" },
+  { g: "Thực chiến" }, { id: "labs", n: "14", t: "Bài tập theo domain" }, { id: "best", n: "15", t: "Best practices & cấu trúc dự án" }, { id: "perf", n: "16", t: "Hiệu năng & QoS" }, { id: "cases", n: "17", t: "Use case thực tế" }, { id: "quiz", n: "18", t: "Quiz" },
+  { g: "Tra cứu" }, { id: "concepts", n: "19", t: "Thư viện khái niệm" }, { id: "commands", n: "20", t: "Lệnh & terminal" }
 ];
 const onShow = {};
 let current = "overview";
