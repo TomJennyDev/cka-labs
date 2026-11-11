@@ -2,7 +2,7 @@
 /* Mô phỏng HPA + Cluster Autoscaler theo nhịp 15 giây, máy tính số node (allocatable, bin-packing, chi phí),
    rightsizing requests từ số đo thật, các kiểu autoscaling và lỗi khi scale. build.py chèn vào learn.html. */
 
-const SC_TABS = [["hpa", "Mô phỏng HPA + autoscaler"], ["node", "Ước lượng số node"], ["right", "Rightsizing requests"], ["kinds", "Các kiểu scaling"], ["err", "Lỗi khi scale"]];
+const SC_TABS = [["hpa", "Mô phỏng HPA + autoscaler"], ["node", "Ước lượng số node"], ["quota", "Quota & giới hạn"], ["right", "Rightsizing requests"], ["kinds", "Các kiểu scaling"], ["err", "Lỗi khi scale"]];
 let scCur = "hpa";
 const scEsc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 const scCode = t => '<div class="codewrap"><pre class="code">' + scEsc(t) + "</pre></div>";
@@ -26,6 +26,7 @@ function scShow() {
   box.oninput = box.onchange = box.onclick = null;
   if (scCur === "hpa") { box.innerHTML = hpaHTML(); hpaReset(); }
   else if (scCur === "node") { box.innerHTML = nodeHTML(); nodeCalc(); }
+  else if (scCur === "quota") { box.innerHTML = quotaHTML(); quotaInit(); }
   else if (scCur === "right") { box.innerHTML = rightHTML(); rightCalc(); }
   else if (scCur === "kinds") box.innerHTML = kindsScaleHTML();
   else box.innerHTML = scErrHTML();
@@ -456,6 +457,127 @@ const SC_ERRS = [
 function scErrHTML() {
   return '<div class="panel col"><h4>' + SC_ERRS.length + " lỗi hay gặp khi scale</h4>" + SC_ERRS.map(e => '<details class="bp err"><summary><span>' + scEsc(e[0]) + '</span></summary><div class="body"><code class="em">' + scEsc(e[1]) + '</code><p style="margin:0"><b>Vì sao:</b> ' + scEsc(e[2]) + '</p><span class="tb-h">Kiểm tra</span>' + scCode(e[3]) + '<span class="tb-h ok">Cách sửa</span>' + scCode(e[4]) + "</div></details>").join("") +
     '<p class="small">Luyện: <a class="pill cp" style="text-decoration:none" href="index.html#lab-11">Lab 11 · metrics-server và HPA</a></p></div>';
+}
+
+
+/* ================= quota & các chốt giới hạn ================= */
+const QG = [["HPA", "replicas max"], ["LimitRange", "min, max, mặc định"], ["ResourceQuota", "tổng namespace"], ["Scheduler", "allocatable"], ["kubelet", "eviction"], ["cgroup", "limits"]];
+const QS = [
+  { id: "ok", t: "Pod hợp lệ", pod: "requests cpu 500m · mem 512Mi · limits mem 512Mi", at: -1,
+    c: [["ok", "HPA muốn 4 Pod, maxReplicas 20"], ["ok", "Pod đã khai đủ, không cần điền mặc định; cpu limit 1 ≤ max 2"], ["ok", "requests.cpu: 1200m + 500m ≤ 2 · requests.memory: 3Gi + 512Mi ≤ 16Gi"], ["ok", "node02 còn trống 1,4 vCPU · 3 GiB allocatable"], ["ok", "node02 còn 2,1 GiB RAM, trên ngưỡng 100Mi"], ["ok", "dùng 300m / limit 1 CPU · 400Mi / 512Mi"]],
+    msg: "web-7c9d-x2   1/1   Running   0   20s", fix: "" },
+  { id: "hpamax", t: "HPA đã chạm maxReplicas", pod: "HPA min 2 · max 20 · tải cần 26 Pod", at: 0,
+    c: [["bad", "HPA tính ra 26 Pod nhưng maxReplicas là 20: chỉ chạy 20, CPU vẫn quá mục tiêu"]],
+    msg: "ScalingLimited  True  TooManyReplicas  the desired replica count is more than the maximum replica count", where: "k describe hpa web", fix: "Tăng maxReplicas (kiểm quota còn đủ cho số Pod mới), hoặc giảm tải mỗi Pod." },
+  { id: "lrmax", t: "Vượt max của LimitRange", pod: "limits cpu 4 · LimitRange max cpu 2", at: 1,
+    c: [["ok", "HPA muốn 4 Pod"], ["bad", "LimitRange max cpu 2 cho mỗi container, Pod đặt limits.cpu 4"]],
+    msg: 'Error creating: pods "web-7c9d-x2" is forbidden: maximum cpu usage per Container is 2, but limit is 4', where: "k describe rs -l app=web | tail -3", fix: "Giảm limits.cpu xuống ≤ 2, hoặc sửa LimitRange nếu workload thật sự cần." },
+  { id: "noreq", t: "Không khai requests, namespace có quota", pod: "không có resources · namespace có quota cpu/memory, không có LimitRange", at: 2,
+    c: [["ok", "HPA muốn 4 Pod"], ["skip", "Namespace không có LimitRange: không ai điền requests mặc định"], ["bad", "Quota có requests.cpu, requests.memory, limits.memory: Pod bắt buộc khai cả ba"]],
+    msg: 'Error creating: pods "web-7c9d-x2" is forbidden: failed quota: compute: must specify limits.memory for: web; requests.cpu for: web; requests.memory for: web', where: "k describe rs -l app=web | tail -3", fix: "Thêm resources vào Pod, hoặc tạo LimitRange có defaultRequest và default để tự điền." },
+  { id: "full", t: "Vượt tổng quota của namespace", pod: "requests cpu 500m · quota requests.cpu 2 · đã dùng 1800m", at: 2,
+    c: [["ok", "HPA muốn 5 Pod"], ["ok", "LimitRange: hợp lệ"], ["bad", "requests.cpu: 1800m + 500m = 2300m > 2"]],
+    msg: 'Error creating: pods "web-7c9d-x5" is forbidden: exceeded quota: compute, requested: requests.cpu=500m, used: requests.cpu=1800m, limited: requests.cpu=2', where: "k describe quota compute -n shop", fix: "Tăng quota, giảm requests mỗi Pod (xem Rightsizing), hoặc giảm replicas." },
+  { id: "rollout", t: "Rollout kẹt vì không còn quota cho Pod surge", pod: "4 Pod × 500m = 2 (đúng bằng quota) · maxSurge 25%", at: 2,
+    c: [["ok", "Deployment cần thêm 1 Pod mới (maxSurge 25% của 4)"], ["ok", "LimitRange: hợp lệ"], ["bad", "Pod cũ đã dùng hết 2/2 CPU; Pod mới cần thêm 500m trước khi Pod cũ được xóa"]],
+    msg: 'Error creating: pods "web-5f8b-q1" is forbidden: exceeded quota: compute, requested: requests.cpu=500m, used: requests.cpu=2, limited: requests.cpu=2', where: "k rollout status deploy/web   # đứng ở 0 of 4 updated\nk describe rs -l app=web | tail -3", fix: "strategy.rollingUpdate: maxSurge: 0, maxUnavailable: 1 (thay từng Pod), hoặc chừa quota cho Pod surge." },
+  { id: "nonode", t: "Quota đủ nhưng không node nào đủ chỗ", pod: "requests mem 6Gi · node lớn nhất còn 3,2Gi", at: 3,
+    c: [["ok", "HPA muốn 4 Pod"], ["ok", "LimitRange: hợp lệ"], ["ok", "Quota còn đủ"], ["bad", "Không node nào còn 6Gi allocatable trống"]],
+    msg: "0/3 nodes are available: 1 node(s) had untolerated taint {node-role.kubernetes.io/control-plane: }, 2 Insufficient memory. preemption: 0/3 nodes are available: 1 Preemption is not helpful for scheduling, 2 No preemption victims found for incoming pod.", where: "k describe pod web-7c9d-x2 | tail -3", fix: "Giảm requests, thêm node lớn hơn, hoặc bật Cluster Autoscaler (Pod Pending sẽ kích thêm node)." },
+  { id: "evict", t: "Node thiếu RAM, Pod dùng vượt requests bị đuổi", pod: "requests mem 256Mi · đang dùng 1,5Gi · không có limit", at: 4,
+    c: [["ok", "HPA muốn 4 Pod"], ["ok", "LimitRange: hợp lệ"], ["ok", "Quota tính theo requests 256Mi: đủ"], ["ok", "Scheduler xếp theo 256Mi: còn chỗ"], ["bad", "node còn 90Mi < ngưỡng memory.available 100Mi; Pod này dùng vượt requests nhiều nhất nên bị đuổi trước"]],
+    msg: "The node was low on resource: memory. Threshold quantity: 100Mi, available: 90Mi. Container web was using 1.5Gi, request is 256Mi, has larger consumption of memory.", where: "k get pod web-7c9d-x2   # STATUS Evicted\nk describe node node02 | grep -i pressure", fix: "Đặt requests gần mức dùng thật và có limits.memory; đặt kubeReserved/systemReserved cho node." },
+  { id: "oom", t: "Chạm limits RAM", pod: "limits mem 512Mi · cần 530Mi", at: 5,
+    c: [["ok", "HPA muốn 4 Pod"], ["ok", "LimitRange: hợp lệ"], ["ok", "Quota đủ"], ["ok", "Có node đủ chỗ"], ["ok", "Node không thiếu RAM"], ["bad", "memory.max = 512Mi; tiến trình xin thêm → kernel giết (SIGKILL)"]],
+    msg: "Last State:  Terminated\n  Reason:    OOMKilled\n  Exit Code: 137", where: "k describe pod web-7c9d-x2 | grep -A3 'Last State'", fix: "Tăng limits.memory hơn đỉnh dùng thật ~10%, hoặc sửa rò rỉ bộ nhớ." },
+  { id: "throttle", t: "Chạm limits CPU (không chết, chỉ chậm)", pod: "limits cpu 1 · lúc cao điểm muốn 1,6 CPU", at: 5, warn: 1,
+    c: [["ok", "HPA muốn 4 Pod"], ["ok", "LimitRange: hợp lệ"], ["ok", "Quota đủ"], ["ok", "Có node đủ chỗ"], ["ok", "Node không thiếu tài nguyên"], ["warn", "cpu.max = 100000 100000: mỗi 100ms chỉ được chạy 100ms CPU; phần còn lại phải chờ → độ trễ tăng"]],
+    msg: "$ cat /sys/fs/cgroup/kubepods.slice/…/cpu.stat\nnr_periods 41820\nnr_throttled 12977        ← 31% chu kỳ bị bóp\nthrottled_usec 893412220", where: "PromQL: rate(container_cpu_cfs_throttled_periods_total[5m]) / rate(container_cpu_cfs_periods_total[5m])", fix: "Tăng hoặc bỏ limits.cpu; giữ requests.cpu đúng mức dùng để scheduler và quota vẫn tính đúng." }
+];
+let qCur = "full", qRun = 0;
+function quotaHTML() {
+  return '<div class="panel col">' + scTl(["Pod đi qua <b>6 chốt</b>; 3 chốt đầu chặn lúc <b>tạo</b>, 3 chốt sau chặn lúc <b>chạy</b>.", "Quota và scheduler tính theo <b>requests</b>; kernel chặn theo <b>limits</b>.", "Bị chặn ở quota thì <b>không có Pod</b>: xem event của ReplicaSet."]) + "</div>" +
+    '<div class="panel col"><h4>Pod đi qua các chốt</h4><div class="tb-chips" id="qChips">' + QS.map(s => '<button type="button" data-q="' + s.id + '" aria-pressed="' + (s.id === qCur) + '"><b class="' + (s.at < 0 ? "okc" : s.warn ? "warnc" : "") + '">' + (s.at < 0 ? "qua hết" : "chặn ở " + QG[s.at][0]) + "</b><span>" + scEsc(s.t) + "</span></button>").join("") + "</div>" +
+    '<p class="small muted" id="qPod" style="margin:0"></p>' +
+    '<div class="stage sm"><svg id="qSvg" viewBox="0 0 1000 150" role="img" aria-label="Các chốt giới hạn"></svg></div>' +
+    '<div class="controls"><button class="btn" type="button" id="qReplay">↺ Chạy lại</button><span class="hint" id="qCap" aria-live="polite"></span></div>' +
+    '<ol class="qchk" id="qChk"></ol><div id="qOut"></div></div>' +
+    '<div class="panel col"><h4>5 điểm hay nhầm</h4><ol class="tight">' +
+    "<li>Quota tính theo <b>requests</b>, không theo mức dùng thật: Pod nhàn rỗi vẫn chiếm quota.</li>" +
+    "<li>Có quota CPU/RAM thì <b>mọi Pod phải khai</b> requests/limits, hoặc phải có LimitRange điền mặc định.</li>" +
+    "<li>Rolling update cần quota cho <b>Pod surge</b>: quota vừa khít là rollout đứng.</li>" +
+    "<li>HPA scale mà đụng quota thì Pod <b>không được tạo</b> (không Pending): xem <code>k describe rs</code>.</li>" +
+    "<li>Vượt <b>limits RAM</b> thì bị giết; vượt <b>limits CPU</b> chỉ bị chậm.</li></ol></div>" +
+    '<div class="panel col">' + scDet("Bảng 6 chốt", '<div class="tbl"><table><thead><tr><th>Chốt</th><th>Giới hạn</th><th>Ai kiểm</th><th>Vượt thì</th></tr></thead><tbody>' + [
+      ["HPA, Cluster Autoscaler, Karpenter", "minReplicas/maxReplicas; số node min/max; tổng CPU/RAM của NodePool", "controller", "ScalingLimited; Pod Pending: max node group size reached"],
+      ["LimitRange (namespace)", "requests/limits mặc định; min/max mỗi container hoặc Pod; tỉ lệ limit/request; cỡ PVC", "apiserver: admission LimitRanger (chạy trước, điền mặc định)", "forbidden: maximum cpu usage per Container is …"],
+      ["ResourceQuota (namespace)", "tổng requests/limits CPU, RAM; số Pod, Service, PVC, LoadBalancer, NodePort; dung lượng theo StorageClass", "apiserver: admission ResourceQuota", "Pod không được tạo: exceeded quota / must specify"],
+      ["Scheduler", "allocatable của node; maxPods (110); GPU; số volume mỗi node", "kube-scheduler", "Pending: Insufficient cpu/memory, Too many pods"],
+      ["kubelet", "kube-reserved, system-reserved; ngưỡng eviction; podPidsLimit", "kubelet", "Evicted, MemoryPressure, DiskPressure"],
+      ["cgroup", "limits.cpu → cpu.max (CFS quota); limits.memory → memory.max", "kernel Linux", "CPU throttling; OOMKilled (137)"]
+    ].map(r => "<tr><td><b>" + scEsc(r[0]) + "</b></td><td>" + scEsc(r[1]) + "</td><td>" + scEsc(r[2]) + "</td><td>" + scEsc(r[3]) + "</td></tr>").join("") + '</tbody></table></div><p class="small muted">Ngoài Kubernetes còn: quota vCPU của cloud theo region, số IP trong subnet, số Pod mỗi node trên EKS, dải IP Pod của node, API Priority and Fairness (429), PodDisruptionBudget khi drain.</p>') +
+    scDet("Lệnh xem từng chốt", scCode(`k describe hpa web | grep -A5 Conditions                  # HPA
+k describe limitrange -n shop                              # LimitRange
+k describe quota -n shop                                   # ResourceQuota: Used / Hard
+k describe node node01 | sed -n '/Allocatable/,/Events/p'  # Scheduler: allocatable và tổng requests
+sudo grep -iE 'reserved|eviction|maxPods' /var/lib/kubelet/config.yaml   # kubelet
+cat /sys/fs/cgroup/kubepods.slice/<pod>/<container>/cpu.max              # cgroup: "50000 100000" = 500m`)) +
+    scDet("Mẫu ResourceQuota + LimitRange đi kèm nhau", scCode(`apiVersion: v1
+kind: ResourceQuota
+metadata: {name: compute, namespace: shop}
+spec:
+  hard:
+    requests.cpu: "8"
+    requests.memory: 16Gi
+    limits.memory: 24Gi
+    pods: "40"
+    services.loadbalancers: "1"
+    count/deployments.apps: "20"
+---
+apiVersion: v1
+kind: LimitRange
+metadata: {name: defaults, namespace: shop}
+spec:
+  limits:
+    - type: Container
+      defaultRequest: {cpu: 100m, memory: 128Mi}   # Pod quên khai thì tự điền
+      default: {memory: 256Mi}                     # limit mặc định
+      max: {cpu: "2", memory: 4Gi}`) + scCode(`# Tạo nhanh trong đề thi
+k create quota compute -n shop --hard=requests.cpu=8,requests.memory=16Gi,limits.memory=24Gi,pods=40
+k describe quota compute -n shop`), true) + "</div>";
+}
+function quotaInit() {
+  const svg = $("#qSvg"); let s = '<line x1="40" y1="55" x2="960" y2="55" class="sv-wire"/>';
+  s += '<rect x="900" y="33" width="90" height="44" rx="8" class="sv-node" id="qEnd"/><text x="945" y="60" text-anchor="middle" class="sv-tb">Running</text>';
+  QG.forEach((g, i) => { const x = 150 + i * 130; s += '<g class="qg" id="qG' + i + '"><rect x="' + (x - 8) + '" y="22" width="16" height="66" rx="4"/><text x="' + x + '" y="110" text-anchor="middle" class="sv-tb">' + scEsc(g[0]) + '</text><text x="' + x + '" y="128" text-anchor="middle" class="sv-s">' + scEsc(g[1]) + "</text></g>"; });
+  s += '<text x="150" y="146" class="sv-s">← chặn lúc tạo</text><text x="800" y="146" text-anchor="end" class="sv-s">chặn lúc chạy →</text><line x1="475" x2="475" y1="18" y2="140" class="sc-now" stroke-dasharray="4 4"/>';
+  s += '<g id="qTok" transform="translate(40 55)"><rect x="-22" y="-12" width="44" height="22" rx="6"/><text y="4" text-anchor="middle">Pod</text></g>';
+  svg.innerHTML = s;
+  $("#scBody").onclick = e => { const c = e.target.closest("[data-q]"); if (c) { qCur = c.dataset.q; $$("#qChips button").forEach(b => b.setAttribute("aria-pressed", b === c ? "true" : "false")); qPlay(); return; } if (e.target.closest("#qReplay")) qPlay(); };
+  qPlay();
+}
+async function qPlay() {
+  const run = ++qRun, sc = QS.find(x => x.id === qCur), tok = $("#qTok"), chk = $("#qChk"), out = $("#qOut");
+  const alive = () => run === qRun && tok.isConnected;
+  $$(".qg").forEach(g => g.setAttribute("class", "qg")); tok.setAttribute("class", ""); $("#qEnd").setAttribute("class", "sv-node");
+  tok.setAttribute("transform", "translate(40 55)"); chk.innerHTML = ""; out.innerHTML = "";
+  $("#qPod").textContent = "Pod: " + sc.pod; $("#qCap").textContent = "";
+  const move = (x, d) => new Promise(res => { if (RM) { tok.setAttribute("transform", "translate(" + x + " 55)"); res(); return; } const m = /translate\(([-\d.]+)/.exec(tok.getAttribute("transform")), x0 = +m[1], t0 = performance.now(); const f = t => { const p = Math.min(1, (t - t0) / d); tok.setAttribute("transform", "translate(" + (x0 + (x - x0) * ease(p)) + " 55)"); if (p < 1 && tok.isConnected) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+  const last = sc.at < 0 ? QG.length - 1 : sc.at;
+  for (let i = 0; i <= last; i++) {
+    if (!alive()) return;
+    const x = 150 + i * 130, c = sc.c[i] || ["ok", ""];
+    await move(x - 26, 420);
+    const li = document.createElement("li"); li.className = c[0]; li.innerHTML = '<span class="qi">' + (c[0] === "ok" ? "✓" : c[0] === "bad" ? "✕" : c[0] === "warn" ? "!" : "–") + "</span><b>" + scEsc(QG[i][0]) + "</b> " + scEsc(c[1]); chk.appendChild(li);
+    if (c[0] === "bad") { $("#qG" + i).setAttribute("class", "qg bad"); tok.setAttribute("class", "bad"); break; }
+    $("#qG" + i).setAttribute("class", c[0] === "warn" ? "qg warn" : "qg ok");
+    await sleep(RM ? 30 : 220);
+    await move(x + 26, 260);
+  }
+  if (!alive()) return;
+  if (sc.at < 0 || sc.warn) { await move(945, sc.warn ? 1400 : 500); $("#qEnd").setAttribute("class", "sv-node lit"); tok.setAttribute("class", sc.warn ? "warn" : "ok"); }
+  $("#qCap").innerHTML = sc.at < 0 ? "Qua cả 6 chốt: Pod Running." : sc.warn ? "Không bị chặn, nhưng bị <b>bóp CPU</b> ở chốt cgroup." : "Bị chặn ở chốt <b>" + scEsc(QG[sc.at][0]) + "</b>.";
+  out.innerHTML = '<div class="term tb-term qterm">' + scEsc(sc.msg) + "</div>" + (sc.where ? '<span class="tb-h">Xem ở đâu</span>' + scCode(sc.where) : "") + (sc.fix ? '<p class="take" style="border-color:var(--node)">' + scEsc(sc.fix) + "</p>" : "");
 }
 
 onShow.scale = scInit;

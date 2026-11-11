@@ -469,6 +469,22 @@ details.err code.em{display:block}
 .sc-k .kv2{font-size:13px}.sc-k .kv2 span{display:block;font:600 10px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
 .sc-k .kv2.warn{color:var(--pkt)}
 .sc-k code{white-space:normal;overflow-wrap:anywhere;font-size:11.5px;margin-top:auto}
+.qg rect{fill:var(--paper-2);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s}
+.qg.ok rect{fill:var(--node);stroke:var(--node)}.qg.bad rect{fill:var(--bad);stroke:var(--bad)}.qg.warn rect{fill:var(--pkt);stroke:var(--pkt)}
+.qg.bad text{fill:var(--bad)}
+#qTok rect{fill:var(--accent);stroke:var(--paper);stroke-width:2}#qTok text{fill:#fff;font:700 11px var(--f-mono)}
+#qTok.ok rect{fill:var(--node)}#qTok.bad rect{fill:var(--bad)}#qTok.warn rect{fill:var(--pkt)}
+#qEnd.lit{fill:var(--node-soft);stroke:var(--node)}
+ol.qchk{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+ol.qchk li{display:flex;gap:8px;align-items:baseline;font-size:14px;padding:7px 10px;border-radius:7px;background:var(--paper-2);animation:fadein .3s}
+ol.qchk li.bad{background:var(--bad-soft)}ol.qchk li.warn{background:var(--pkt-soft)}
+ol.qchk .qi{font:700 13px var(--f-mono);width:16px;flex:none}
+ol.qchk li.ok .qi{color:var(--node)}ol.qchk li.bad .qi{color:var(--bad)}ol.qchk li.warn .qi{color:var(--pkt)}
+ol.qchk b{flex:none}
+@keyframes fadein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.tb-chips b.okc{color:var(--node)}.tb-chips b.warnc{color:var(--pkt)}
+.qterm{min-height:0}
+#qChips b{font-family:var(--f-body);font-size:12.5px}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
