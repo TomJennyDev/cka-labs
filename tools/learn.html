@@ -419,6 +419,56 @@ details.err code.em{display:block}
 .tb-fix{display:flex;flex-direction:column;gap:12px}
 .tb-fix,.tb-chips button{overflow-wrap:anywhere;min-width:0}
 .tb-fix .take{font-size:16px;font-weight:600;border-left:4px solid var(--bad);padding-left:12px;line-height:1.45}
+/* scaling */
+.sc-formula{font:600 13.5px var(--f-mono);background:var(--paper-2);border-radius:8px;padding:10px 12px;overflow-wrap:anywhere}
+.sc-node{fill:var(--paper);stroke:var(--accent);stroke-width:1.6}.sc-node.boot{stroke-dasharray:6 4;fill:var(--accent-soft)}
+.sc-pod{stroke:var(--paper);stroke-width:1}.sc-pod.on{fill:var(--node)}.sc-pod.start{fill:var(--pkt);animation:scblink 1s infinite}.sc-pod.pend{fill:var(--bad)}
+@keyframes scblink{50%{opacity:.45}}
+.sc-pt{fill:#fff;font:700 10.5px var(--f-mono)}
+.sc-pend{fill:var(--bad-soft);stroke:var(--bad);stroke-dasharray:5 4}
+.sc-grid{stroke:var(--line);stroke-width:1}
+.sc-l{fill:none;stroke-width:2.4}.sc-l.need{stroke:var(--muted);stroke-dasharray:5 4}.sc-l.ready{stroke:var(--node)}.sc-l.spec{stroke:var(--pkt);stroke-width:1.6}.sc-l.nodes{stroke:var(--accent);stroke-width:1.6}
+.sc-now{stroke:var(--ink);stroke-width:1;opacity:.4}
+.sc-leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.sc-leg i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.sc-leg i.free,.nd-mini i.free{background:repeating-linear-gradient(135deg,var(--paper-2) 0 4px,var(--line) 4px 6px)}
+.sc-log{min-height:150px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px}
+#scBody label.f input[type=number]{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);font:inherit;width:100%;min-width:90px}
+#ndOut{display:flex;flex-direction:column;gap:12px}#ndOut h4{margin:8px 0 0}
+.nd-wl input{width:100%;min-width:64px;font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
+.nd-wl td{padding:4px 6px}
+.nd-lab{font:600 11px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.nd-bar{display:flex;height:30px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+.nd-bar i{flex-basis:0;min-width:2px;display:flex;align-items:center;padding:0 6px;font:600 11px var(--f-mono);overflow:hidden;white-space:nowrap}
+.nd-bar i span{overflow:hidden;text-overflow:ellipsis}
+.nd-bar .r1{background:var(--bad-soft);color:var(--bad)}.nd-bar .r2{background:var(--pkt-soft);color:var(--pkt)}.nd-bar .r3{background:var(--paper-2);color:var(--muted)}.nd-bar .r4{background:var(--node-soft);color:var(--node)}
+.nd-nodes{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(170px,100%),1fr))}
+.nd-node{border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.nd-node.spare{border-style:dashed;color:var(--muted)}
+.nd-node small{font-size:12px;color:var(--muted)}
+.nd-mini{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--paper-2)}
+.nd-mini i{flex-basis:0;min-width:1px}
+.rg{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+.rg-g{display:flex;flex-direction:column;gap:5px}.rg-g>b{font-size:14px}
+.rg-b{display:grid;grid-template-columns:100px minmax(0,1fr) 64px;gap:8px;align-items:center;font-size:12.5px}
+.rg-b em{font:600 12px var(--f-mono);font-style:normal;text-align:right}
+.rg-t{height:12px;background:var(--paper-2);border-radius:4px;overflow:hidden}.rg-t i{display:block;height:100%;border-radius:4px}
+.rg-t i.use{background:var(--muted)}.rg-t i.peak{background:var(--ink)}.rg-t i.old{background:var(--bad)}.rg-t i.new{background:var(--node)}.rg-t i.lim{background:var(--pkt)}
+.rg-row{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;gap:10px}
+.rg-track{position:relative;height:8px;background:var(--paper-2);border-radius:4px}
+.rg-mark{position:absolute;top:-6px;width:3px;height:20px;border-radius:2px;transform:translateX(-1px)}
+.rg-mark span{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);white-space:nowrap;font:600 11px var(--f-mono)}
+.rg-mark:nth-child(even) span{bottom:auto;top:22px}
+.rg-mark.use{background:var(--muted)}.rg-mark.use span{color:var(--muted)}
+.rg-mark.peak{background:var(--ink)}.rg-mark.old{background:var(--bad)}.rg-mark.old span{color:var(--bad)}
+.rg-mark.new{background:var(--node);width:5px}.rg-mark.new span{color:var(--node)}
+.rg-mark.lim{background:var(--pkt)}.rg-mark.lim span{color:var(--pkt)}
+.sc-kinds{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr))}
+.sc-k{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.sc-k>b{font-family:var(--f-display);font-size:17px}
+.sc-k .kv2{font-size:13px}.sc-k .kv2 span{display:block;font:600 10px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.sc-k .kv2.warn{color:var(--pkt)}
+.sc-k code{white-space:normal;overflow-wrap:anywhere;font-size:11.5px;margin-top:auto}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
@@ -1565,6 +1615,17 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
   </div>
 </section>
 
+<!-- ============ SCALING ============ -->
+<section class="view" data-view="scale" hidden>
+  <header class="vh">
+    <p class="eyebrow">Thực chiến · scaling và tối ưu tài nguyên</p>
+    <h2>Scale Pod, ước lượng node, đặt requests đúng</h2>
+    <p class="lead">Xem HPA và Cluster Autoscaler phản ứng với tải, tính cần bao nhiêu node, và đặt requests theo số đo thật.</p>
+  </header>
+  <div class="seg" id="scTabs" role="group" aria-label="Chọn chủ đề"></div>
+  <div id="scBody" class="col" style="gap:16px" aria-live="polite"></div>
+</section>
+
 <!-- ============ 11 CASES ============ -->
 <section class="view" data-view="cases" hidden>
   <header class="vh">
@@ -1757,8 +1818,8 @@ function addCopy(wrap, pre) {
 const MODULES = [
   { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "arch", n: "01", t: "Kiến trúc cluster" }, { id: "flow", n: "02", t: "Một Pod ra đời" }, { id: "linux", n: "03", t: "Bên trong Linux" }, { id: "mech", n: "04", t: "Cơ chế động" }, { id: "wire", n: "05", t: "Giao tiếp & mã hóa" },
   { g: "Domain thi" }, { id: "network", n: "06", t: "Mạng & Service" }, { id: "kinds", n: "07", t: "Workload resources" }, { id: "workloads", n: "08", t: "Rolling update & Scheduling" }, { id: "probes", n: "09", t: "Probes & tự phục hồi" }, { id: "storage", n: "10", t: "Storage" }, { id: "security", n: "11", t: "RBAC & bảo mật" }, { id: "ops", n: "12", t: "Vận hành cluster" }, { id: "trouble", n: "13", t: "Troubleshooting" },
-  { g: "Thực chiến" }, { id: "labs", n: "14", t: "Bài tập theo domain" }, { id: "best", n: "15", t: "Best practices & cấu trúc dự án" }, { id: "perf", n: "16", t: "Hiệu năng & QoS" }, { id: "cases", n: "17", t: "Use case thực tế" }, { id: "quiz", n: "18", t: "Quiz" },
-  { g: "Tra cứu" }, { id: "concepts", n: "19", t: "Thư viện khái niệm" }, { id: "commands", n: "20", t: "Lệnh & terminal" }
+  { g: "Thực chiến" }, { id: "labs", n: "14", t: "Bài tập theo domain" }, { id: "best", n: "15", t: "Best practices & cấu trúc dự án" }, { id: "perf", n: "16", t: "Hiệu năng & QoS" }, { id: "scale", n: "17", t: "Scaling & ước lượng node" }, { id: "cases", n: "18", t: "Use case thực tế" }, { id: "quiz", n: "19", t: "Quiz" },
+  { g: "Tra cứu" }, { id: "concepts", n: "20", t: "Thư viện khái niệm" }, { id: "commands", n: "21", t: "Lệnh & terminal" }
 ];
 const onShow = {};
 let current = "overview";
