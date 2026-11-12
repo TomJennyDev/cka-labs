@@ -1,0 +1,478 @@
+[
+ {
+  "d": "trouble",
+  "c": 0,
+  "t": "Node NotReady",
+  "task": "Node worker-2 đang NotReady. Sửa để node về Ready, đảm bảo trạng thái giữ nguyên sau khi reboot.",
+  "sol": "k get nodes ; k describe node worker-2 | grep -A5 Conditions\nssh worker-2\nsudo systemctl status kubelet          # inactive (dead)?\nsudo journalctl -u kubelet -n 50 --no-pager\n# nguyên nhân hay gặp: kubelet bị disable, sai đường dẫn trong config.yaml, swap bật, containerd dừng\nsudo systemctl enable --now kubelet\nsudo systemctl status containerd\nexit\nk get nodes -w"
+ },
+ {
+  "d": "trouble",
+  "c": 0,
+  "t": "Node hết dung lượng đĩa",
+  "task": "Pod mới trên worker-1 bị Evicted với lý do DiskPressure. Tìm và giải phóng dung lượng, sau đó xác nhận condition DiskPressure = False.",
+  "sol": "k describe node worker-1 | grep -i pressure\nssh worker-1\ndf -h / /var/lib/containerd /var/log\nsudo crictl rmi --prune\nsudo journalctl --vacuum-size=200M\nsudo du -sh /var/log/pods/* | sort -h | tail\nexit\nk get pods -A --field-selector status.phase=Failed -o name | xargs kubectl delete"
+ },
+ {
+  "d": "trouble",
+  "c": 1,
+  "t": "kube-apiserver không lên",
+  "task": "Sau khi ai đó sửa cấu hình, kubectl báo connection refused. Khôi phục kube-apiserver.",
+  "sol": "ssh cp-1\nsudo crictl ps -a | grep kube-apiserver\nsudo crictl logs $(sudo crictl ps -a --name kube-apiserver -q | head -1) 2>&1 | tail\n# hoặc nếu container không được tạo:\nsudo journalctl -u kubelet | grep -i apiserver | tail\nsudo vi /etc/kubernetes/manifests/kube-apiserver.yaml\n# sửa: --etcd-servers=https://127.0.0.1:2379 (không phải 2380), đường dẫn cert, lỗi thụt lề YAML\nwatch sudo crictl ps --name kube-apiserver\nk get nodes"
+ },
+ {
+  "d": "trouble",
+  "c": 1,
+  "t": "Pod mới đứng Pending, không có event",
+  "task": "Mọi Pod mới tạo đều Pending và không có event nào. Tìm và sửa thành phần bị lỗi.",
+  "sol": "k get pods -n kube-system | grep scheduler    # CrashLoopBackOff hoặc không có\nsudo crictl ps -a | grep scheduler\nsudo crictl logs <id>\nsudo vi /etc/kubernetes/manifests/kube-scheduler.yaml\n# lỗi hay gặp: sai image tag, sai --kubeconfig=/etc/kubernetes/scheduler.conf, sai command\nk get pods -w"
+ },
+ {
+  "d": "trouble",
+  "c": 1,
+  "t": "Deployment không tạo Pod",
+  "task": "Deployment web đã được tạo nhưng không có ReplicaSet nào. Sửa control plane để Deployment hoạt động.",
+  "sol": "k get rs -l app=web               # trống\nk -n kube-system get pod -l component=kube-controller-manager\nsudo crictl logs $(sudo crictl ps -a --name kube-controller-manager -q | head -1) | tail\nsudo vi /etc/kubernetes/manifests/kube-controller-manager.yaml\nk get rs,pods -l app=web"
+ },
+ {
+  "d": "trouble",
+  "c": 2,
+  "t": "Pod ăn CPU nhiều nhất",
+  "task": "Trong namespace monitoring, tìm Pod dùng CPU nhiều nhất và ghi tên vào /opt/answers/top-cpu.txt.",
+  "sol": "k top pod -n monitoring --sort-by=cpu --no-headers | head -1 | awk '{print $1}' > /opt/answers/top-cpu.txt\ncat /opt/answers/top-cpu.txt"
+ },
+ {
+  "d": "trouble",
+  "c": 2,
+  "t": "Node đủ điều kiện",
+  "task": "Đếm số node Ready không có taint NoSchedule và ghi con số vào /opt/answers/nodes.txt.",
+  "sol": "k get nodes\nk describe nodes | grep -E '^Name:|^Taints:'\n# hoặc tự động:\nk get nodes -o jsonpath='{range .items[*]}{.metadata.name} {.spec.taints[*].effect}{\"\\n\"}{end}' | grep -vc NoSchedule > /opt/answers/nodes.txt"
+ },
+ {
+  "d": "trouble",
+  "c": 3,
+  "t": "Lọc log lỗi",
+  "task": "Pod api trong namespace shop có 2 container. Lấy các dòng chứa ERROR từ lần chạy trước của container app và ghi vào /opt/answers/api-errors.log.",
+  "sol": "k get pod api -n shop -o jsonpath='{.spec.containers[*].name}'\nk logs api -n shop -c app --previous | grep ERROR > /opt/answers/api-errors.log"
+ },
+ {
+  "d": "trouble",
+  "c": 3,
+  "t": "Sidecar đưa log file ra stdout",
+  "task": "Pod legacy ghi log vào /var/log/legacy/app.log. Thêm sidecar busybox tên log-tail in nội dung file đó ra stdout để kubectl logs đọc được, không đổi image của container chính.",
+  "sol": "k get pod legacy -o yaml > legacy.yaml\n# thêm volume emptyDir 'logs' gắn vào /var/log/legacy ở container chính\n# thêm vào initContainers:\n- name: log-tail\n  image: busybox:1.36\n  restartPolicy: Always\n  command: ['sh','-c','tail -n+1 -F /var/log/legacy/app.log']\n  volumeMounts: [{name: logs, mountPath: /var/log/legacy}]\nk replace --force -f legacy.yaml\nk logs legacy -c log-tail"
+ },
+ {
+  "d": "trouble",
+  "c": 4,
+  "t": "Service không có endpoint",
+  "task": "Service web trong namespace shop không trả lời. Sửa cho đến khi gọi được web.shop từ một Pod khác.",
+  "sol": "k get endpointslices -n shop -l kubernetes.io/service-name=web\nk get svc web -n shop -o jsonpath='{.spec.selector}' ; echo\nk get pods -n shop --show-labels\nk edit svc web -n shop       # sửa selector, kiểm tra cả targetPort\nk run t --image=busybox:1.36 -n shop --rm -it --restart=Never -- wget -qO- -T3 web"
+ },
+ {
+  "d": "trouble",
+  "c": 4,
+  "t": "DNS hỏng toàn cluster",
+  "task": "Pod không phân giải được tên Service nào. Tìm nguyên nhân và sửa.",
+  "sol": "k run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup kubernetes.default\nk -n kube-system get deploy coredns ; k -n kube-system get pods -l k8s-app=kube-dns\nk -n kube-system logs -l k8s-app=kube-dns\nk -n kube-system get cm coredns -o yaml     # Corefile sai cú pháp?\nk -n kube-system scale deploy coredns --replicas=2\nk -n kube-system get svc kube-dns ; k -n kube-system get endpointslices -l k8s-app=kube-dns"
+ },
+ {
+  "d": "trouble",
+  "c": 0,
+  "t": "Pod CrashLoopBackOff do OOM",
+  "task": "Deployment report trong namespace batch liên tục restart. Tìm nguyên nhân và sửa sao cho Pod chạy ổn định, giữ memory limit tối đa 1Gi.",
+  "sol": "k get pods -n batch\nk describe pod -n batch -l app=report | grep -A4 'Last State'   # OOMKilled, 137\nk top pod -n batch\nk set resources deploy report -n batch --requests=memory=768Mi --limits=memory=1Gi\nk rollout status deploy report -n batch"
+ },
+ {
+  "d": "arch",
+  "c": 0,
+  "t": "Role cho ServiceAccount",
+  "task": "Tạo ServiceAccount deployer trong namespace ci, cho phép nó tạo, sửa và liệt kê Deployment cùng StatefulSet chỉ trong namespace ci.",
+  "sol": "k create sa deployer -n ci\nk create role deployer -n ci --verb=create,update,patch,list,get --resource=deployments,statefulsets\nk create rolebinding deployer -n ci --role=deployer --serviceaccount=ci:deployer\nk auth can-i create deployments -n ci --as=system:serviceaccount:ci:deployer     # yes\nk auth can-i create deployments -n default --as=system:serviceaccount:ci:deployer # no"
+ },
+ {
+  "d": "arch",
+  "c": 0,
+  "t": "ClusterRole cho nhóm",
+  "task": "Nhóm platform-ops cần xem node và PersistentVolume trên toàn cluster, không được sửa.",
+  "sol": "k create clusterrole node-pv-viewer --verb=get,list,watch --resource=nodes,persistentvolumes\nk create clusterrolebinding platform-ops-view --clusterrole=node-pv-viewer --group=platform-ops\nk auth can-i list pv --as=x --as-group=platform-ops      # yes\nk auth can-i delete nodes --as=x --as-group=platform-ops # no"
+ },
+ {
+  "d": "arch",
+  "c": 0,
+  "t": "User mới qua CSR",
+  "task": "Tạo quyền truy cập cho user dev1: key, CSR được duyệt, context dev1@lab dùng namespace dev, và chỉ được xem Pod trong dev.",
+  "sol": "openssl genrsa -out dev1.key 2048\nopenssl req -new -key dev1.key -subj '/CN=dev1' -out dev1.csr\ncat <<EOF | k apply -f -\napiVersion: certificates.k8s.io/v1\nkind: CertificateSigningRequest\nmetadata: {name: dev1}\nspec:\n  request: $(base64 -w0 dev1.csr)\n  signerName: kubernetes.io/kube-apiserver-client\n  usages: [client auth]\nEOF\nk certificate approve dev1\nk get csr dev1 -o jsonpath='{.status.certificate}' | base64 -d > dev1.crt\nk config set-credentials dev1 --client-key=dev1.key --client-certificate=dev1.crt --embed-certs\nk config set-context dev1@lab --cluster=kubernetes --user=dev1 --namespace=dev\nk create role pod-view -n dev --verb=get,list,watch --resource=pods\nk create rolebinding dev1-pod-view -n dev --role=pod-view --user=dev1\nk --context=dev1@lab get pods"
+ },
+ {
+  "d": "arch",
+  "c": 1,
+  "t": "Chuẩn bị node mới",
+  "task": "Chuẩn bị node04 (Ubuntu) để join cluster v1.37: kernel module, sysctl, containerd với systemd cgroup, kubeadm/kubelet/kubectl đúng phiên bản và giữ không tự nâng.",
+  "sol": "# module + sysctl: xem module Bên trong Linux\nsudo apt-get update && sudo apt-get install -y containerd apt-transport-https ca-certificates curl gpg\nsudo mkdir -p /etc/containerd && containerd config default | sudo tee /etc/containerd/config.toml\nsudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml && sudo systemctl restart containerd\ncurl -fsSL https://pkgs.k8s.io/core:/stable:/v1.37/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\necho 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.37/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list\nsudo apt-get update && sudo apt-get install -y kubelet kubeadm kubectl && sudo apt-mark hold kubelet kubeadm kubectl"
+ },
+ {
+  "d": "arch",
+  "c": 2,
+  "t": "Join worker",
+  "task": "Thêm node04 vào cluster bằng kubeadm.",
+  "sol": "# trên cp-1\nkubeadm token create --print-join-command\n# trên node04\nsudo kubeadm join 10.0.0.10:6443 --token <t> --discovery-token-ca-cert-hash sha256:<h>\n# trên cp-1\nk get nodes -w"
+ },
+ {
+  "d": "arch",
+  "c": 2,
+  "t": "Dựng cluster bằng kubeadm",
+  "task": "Khởi tạo control plane với pod network 10.244.0.0/16, cấu hình kubectl cho user hiện tại, cài CNI để node Ready.",
+  "sol": "sudo kubeadm init --pod-network-cidr=10.244.0.0/16 --kubernetes-version=v1.37.0\nmkdir -p $HOME/.kube && sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config && sudo chown $(id -u):$(id -g) $HOME/.kube/config\nk apply -f <manifest CNI được cung cấp>\nk get nodes ; k get pods -n kube-system"
+ },
+ {
+  "d": "arch",
+  "c": 3,
+  "t": "Nâng control plane",
+  "task": "Nâng cp-1 từ v1.36 lên v1.37.0 (chỉ control plane, kể cả kubelet và kubectl). Worker giữ nguyên.",
+  "sol": "# xem runbook trong module Vận hành cluster\nsudo kubeadm upgrade plan\nsudo kubeadm upgrade apply v1.37.0\nk drain cp-1 --ignore-daemonsets\n# nâng gói kubelet kubectl, daemon-reload, restart kubelet\nk uncordon cp-1\nk get nodes"
+ },
+ {
+  "d": "arch",
+  "c": 3,
+  "t": "Sao lưu và khôi phục etcd",
+  "task": "Chụp snapshot etcd vào /opt/etcd-backup.db. Sau đó khôi phục từ /opt/etcd-backup-old.db được cung cấp sẵn.",
+  "sol": "sudo ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \\\n  --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt \\\n  --key=/etc/kubernetes/pki/etcd/server.key snapshot save /opt/etcd-backup.db\nsudo etcdutl snapshot restore /opt/etcd-backup-old.db --data-dir /var/lib/etcd-restore\nsudo vi /etc/kubernetes/manifests/etcd.yaml     # hostPath etcd-data → /var/lib/etcd-restore\nwatch sudo crictl ps --name etcd\nk get pods -A"
+ },
+ {
+  "d": "arch",
+  "c": 4,
+  "t": "Thêm control plane thứ hai",
+  "task": "Cluster được dựng với --control-plane-endpoint lb.lab:6443. Đưa cp-2 vào làm control plane.",
+  "sol": "# trên cp-1: tải lại cert và lấy khóa\nsudo kubeadm init phase upload-certs --upload-certs     # in ra certificate key\nkubeadm token create --print-join-command\n# trên cp-2\nsudo kubeadm join lb.lab:6443 --token <t> --discovery-token-ca-cert-hash sha256:<h> \\\n  --control-plane --certificate-key <key>\nk get nodes ; k -n kube-system get pods -l tier=control-plane -o wide"
+ },
+ {
+  "d": "arch",
+  "c": 5,
+  "t": "Cài chart Helm đúng phiên bản",
+  "task": "Cài chart bitnami/nginx phiên bản 18.2.0 thành release web trong namespace web với 3 replica, sau đó nâng service type lên NodePort.",
+  "sol": "helm repo add bitnami https://charts.bitnami.com/bitnami && helm repo update\nhelm search repo bitnami/nginx --versions | head\nhelm install web bitnami/nginx --version 18.2.0 -n web --create-namespace --set replicaCount=3\nhelm upgrade web bitnami/nginx --version 18.2.0 -n web --reuse-values --set service.type=NodePort\nhelm list -n web ; k get svc -n web"
+ },
+ {
+  "d": "arch",
+  "c": 5,
+  "t": "Overlay Kustomize",
+  "task": "Thư mục /opt/app có base. Tạo overlay prod đặt namespace prod, image nginx:1.27, 4 replica rồi áp dụng.",
+  "sol": "mkdir -p /opt/app/overlays/prod && cat > /opt/app/overlays/prod/kustomization.yaml <<EOF\nresources: [../../base]\nnamespace: prod\nimages:\n- {name: nginx, newTag: \"1.27\"}\nreplicas:\n- {name: web, count: 4}\nEOF\nk kustomize /opt/app/overlays/prod | grep -E 'namespace|image|replicas'\nk create ns prod ; k apply -k /opt/app/overlays/prod"
+ },
+ {
+  "d": "arch",
+  "c": 6,
+  "t": "Interface mở rộng của cluster",
+  "task": "Ghi vào /opt/answers/interfaces.txt: tên plugin CNI đang dùng, container runtime và endpoint của nó, và driver CSI đã cài.",
+  "sol": "ls /etc/cni/net.d/ ; k get pods -n kube-system -o wide | grep -E 'calico|cilium|flannel'\nk get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}'\nsudo cat /var/lib/kubelet/kubeadm-flags.env /etc/crictl.yaml 2>/dev/null | grep -i endpoint\nk get csidrivers"
+ },
+ {
+  "d": "arch",
+  "c": 7,
+  "t": "Cài operator và dùng CRD",
+  "task": "Cài cert-manager bằng Helm, liệt kê các CRD thuộc group cert-manager.io vào /opt/answers/crds.txt và ghi field spec cần để tạo Certificate.",
+  "sol": "helm repo add jetstack https://charts.jetstack.io && helm repo update\nhelm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set crds.enabled=true\nk get crd | grep cert-manager.io > /opt/answers/crds.txt\nk explain certificate.spec | head -40\nk get pods -n cert-manager"
+ },
+ {
+  "d": "arch",
+  "c": 7,
+  "t": "Tự tạo CRD",
+  "task": "Tạo CRD Backup (group ops.example.com, v1, Namespaced, shortName bk) với spec.schedule kiểu string, sau đó tạo một Backup tên nightly.",
+  "sol": "# YAML CRD: xem Thư viện khái niệm → CustomResourceDefinition\nk apply -f backup-crd.yaml\nk get crd backups.ops.example.com\ncat <<EOF | k apply -f -\napiVersion: ops.example.com/v1\nkind: Backup\nmetadata: {name: nightly}\nspec: {schedule: \"0 2 * * *\"}\nEOF\nk get bk"
+ },
+ {
+  "d": "arch",
+  "c": 2,
+  "t": "Gia hạn chứng chỉ",
+  "task": "Kiểm tra hạn chứng chỉ control plane, ghi ngày hết hạn của cert apiserver vào /opt/answers/apiserver-expiry.txt rồi gia hạn toàn bộ.",
+  "sol": "sudo kubeadm certs check-expiration\nsudo openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -enddate | cut -d= -f2 > /opt/answers/apiserver-expiry.txt\nsudo kubeadm certs renew all\n# restart static pod: di chuyển manifest ra rồi vào lại, hoặc restart kubelet\nsudo systemctl restart kubelet"
+ },
+ {
+  "d": "net",
+  "c": 0,
+  "t": "Kết nối giữa Pod",
+  "task": "Tạo Pod client trong namespace a và Pod server (nginx) trong namespace b. Ghi IP của server và xác nhận client gọi được bằng IP lẫn bằng tên Service.",
+  "sol": "k create ns a ; k create ns b\nk run server -n b --image=nginx:1.27 --port=80 --expose\nk run client -n a --image=busybox:1.36 -- sleep 3600\nk get pod server -n b -o jsonpath='{.status.podIP}'\nk exec -n a client -- wget -qO- -T3 <ip>\nk exec -n a client -- wget -qO- -T3 server.b.svc.cluster.local"
+ },
+ {
+  "d": "net",
+  "c": 1,
+  "t": "Default deny và mở một đường",
+  "task": "Trong namespace backend: chặn mọi ingress, rồi chỉ cho Pod app=api nhận traffic cổng 8080 từ Pod app=web ở namespace frontend.",
+  "sol": "cat <<EOF | k apply -f -\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: deny-all, namespace: backend}\nspec: {podSelector: {}, policyTypes: [Ingress]}\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: web-to-api, namespace: backend}\nspec:\n  podSelector: {matchLabels: {app: api}}\n  policyTypes: [Ingress]\n  ingress:\n  - from:\n    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: frontend}}\n      podSelector: {matchLabels: {app: web}}\n    ports: [{protocol: TCP, port: 8080}]\nEOF"
+ },
+ {
+  "d": "net",
+  "c": 1,
+  "t": "Egress chỉ ra DB và DNS",
+  "task": "Pod app=api trong backend chỉ được gọi ra Pod app=db cổng 5432 và DNS.",
+  "sol": "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: api-egress, namespace: backend}\nspec:\n  podSelector: {matchLabels: {app: api}}\n  policyTypes: [Egress]\n  egress:\n  - to: [{podSelector: {matchLabels: {app: db}}}]\n    ports: [{port: 5432, protocol: TCP}]\n  - to: [{namespaceSelector: {}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]\n    ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]"
+ },
+ {
+  "d": "net",
+  "c": 2,
+  "t": "NodePort cố định",
+  "task": "Expose Deployment web (container port 8080) bằng Service NodePort tên web-np, port 80, nodePort 30080.",
+  "sol": "k expose deploy web --name=web-np --type=NodePort --port=80 --target-port=8080 $do > np.yaml\n# thêm nodePort: 30080 dưới ports\nk apply -f np.yaml\ncurl http://<node-ip>:30080"
+ },
+ {
+  "d": "net",
+  "c": 2,
+  "t": "Headless Service cho StatefulSet",
+  "task": "StatefulSet db có 2 replica. Tạo headless Service db và xác nhận phân giải được db-0.db.",
+  "sol": "k create svc clusterip db --clusterip=None --tcp=5432\nk get sts db -o jsonpath='{.spec.serviceName}'   # phải là db\nk run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup db-0.db"
+ },
+ {
+  "d": "net",
+  "c": 2,
+  "t": "Giữ IP client",
+  "task": "Service LoadBalancer web cần thấy IP thật của client. Cấu hình phù hợp.",
+  "sol": "k patch svc web -p '{\"spec\":{\"externalTrafficPolicy\":\"Local\"}}'\nk get svc web -o jsonpath='{.spec.healthCheckNodePort}'"
+ },
+ {
+  "d": "net",
+  "c": 3,
+  "t": "Gateway và HTTPRoute",
+  "task": "GatewayClass envoy đã có. Tạo Gateway web-gw (ns infra, HTTP 80, nhận route mọi namespace) và HTTPRoute trong ns shop: /api tới Service api:8080, còn lại tới web:80, host shop.lab.",
+  "sol": "apiVersion: gateway.networking.k8s.io/v1\nkind: Gateway\nmetadata: {name: web-gw, namespace: infra}\nspec:\n  gatewayClassName: envoy\n  listeners:\n  - {name: http, protocol: HTTP, port: 80, allowedRoutes: {namespaces: {from: All}}}\n---\napiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nmetadata: {name: shop, namespace: shop}\nspec:\n  parentRefs: [{name: web-gw, namespace: infra}]\n  hostnames: [shop.lab]\n  rules:\n  - matches: [{path: {type: PathPrefix, value: /api}}]\n    backendRefs: [{name: api, port: 8080}]\n  - backendRefs: [{name: web, port: 80}]\n---\nk get gateway -n infra ; k describe httproute shop -n shop | grep -A6 Conditions"
+ },
+ {
+  "d": "net",
+  "c": 3,
+  "t": "Chuyển Ingress sang HTTPRoute",
+  "task": "Ingress legacy trong ns shop định tuyến host old.lab tới Service web:80 với TLS secret old-tls. Viết HTTPRoute và listener HTTPS tương đương trên Gateway web-gw.",
+  "sol": "# listener thêm vào Gateway web-gw:\n- name: https\n  protocol: HTTPS\n  port: 443\n  hostname: old.lab\n  tls: {certificateRefs: [{name: old-tls, namespace: shop}]}   # cần ReferenceGrant trong shop\n  allowedRoutes: {namespaces: {from: All}}\n# HTTPRoute:\nspec:\n  parentRefs: [{name: web-gw, namespace: infra, sectionName: https}]\n  hostnames: [old.lab]\n  rules: [{backendRefs: [{name: web, port: 80}]}]"
+ },
+ {
+  "d": "net",
+  "c": 4,
+  "t": "Ingress với TLS",
+  "task": "Tạo Ingress shop (class nginx) cho host shop.lab: /api tới api:8080, / tới web:80, TLS bằng Secret shop-tls.",
+  "sol": "k create secret tls shop-tls --cert=shop.crt --key=shop.key -n shop\nk create ingress shop -n shop --class=nginx \\\n  --rule='shop.lab/api*=api:8080,tls=shop-tls' --rule='shop.lab/*=web:80,tls=shop-tls'\nk describe ingress shop -n shop"
+ },
+ {
+  "d": "net",
+  "c": 5,
+  "t": "CoreDNS forward",
+  "task": "Truy vấn cho zone corp.internal phải chuyển tới DNS 10.0.0.53. Cấu hình CoreDNS và kiểm tra.",
+  "sol": "k -n kube-system edit cm coredns\n# thêm block:\ncorp.internal:53 {\n    errors\n    cache 30\n    forward . 10.0.0.53\n}\nk -n kube-system rollout restart deploy coredns\nk run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup host1.corp.internal"
+ },
+ {
+  "d": "net",
+  "c": 5,
+  "t": "Tra thông tin DNS cluster",
+  "task": "Ghi vào /opt/answers/dns.txt: ClusterIP của Service kube-dns và cluster domain.",
+  "sol": "k -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIP}' > /opt/answers/dns.txt\necho >> /opt/answers/dns.txt\nsudo grep -A1 clusterDomain /var/lib/kubelet/config.yaml >> /opt/answers/dns.txt"
+ },
+ {
+  "d": "work",
+  "c": 0,
+  "t": "Rollout và rollback",
+  "task": "Deployment web chạy nginx:1.26. Nâng lên nginx:1.27 có ghi change-cause, rồi quay lại revision trước.",
+  "sol": "k set image deploy/web nginx=nginx:1.27\nk annotate deploy/web kubernetes.io/change-cause='nginx 1.27' --overwrite\nk rollout status deploy/web\nk rollout history deploy/web\nk rollout undo deploy/web\nk get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}'"
+ },
+ {
+  "d": "work",
+  "c": 0,
+  "t": "Chiến lược rollout không gián đoạn",
+  "task": "Cấu hình Deployment api: maxSurge 2, maxUnavailable 0, giữ tối đa 5 revision.",
+  "sol": "k patch deploy api -p '{\"spec\":{\"revisionHistoryLimit\":5,\"strategy\":{\"type\":\"RollingUpdate\",\"rollingUpdate\":{\"maxSurge\":2,\"maxUnavailable\":0}}}}'\nk get deploy api -o jsonpath='{.spec.strategy}'"
+ },
+ {
+  "d": "work",
+  "c": 1,
+  "t": "ConfigMap file và Secret env",
+  "task": "Tạo ConfigMap app-cfg từ file app.properties, mount vào /etc/app; tạo Secret db-cred (password=s3cr3t) và đưa vào biến DB_PASSWORD của Deployment api.",
+  "sol": "k create cm app-cfg --from-file=app.properties\nk create secret generic db-cred --from-literal=password=s3cr3t\nk set env deploy/api --from=secret/db-cred --prefix=DB_      # tạo DB_PASSWORD\n# volume: k edit deploy api\nvolumes: [{name: cfg, configMap: {name: app-cfg}}]\nvolumeMounts: [{name: cfg, mountPath: /etc/app}]\nk exec deploy/api -- sh -c 'ls /etc/app; echo $DB_PASSWORD'"
+ },
+ {
+  "d": "work",
+  "c": 2,
+  "t": "HPA với behavior",
+  "task": "Tạo HPA cho Deployment api: CPU 60%, 2 đến 8 replica, scale down chờ 120 giây.",
+  "sol": "k autoscale deploy api --min=2 --max=8 --cpu-percent=60\nk patch hpa api -p '{\"spec\":{\"behavior\":{\"scaleDown\":{\"stabilizationWindowSeconds\":120}}}}'\nk describe hpa api"
+ },
+ {
+  "d": "work",
+  "c": 2,
+  "t": "Resize Pod tại chỗ",
+  "task": "Pod worker cần tăng CPU request lên 500m mà không bị tạo lại.",
+  "sol": "k patch pod worker --subresource resize -p '{\"spec\":{\"containers\":[{\"name\":\"worker\",\"resources\":{\"requests\":{\"cpu\":\"500m\"}}}]}}'\nk get pod worker -o jsonpath='{.status.containerStatuses[0].resources}{\"\\n\"}{.status.containerStatuses[0].restartCount}'"
+ },
+ {
+  "d": "work",
+  "c": 3,
+  "t": "Ba loại probe",
+  "task": "Thêm vào Deployment api: startupProbe HTTP /healthz:8080 (tối đa 60 giây), readinessProbe /ready, livenessProbe /healthz mỗi 10 giây.",
+  "sol": "startupProbe:\n  httpGet: {path: /healthz, port: 8080}\n  periodSeconds: 2\n  failureThreshold: 30\nreadinessProbe:\n  httpGet: {path: /ready, port: 8080}\nlivenessProbe:\n  httpGet: {path: /healthz, port: 8080}\n  periodSeconds: 10"
+ },
+ {
+  "d": "work",
+  "c": 3,
+  "t": "PDB và drain",
+  "task": "Đảm bảo Deployment web (4 replica) luôn còn ít nhất 3 Pod khi bảo trì node, rồi drain worker-1.",
+  "sol": "k create pdb web --selector=app=web --min-available=3\nk drain worker-1 --ignore-daemonsets --delete-emptydir-data\nk get pdb web ; k uncordon worker-1"
+ },
+ {
+  "d": "work",
+  "c": 3,
+  "t": "DaemonSet chạy cả control plane",
+  "task": "Tạo DaemonSet node-agent (busybox, sleep) chạy trên mọi node, kể cả control plane.",
+  "sol": "k create deploy node-agent --image=busybox:1.36 $do -- sleep infinity > ds.yaml\n# kind: DaemonSet, xóa replicas, strategy, status; thêm:\ntolerations:\n- {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}\nk apply -f ds.yaml ; k get ds node-agent -o wide"
+ },
+ {
+  "d": "work",
+  "c": 3,
+  "t": "Init container chờ phụ thuộc",
+  "task": "Pod web chỉ khởi động sau khi Service db phân giải được.",
+  "sol": "initContainers:\n- name: wait-db\n  image: busybox:1.36\n  command: ['sh','-c','until nslookup db.default.svc.cluster.local; do sleep 2; done']\nk get pod web     # Init:0/1 cho tới khi có Service db"
+ },
+ {
+  "d": "work",
+  "c": 4,
+  "t": "nodeAffinity và toleration",
+  "task": "Pod gpu-job chỉ chạy trên node có label accelerator=nvidia; các node đó có taint gpu=true:NoSchedule.",
+  "sol": "k label node worker-3 accelerator=nvidia\nk taint node worker-3 gpu=true:NoSchedule\nspec:\n  tolerations: [{key: gpu, operator: Equal, value: \"true\", effect: NoSchedule}]\n  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n        - matchExpressions: [{key: accelerator, operator: In, values: [nvidia]}]"
+ },
+ {
+  "d": "work",
+  "c": 4,
+  "t": "Quota và LimitRange",
+  "task": "Namespace team-a: tổng requests.cpu tối đa 2, requests.memory 4Gi, 10 Pod; container không khai báo thì nhận request 100m/128Mi và limit 500m/256Mi.",
+  "sol": "k create quota team-a -n team-a --hard=requests.cpu=2,requests.memory=4Gi,pods=10\ncat <<EOF | k apply -f -\napiVersion: v1\nkind: LimitRange\nmetadata: {name: defaults, namespace: team-a}\nspec:\n  limits:\n  - type: Container\n    defaultRequest: {cpu: 100m, memory: 128Mi}\n    default: {cpu: 500m, memory: 256Mi}\nEOF\nk describe quota,limitrange -n team-a"
+ },
+ {
+  "d": "work",
+  "c": 4,
+  "t": "PriorityClass",
+  "task": "Tạo PriorityClass critical-app (value 100000, không là mặc định) và gán cho Deployment payments.",
+  "sol": "k create priorityclass critical-app --value=100000 --description='payments'\nk patch deploy payments -p '{\"spec\":{\"template\":{\"spec\":{\"priorityClassName\":\"critical-app\"}}}}'\nk get pods -l app=payments -o jsonpath='{.items[*].spec.priority}'"
+ },
+ {
+  "d": "work",
+  "c": 4,
+  "t": "Static pod trên node",
+  "task": "Tạo static pod web-static (nginx) trên worker-1.",
+  "sol": "ssh worker-1\nsudo grep staticPodPath /var/lib/kubelet/config.yaml\nkubectl run web-static --image=nginx:1.27 --dry-run=client -o yaml | sudo tee /etc/kubernetes/manifests/web-static.yaml\nexit\nk get pods | grep web-static-worker-1"
+ },
+ {
+  "d": "work",
+  "c": 4,
+  "t": "Lập lịch thủ công",
+  "task": "Scheduler không chạy. Đặt Pod manual lên worker-2 ngay.",
+  "sol": "k run manual --image=nginx:1.27 $do > m.yaml\n# thêm spec.nodeName: worker-2\nk apply -f m.yaml ; k get pod manual -o wide"
+ },
+ {
+  "d": "work",
+  "c": 4,
+  "t": "Trải đều qua zone",
+  "task": "Deployment web 6 replica phải chia đều qua các zone (lệch tối đa 1), không được đặt nếu vi phạm.",
+  "sol": "topologySpreadConstraints:\n- maxSkew: 1\n  topologyKey: topology.kubernetes.io/zone\n  whenUnsatisfiable: DoNotSchedule\n  labelSelector: {matchLabels: {app: web}}"
+ },
+ {
+  "d": "stor",
+  "c": 0,
+  "t": "StorageClass mặc định",
+  "task": "Tạo StorageClass local-wait (provisioner rancher.io/local-path, WaitForFirstConsumer, Delete) và đặt làm mặc định thay cho lớp hiện tại.",
+  "sol": "k get sc\nk patch sc <lớp-cũ> -p '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}'\ncat <<EOF | k apply -f -\napiVersion: storage.k8s.io/v1\nkind: StorageClass\nmetadata:\n  name: local-wait\n  annotations: {storageclass.kubernetes.io/is-default-class: \"true\"}\nprovisioner: rancher.io/local-path\nvolumeBindingMode: WaitForFirstConsumer\nreclaimPolicy: Delete\nEOF\nk get sc"
+ },
+ {
+  "d": "stor",
+  "c": 0,
+  "t": "Dynamic provisioning và Pod",
+  "task": "Tạo PVC data (2Gi, RWO, lớp local-wait) và Pod writer ghi ngày giờ vào /data/out.txt. Xác nhận PV được tạo tự động.",
+  "sol": "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata: {name: data}\nspec: {accessModes: [ReadWriteOnce], storageClassName: local-wait, resources: {requests: {storage: 2Gi}}}\n---\napiVersion: v1\nkind: Pod\nmetadata: {name: writer}\nspec:\n  containers:\n  - {name: w, image: busybox:1.36, command: ['sh','-c','date > /data/out.txt; sleep 3600'], volumeMounts: [{name: d, mountPath: /data}]}\n  volumes: [{name: d, persistentVolumeClaim: {claimName: data}}]\n---\nk get pvc data ; k get pv ; k exec writer -- cat /data/out.txt"
+ },
+ {
+  "d": "stor",
+  "c": 1,
+  "t": "PV hostPath tạo tay",
+  "task": "Tạo PV pv-log 1Gi, RWO, Retain, storageClassName manual, hostPath /mnt/log; PVC log-claim bind vào nó; Pod logger mount ở /var/log/app.",
+  "sol": "apiVersion: v1\nkind: PersistentVolume\nmetadata: {name: pv-log}\nspec: {capacity: {storage: 1Gi}, accessModes: [ReadWriteOnce], persistentVolumeReclaimPolicy: Retain, storageClassName: manual, hostPath: {path: /mnt/log}}\n---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata: {name: log-claim}\nspec: {accessModes: [ReadWriteOnce], storageClassName: manual, resources: {requests: {storage: 1Gi}}}\n---\nk get pv pv-log    # Bound"
+ },
+ {
+  "d": "stor",
+  "c": 1,
+  "t": "emptyDir chia sẻ",
+  "task": "Pod share có hai container: writer ghi file vào /shared mỗi 5 giây, reader đọc từ đó. Volume dùng RAM, giới hạn 64Mi.",
+  "sol": "volumes:\n- name: shared\n  emptyDir: {medium: Memory, sizeLimit: 64Mi}\ncontainers:\n- {name: writer, image: busybox:1.36, command: ['sh','-c','while true; do date >> /shared/t; sleep 5; done'], volumeMounts: [{name: shared, mountPath: /shared}]}\n- {name: reader, image: busybox:1.36, command: ['sh','-c','tail -F /shared/t'], volumeMounts: [{name: shared, mountPath: /shared}]}"
+ },
+ {
+  "d": "stor",
+  "c": 2,
+  "t": "Mở rộng PVC",
+  "task": "Tăng PVC data từ 2Gi lên 5Gi.",
+  "sol": "k get sc local-wait -o jsonpath='{.allowVolumeExpansion}'   # phải true\nk patch pvc data -p '{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"5Gi\"}}}}'\nk get pvc data -w"
+ },
+ {
+  "d": "stor",
+  "c": 2,
+  "t": "Tái sử dụng PV Released",
+  "task": "PV pv-old ở trạng thái Released sau khi PVC cũ bị xóa. Cho nó Available để PVC mới bind được, giữ nguyên dữ liệu.",
+  "sol": "k get pv pv-old -o jsonpath='{.spec.claimRef}'\nk patch pv pv-old --type=json -p '[{\"op\":\"remove\",\"path\":\"/spec/claimRef\"}]'\nk get pv pv-old     # Available"
+ },
+ {
+  "d": "stor",
+  "c": 2,
+  "t": "Snapshot và khôi phục",
+  "task": "Chụp VolumeSnapshot data-snap từ PVC data (class csi-snap) rồi tạo PVC data-restore từ snapshot đó.",
+  "sol": "# VolumeSnapshot: xem Thư viện khái niệm → Volume snapshot\nk get volumesnapshot data-snap -o jsonpath='{.status.readyToUse}'\n# PVC data-restore với dataSource: {name: data-snap, kind: VolumeSnapshot, apiGroup: snapshot.storage.k8s.io}\nk get pvc data-restore"
+ },
+ {
+  "d": "work",
+  "c": 3,
+  "t": "Readiness bằng lệnh exec",
+  "task": "Pod cache chỉ được nhận traffic khi file /tmp/ready tồn tại. Cấu hình readinessProbe kiểu exec kiểm tra mỗi 5 giây, rồi tạo file để Pod thành Ready.",
+  "sol": "readinessProbe:\n  exec: {command: [\"test\", \"-f\", \"/tmp/ready\"]}\n  periodSeconds: 5\n---\nk get pod cache          # READY 0/1\nk exec cache -- touch /tmp/ready\nk get pod cache -w       # READY 1/1"
+ },
+ {
+  "d": "trouble",
+  "c": 3,
+  "t": "Liveness giết app khởi động chậm",
+  "task": "Pod report-api restart liên tục, log cho thấy app chưa kịp khởi động xong. App cần khoảng 90 giây để sẵn sàng. Sửa cấu hình probe mà không tăng initialDelaySeconds của liveness.",
+  "sol": "k describe pod -l app=report-api | grep -E 'Liveness|Killing'\nk edit deploy report-api\n# thêm:\nstartupProbe:\n  httpGet: {path: /healthz, port: 8080}\n  periodSeconds: 10\n  failureThreshold: 12      # tối đa 120 giây\nk rollout status deploy report-api"
+ },
+ {
+  "d": "net",
+  "c": 2,
+  "t": "Service rỗng vì readiness",
+  "task": "Service api có selector đúng nhưng EndpointSlice không có địa chỉ nào. Các Pod Running 0/1. Tìm và sửa.",
+  "sol": "k get pods -l app=api       # READY 0/1\nk describe pod -l app=api | grep -A3 Readiness\n# readinessProbe trỏ sai port 8081, app nghe 8080\nk edit deploy api\nk get endpointslices -l kubernetes.io/service-name=api"
+ },
+ {
+  "d": "work",
+  "c": 3,
+  "t": "Job chạy song song",
+  "task": "Tạo Job batch-sum (image busybox:1.36, lệnh echo done) cần 6 lần thành công, tối đa 2 Pod chạy cùng lúc, thử lại tối đa 3 lần, tự xóa 120 giây sau khi xong.",
+  "sol": "k create job batch-sum --image=busybox:1.36 $do -- sh -c 'echo done' > job.yaml\n# thêm dưới spec:\n  completions: 6\n  parallelism: 2\n  backoffLimit: 3\n  ttlSecondsAfterFinished: 120\nk apply -f job.yaml\nk get job batch-sum -w          # COMPLETIONS 6/6\nk get pods -l job-name=batch-sum"
+ },
+ {
+  "d": "work",
+  "c": 0,
+  "t": "Xóa Deployment nhưng giữ Pod",
+  "task": "Xóa Deployment legacy trong namespace app mà không làm dừng ReplicaSet và Pod đang chạy. Xác nhận ReplicaSet không còn ownerReferences.",
+  "sol": "k delete deploy legacy -n app --cascade=orphan\nk get rs,pods -n app -l app=legacy\nk get rs -n app -l app=legacy -o jsonpath='{.items[0].metadata.ownerReferences}'   # rỗng"
+ },
+ {
+  "d": "trouble",
+  "c": 0,
+  "t": "Namespace kẹt Terminating",
+  "task": "Namespace old-team đứng Terminating hơn 10 phút. Tìm object còn giữ nó và xử lý.",
+  "sol": "k get ns old-team -o jsonpath='{.status.conditions}' ; echo\nk api-resources --verbs=list --namespaced -o name \\\n  | xargs -n1 kubectl get -n old-team --ignore-not-found --show-kind\n# thường là custom resource còn finalizer mà operator đã bị gỡ\nk get <kind> <name> -n old-team -o jsonpath='{.metadata.finalizers}'\nk patch <kind> <name> -n old-team --type=merge -p '{\"metadata\":{\"finalizers\":null}}'   # chỉ khi chắc chắn"
+ },
+ {
+  "d": "arch",
+  "c": 0,
+  "t": "ServiceAccount cho Pod đọc ConfigMap",
+  "task": "Trong namespace app: Pod reader dùng ServiceAccount reader-sa và được get, list ConfigMap trong app. ServiceAccount default không được tự gắn token vào Pod.",
+  "sol": "k create sa reader-sa -n app\nk create role cm-read -n app --verb=get,list --resource=configmaps\nk create rolebinding reader-sa-cm -n app --role=cm-read --serviceaccount=app:reader-sa\nk patch sa default -n app -p '{\"automountServiceAccountToken\":false}'\nk run reader -n app --image=bitnami/kubectl \\\n  --overrides='{\"spec\":{\"serviceAccountName\":\"reader-sa\"}}' -- sleep 3600\nk exec -n app reader -- kubectl get cm\nk auth can-i list cm -n app --as=system:serviceaccount:app:reader-sa"
+ },
+ {
+  "d": "net",
+  "c": 2,
+  "t": "Service trỏ ra DB ngoài cluster",
+  "task": "Tạo Service legacy-db (không selector, port 5432) trỏ tới 10.0.5.20:5432 bằng EndpointSlice tự tạo.",
+  "sol": "cat <<EOF | k apply -f -\napiVersion: v1\nkind: Service\nmetadata: {name: legacy-db}\nspec:\n  ports: [{port: 5432, protocol: TCP}]\n---\napiVersion: discovery.k8s.io/v1\nkind: EndpointSlice\nmetadata:\n  name: legacy-db-1\n  labels: {kubernetes.io/service-name: legacy-db}\naddressType: IPv4\nports: [{port: 5432, protocol: TCP}]\nendpoints: [{addresses: [\"10.0.5.20\"]}]\nEOF\nk get endpointslices -l kubernetes.io/service-name=legacy-db"
+ }
+]

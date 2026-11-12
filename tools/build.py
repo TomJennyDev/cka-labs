@@ -276,6 +276,16 @@ def main():
             "diagrams": [[t, md(b)] for t, b in l["diagrams"]],
         } for l in labs],
     }
+    # shared data: CKA exercise bank (src/cka/bank.json) and CKAD curriculum (src/ckad/*.yaml)
+    with open(os.path.join(ROOT, "src", "cka", "bank.json"), encoding="utf-8") as f:
+        bank = json.load(f)
+    with open(os.path.join(ROOT, "src", "ckad", "topics.yaml"), encoding="utf-8") as f:
+        ck = yaml.safe_load(f)
+    with open(os.path.join(ROOT, "src", "ckad", "exercises.yaml"), encoding="utf-8") as f:
+        ck["exercises"] = yaml.safe_load(f)
+    with open(os.path.join(ROOT, "src", "ckad", "cheat.yaml"), encoding="utf-8") as f:
+        ck["cheat"] = yaml.safe_load(f)
+    data["bank"] = bank
     with open(os.path.join(ROOT, "tools", "guide.html"), encoding="utf-8") as f:
         tpl = f.read()
     blob = json.dumps(data, ensure_ascii=False).replace("</", "<\\/")
@@ -301,7 +311,11 @@ def main():
             with open(fp, encoding="utf-8") as f:
                 best_files[os.path.relpath(fp, ex).replace(os.sep, "/")] = f.read()
     js = "const BEST_FILES = " + json.dumps(best_files, ensure_ascii=False) + ";\n"
-    for part in ("learn-kinds.js", "learn-best.js", "learn-wire-anim.js", "learn-wire-ops.js", "learn-wire.js", "learn-trouble.js", "learn-scale.js"):
+    # theory page gets the whole CKAD curriculum + cheatsheet, a light CKAD exercise index and the CKA bank (for counts)
+    js += "const CKAD = " + json.dumps({"domains": ck["domains"], "sources": ck["sources"], "cheat": ck["cheat"],
+                                        "ex": [{"id": e["id"], "d": e["d"], "tp": e["tp"], "title": e["title"]} for e in ck["exercises"]]}, ensure_ascii=False) + ";\n"
+    js += "const CKA_BANK = " + json.dumps([{"d": b["d"], "c": b["c"]} for b in bank]) + ";\n"
+    for part in ("learn-kinds.js", "learn-best.js", "learn-wire-anim.js", "learn-wire-ops.js", "learn-wire.js", "learn-trouble.js", "learn-scale.js", "learn-ckad.js"):
         with open(os.path.join(ROOT, "tools", part), encoding="utf-8") as f:
             js += f.read() + "\n"
     learn += "\n<script>\n\"use strict\";\n" + js.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT") + "\n</script>\n"
@@ -312,13 +326,10 @@ def main():
     write(os.path.join(ROOT, "docs", "learn.html"), learn_full)
     write(os.path.join(ROOT, "build", "learn.html"), learn_full)
 
-    # CKAD page: data from src/ckad, styles shared with learn.html
-    with open(os.path.join(ROOT, "src", "ckad", "topics.yaml"), encoding="utf-8") as f:
-        ck = yaml.safe_load(f)
-    with open(os.path.join(ROOT, "src", "ckad", "exercises.yaml"), encoding="utf-8") as f:
-        ck["exercises"] = yaml.safe_load(f)
-    with open(os.path.join(ROOT, "src", "ckad", "cheat.yaml"), encoding="utf-8") as f:
-        ck["cheat"] = yaml.safe_load(f)
+    # CKAD exercises page: only names of the curriculum items (theory lives in learn.html), exercises and sources
+    ckpage = {"sources": ck["sources"], "exercises": ck["exercises"],
+              "domains": [{"id": d["id"], "t": d["t"], "vi": d["vi"], "w": d["w"],
+                           "topics": [{"t": t["t"], "vi": t["vi"], "learn": t.get("learn"), "anim": t.get("anim")} for t in d["topics"]]} for d in ck["domains"]]}
     with open(os.path.join(ROOT, "tools", "ckad.html"), encoding="utf-8") as f:
         ckad = f.read()
     with open(os.path.join(ROOT, "tools", "ckad.js"), encoding="utf-8") as f:
@@ -326,11 +337,11 @@ def main():
     style = learn[learn.index("<style>"):learn.index("</style>") + len("</style>")]
     safe = lambda t: t.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT")
     ckad = (ckad.replace("<!--LEARN_STYLE-->", style.replace("</style>", "[hidden]{display:none!important}\n</style>"))
-                .replace("/*CKAD_DATA*/", safe("const CKAD = " + json.dumps(ck, ensure_ascii=False) + ";"))
+                .replace("/*CKAD_DATA*/", safe("const CKAD = " + json.dumps(ckpage, ensure_ascii=False) + ";"))
                 .replace("/*CKAD_JS*/", safe(ckjs)))
     write(os.path.join(ROOT, "docs", "ckad.html"), ckad)
     write(os.path.join(ROOT, "build", "ckad.html"), ckad)
-    print("built %d labs, %d in test suite, CKAD %d exercises" % (len(labs), len(tested), len(ck["exercises"])))
+    print("built %d labs, %d in test suite, CKA bank %d, CKAD %d exercises" % (len(labs), len(tested), len(bank), len(ck["exercises"])))
 
 
 if __name__ == "__main__":

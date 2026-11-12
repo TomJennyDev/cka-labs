@@ -41,7 +41,9 @@ pre{margin:0}
 .top .meta{margin-left:auto;display:flex;gap:10px;align-items:center;font:12px var(--f-mono);color:var(--muted);white-space:nowrap}
 .meter{width:90px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
 .meter i{display:block;height:100%;background:var(--ok);width:0;transition:width .3s}
-@media (max-width:640px){.top nav{margin-left:0}.top nav a:not(:first-child){display:none}.meter{width:50px}}
+.navsep{width:1px;height:20px;background:var(--line);margin:0 4px;align-self:center}
+@media (max-width:1100px){.top nav a.sub:not([data-nav="bank"]),.navsep{display:none}}
+@media (max-width:640px){.top nav{margin-left:0;gap:2px}.top nav a{padding:6px 6px;font-size:13px}.top nav a.sub{display:none}.brand i,.top .meta{display:none}}
 
 .layout{display:grid;grid-template-columns:minmax(0,1fr)}
 .side{background:var(--bg);border-bottom:1px solid var(--line);padding-block:10px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
@@ -205,12 +207,34 @@ details.hint>div{padding:0 0 12px}
 .diagram .md>p{font-size:13.5px;color:var(--muted);margin-top:8px}
 .fade{height:10px;border-radius:5px;background:linear-gradient(90deg,var(--ok) 0%,var(--accent) 45%,var(--warn) 80%,var(--line) 100%)}
 .fade-l{display:flex;justify-content:space-between;font:600 11px var(--f-mono);color:var(--muted);margin-top:6px}
+/* bài tập theo domain (ngân hàng đề viết tay) */
+.bk-dom{display:flex;flex-direction:column;gap:14px}
+.bk-dom>h2{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bk-comp{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:16px;display:flex;flex-direction:column;gap:10px;scroll-margin-top:70px}
+.bk-comp h3{margin:0;font-size:16px}
+.bk-comp .lbl{font:600 11px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.bk-item{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px}
+.bk-item h4{margin:0;font-size:15px;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.bk-item h4 .n{font:600 12px var(--f-mono);color:var(--muted)}
+.bk-item.done h4::before{content:"✓";color:var(--ok);font-weight:700}
+.bk-item p{margin:0;font-size:14.5px}
+.bk-ctl{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.bk-ctl label{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.bk-ctl input{accent-color:var(--ok);width:16px;height:16px}
+.bk-filter{display:flex;flex-wrap:wrap;gap:6px}
+.bk-filter a{font:600 12.5px var(--f-body);text-decoration:none;color:var(--ink);border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:6px 12px;display:inline-flex;gap:6px;align-items:center}
+.bk-filter a[aria-current="page"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.bk-mock{position:sticky;top:64px;z-index:5}
+.domsum{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr))}
+.domsum a{display:flex;flex-direction:column;gap:4px;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-top-width:4px;border-radius:10px;padding:12px;background:var(--paper)}
+.domsum a:hover{border-color:var(--accent)}
+.domsum b{font-size:14.5px}.domsum span{font-size:12.5px;color:var(--muted)}
 @media (prefers-reduced-motion: reduce){*{transition:none !important}}
 </style>
 
 <header class="top">
   <a class="brand" href="#home">CKA Labs <i>v1.37</i></a>
-  <nav><a href="learn.html#overview">Lý thuyết</a><a href="ckad.html#overview">CKAD</a><a href="#home" data-nav="home">Lộ trình</a><a href="#setup" data-nav="setup">Môi trường</a><a href="#lab-38" data-nav="exam">Thi thử</a><a href="https://github.com/TomJennyDev/cka-labs" target="_blank" rel="noopener">GitHub ↗</a></nav>
+  <nav><a href="learn.html#overview">Lý thuyết</a><a href="#home" data-nav="cka">Bài tập CKA</a><a href="ckad.html#overview">Bài tập CKAD</a><span class="navsep" aria-hidden="true"></span><a class="sub" href="#bank" data-nav="bank">Theo domain</a><a class="sub" href="#setup" data-nav="setup">Môi trường</a><a class="sub" href="#lab-38" data-nav="exam">Thi thử</a><a class="sub" href="https://github.com/TomJennyDev/cka-labs" target="_blank" rel="noopener">GitHub ↗</a></nav>
   <div class="meta"><span id="progTxt">0/39</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
 </header>
 <div class="layout">
@@ -297,7 +321,8 @@ function renderSide(filter) {
 function markCurrent() {
   const h = location.hash.slice(1);
   $$("#levels a").forEach(a => a.setAttribute("aria-current", h === "lab-" + pad(+a.dataset.lab) ? "page" : "false"));
-  $$(".top nav a[data-nav]").forEach(a => a.setAttribute("aria-current", (a.dataset.nav === "home" && (h === "home" || !h)) || (a.dataset.nav === "setup" && h === "setup") || (a.dataset.nav === "exam" && h === "lab-38") ? "page" : "false"));
+  const cur = { cka: !h.startsWith("bank") && h !== "setup" && h !== "lab-38", bank: h.startsWith("bank"), setup: h === "setup", exam: h === "lab-38" };
+  $$(".top nav a[data-nav]").forEach(a => a.setAttribute("aria-current", cur[a.dataset.nav] ? "page" : "false"));
 }
 function progress() {
   const n = DATA.labs.filter(l => state.done[l.id]).length;
@@ -309,7 +334,7 @@ function home() {
   const total = DATA.labs.length, tested = DATA.labs.filter(l => l.env !== "vm").length;
   const nComp = Object.values(DATA.domains).reduce((a, d) => a + d[2].length, 0);
   let h = '<div class="page wide">';
-  h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.37</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="learn.html#overview">Học lý thuyết tương tác</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
+  h += '<section class="hero"><div><p class="eyebrow">Certified Kubernetes Administrator · Kubernetes v1.37</p><h1>Học CKA bằng cách sửa cluster thật</h1><p class="lead">Mỗi bài dựng sẵn một tình huống trên cluster của bạn, giao đề kiểu phòng thi, và chấm tự động từng tiêu chí. Đi từ kubectl cơ bản tới troubleshooting control plane, kết thúc bằng đề thi thử 2 giờ.</p><div class="row" style="margin-top:16px"><a class="btn primary" href="#lab-00">Bắt đầu từ lab 00</a><a class="btn" href="#bank">Bài tập theo domain</a><a class="btn" href="learn.html#overview">Học lý thuyết tương tác</a><a class="btn" href="#setup">Dựng môi trường</a><a class="btn" href="' + REPO + '" target="_blank" rel="noopener">Mở repo ↗</a></div></div>';
   h += '<div class="code"><pre>git clone ' + REPO + '\ncd cka-labs\n./env/kind/up.sh        # cluster 3 node v1.37\n./lab start 7           # dựng tình huống\n./lab check 7           # chấm bài\n./lab reset 7           # dọn dẹp</pre></div></section>';
   h += '<div class="stats"><div><b>' + total + '</b><span>bài lab có script tự chấm</span></div><div><b>' + nComp + '/' + nComp + '</b><span>năng lực của đề thi được phủ</span></div><div><b>' + tested + '</b><span>bài chạy trên kind ngay trên laptop</span></div><div><b>120′</b><span>đề thi thử chấm theo trọng số</span></div></div>';
   h += '<section><h2>Hướng dẫn giảm dần theo cấp độ</h2><p class="muted small">Bài đầu dắt bạn từng lệnh. Càng lên cao, phần hướng dẫn càng ít đi, cho tới khi bạn tự làm như trong phòng thi.</p><div class="fade" aria-hidden="true"></div><div class="fade-l" aria-hidden="true"><span>Nhiều hướng dẫn</span><span>Tự lực</span></div><div class="modes" style="margin-top:14px">' +
@@ -320,15 +345,9 @@ function home() {
     h += '<div class="stage"><div class="row" style="justify-content:space-between"><span class="lv">CẤP ' + lv + "</span>" + supTag(labs[0].support) + "</div><h3>" + esc(DATA.levels[lv][0]) + "</h3><p>" + esc(DATA.levels[lv][1]) + '</p><div class="stagebar"><i style="width:' + (done / labs.length * 100) + '%"></i></div><div class="chips">' + labs.map(l => '<a class="chip ' + labStatus(l.id) + '" href="#lab-' + pad(l.id) + '" title="' + esc(l.title) + '">' + pad(l.id) + "</a>").join("") + "</div></div>";
   });
   h += "</div></section>";
-  h += '<section class="panel"><h2>Phủ năng lực của đề thi</h2><p class="muted small">Mỗi năng lực trong curriculum CKA và các bài luyện nó. Bấm mã bài để mở.</p><div class="covwrap"><table class="cov"><thead><tr><th>Năng lực</th><th>Bài lab</th></tr></thead><tbody>';
-  Object.entries(DATA.domains).forEach(([dk, d]) => {
-    h += '<tr class="dm"><td colspan="2"><span class="domsw" style="background:' + DCOL[dk] + '"></span>' + esc(d[0]) + " · " + d[1] + "%</td></tr>";
-    d[2].forEach((c, i) => {
-      const labs = DATA.labs.filter(l => l.comps.includes(dk + ":" + i));
-      h += "<tr><td>" + esc(c) + '</td><td><div class="chips">' + labs.map(l => '<a class="chip ' + labStatus(l.id) + '" href="#lab-' + pad(l.id) + '" title="' + esc(l.title) + '">' + pad(l.id) + "</a>").join("") + "</div></td></tr>";
-    });
-  });
-  h += "</tbody></table></div></section></div>";
+  h += '<section class="panel"><h2>Bài tập theo 5 domain của đề thi</h2><p class="muted small">Mỗi năng lực trong curriculum CKA của Linux Foundation: lab tự chấm và bài viết theo giọng đề thi, kèm đề thi thử 17 câu bốc theo trọng số.</p><div class="domsum">' +
+    Object.entries(DATA.domains).map(([dk, d]) => { const nl = DATA.labs.filter(l => l.comps.some(c => c.startsWith(dk + ":"))).length, nb = DATA.bank.filter(b => b.d === dk).length;
+      return '<a href="#bank-' + dk + '" style="border-top-color:' + DCOL[dk] + '"><b>' + esc(d[0]) + "</b><span>" + d[1] + "% · " + d[2].length + " năng lực · " + nl + " lab · " + nb + " bài viết</span></a>"; }).join("") + '</div><div class="row" style="margin-top:14px"><a class="btn primary" href="#bank">Mở bài tập theo domain</a><a class="btn" href="#bank-mock">Đề thi thử 17 câu</a></div></section></div>';
   return h;
 }
 
@@ -411,12 +430,65 @@ function timer() {
   tick(); timerInt = setInterval(tick, 1000);
 }
 
+// bài tập theo domain: lab tự chấm + ngân hàng bài viết tay (src/cka/bank.json), sắp theo curriculum CKA
+const BANK_MOCK = { trouble: 5, arch: 4, net: 3, work: 3, stor: 2 };
+let bankInt = null;
+state.bank = state.bank || {};
+function bankItem(i, n) {
+  const b = DATA.bank[i], d = !!state.bank[i];
+  return '<div class="bk-item' + (d ? " done" : "") + '" data-bi="' + i + '"><h4><span class="n">' + (n != null ? "Câu " + n : "#" + pad(i + 1)) + "</span>" + esc(b.t) + "</h4><p>" + esc(b.task) + '</p><div class="bk-ctl"><button class="btn" type="button" data-bsol>Xem lời giải</button><label><input type="checkbox" data-bdone' + (d ? " checked" : "") + "> Đã tự làm được</label></div>" +
+    '<div class="md" hidden><pre><code>' + esc(b.sol) + "</code></pre></div></div>";
+}
+function bank(dom) {
+  const mock = store.get("bankMock", null), doms = Object.entries(DATA.domains), n = DATA.bank.length, done = DATA.bank.filter((_, i) => state.bank[i]).length;
+  let h = '<div class="page wide"><div><p class="eyebrow">Bài tập CKA · theo curriculum của Linux Foundation</p><h1>Bài tập theo domain</h1><p class="lead">Mỗi năng lực của đề có lab dựng sẵn để <code>./lab check</code> tự chấm, và bài viết theo giọng đề thi để tự làm trên cluster của bạn. Lý thuyết của từng năng lực nằm ở <a href="learn.html#overview">trang Lý thuyết</a>.</p></div>';
+  h += '<div class="stats"><div><b>' + DATA.labs.length + '</b><span>lab tự chấm</span></div><div><b>' + n + '</b><span>bài viết theo đề</span></div><div><b>' + done + "/" + n + '</b><span>bài viết đã tự làm</span></div><div><b>120′</b><span>đề thử 17 câu theo trọng số</span></div></div>';
+  h += '<nav class="bk-filter" aria-label="Lọc domain"><a href="#bank"' + (!dom ? ' aria-current="page"' : "") + '>Tất cả</a>' + doms.map(([k, d]) => '<a href="#bank-' + k + '"' + (dom === k ? ' aria-current="page"' : "") + '><span class="domsw" style="background:' + DCOL[k] + '"></span>' + esc(d[0].split(",")[0]) + " " + d[1] + "%</a>").join("") + '<a href="#bank-mock"' + (dom === "mock" ? ' aria-current="page"' : "") + ">⏱ Đề thi thử</a></nav>";
+  if (dom === "mock") {
+    h += '<section class="panel timer bk-mock"><b id="bkLeft">' + (mock ? "--:--" : "120:00") + '</b><div class="row"><button class="btn primary" type="button" id="bkNew">' + (mock ? "↺ Đề mới" : "▶ Bốc đề và bắt đầu") + "</button>" + (mock ? '<button class="btn" type="button" id="bkStop">Kết thúc</button>' : "") + '</div><span class="small muted">17 câu: Troubleshooting 5 · Architecture 4 · Networking 3 · Workloads 3 · Storage 2. Tự chấm bằng lời giải.</span></section>';
+    if (mock) h += '<section class="bk-comp">' + mock.ids.map((i, k) => bankItem(i, k + 1)).join("") + "</section>";
+    return h + "</div>";
+  }
+  doms.filter(([k]) => !dom || dom === k).forEach(([dk, d]) => {
+    h += '<section class="bk-dom"><h2><span class="domsw" style="background:' + DCOL[dk] + '"></span>' + esc(d[0]) + ' <span class="pill">' + d[1] + "% điểm</span></h2>";
+    d[2].forEach((c, ci) => {
+      const labs = DATA.labs.filter(l => l.comps.includes(dk + ":" + ci)), items = DATA.bank.map((b, i) => [b, i]).filter(([b]) => b.d === dk && b.c === ci);
+      h += '<div class="bk-comp" id="bk-' + dk + "-" + ci + '"><h3>' + esc(c) + "</h3>" +
+        (labs.length ? '<div class="row"><span class="lbl">Lab tự chấm</span><div class="chips" style="margin:0">' + labs.map(l => '<a class="chip ' + labStatus(l.id) + '" href="#lab-' + pad(l.id) + '" title="' + esc(l.title) + '">' + pad(l.id) + " · " + esc(l.title) + "</a>").join("") + "</div></div>" : "") +
+        items.map(([, i]) => bankItem(i)).join("") + "</div>";
+    });
+    h += "</section>";
+  });
+  return h + "</div>";
+}
+function wireBank(dom, comp) {
+  const main = $("#main");
+  main.onclick = e => {
+    const sb = e.target.closest("[data-bsol]");
+    if (sb) { const md = sb.closest(".bk-item").querySelector(".md"); md.hidden = !md.hidden; sb.textContent = md.hidden ? "Xem lời giải" : "Ẩn lời giải"; return; }
+    if (e.target.closest("#bkNew")) {
+      const ids = []; Object.entries(BANK_MOCK).forEach(([d, n]) => ids.push(...DATA.bank.map((b, i) => [b, i]).filter(([b]) => b.d === d).map(x => x[1]).sort(() => Math.random() - .5).slice(0, n)));
+      store.set("bankMock", { ids, end: Date.now() + 120 * 60000 }); render(); return;
+    }
+    if (e.target.closest("#bkStop")) { store.set("bankMock", null); render(); }
+  };
+  main.onchange = e => { const c = e.target.closest("[data-bdone]"); if (!c) return; const it = c.closest(".bk-item"); state.bank[it.dataset.bi] = c.checked; it.classList.toggle("done", c.checked); save(); };
+  if (dom === "mock") {
+    const m = store.get("bankMock", null), t = $("#bkLeft"); if (!m || !t) return;
+    const tick = () => { const ms = Math.max(0, m.end - Date.now()), mm = Math.floor(ms / 60000), ss = Math.floor(ms / 1000) % 60; if (!t.isConnected) return clearInterval(bankInt); t.textContent = ms ? pad(mm) + ":" + pad(ss) : "Hết giờ"; t.parentElement.classList.toggle("low", mm < 15); };
+    tick(); bankInt = setInterval(tick, 1000);
+  }
+  if (comp != null) { const x = $("#bk-" + dom + "-" + comp); if (x) setTimeout(() => x.scrollIntoView({ block: "start" }), 30); }
+}
+
 function render() {
   const h = location.hash.slice(1) || "home";
   const m = h.match(/^lab-(\d+)$/);
   const main = $("#main");
-  clearInterval(timerInt);
-  if (m && byId(+m[1])) { main.innerHTML = lab(+m[1]); diagrams(main); enhance(main); wireLab(+m[1]); document.title = "Lab " + m[1] + " · CKA Labs"; }
+  const bk = h.match(/^bank(?:-(trouble|arch|net|work|stor|mock))?(?:-(\d+))?$/);
+  clearInterval(timerInt); clearInterval(bankInt); main.onclick = main.onchange = null;
+  if (bk) { main.innerHTML = bank(bk[1]); enhance(main); wireBank(bk[1], bk[2] == null ? null : +bk[2]); document.title = "Bài tập theo domain · CKA Labs"; }
+  else if (m && byId(+m[1])) { main.innerHTML = lab(+m[1]); diagrams(main); enhance(main); wireLab(+m[1]); document.title = "Lab " + m[1] + " · CKA Labs"; }
   else if (h === "setup") { main.innerHTML = setup(); enhance(main); document.title = "Môi trường · CKA Labs"; }
   else { main.innerHTML = home(); enhance(main); document.title = "CKA Labs"; }
   renderSide($("#q").value); progress();

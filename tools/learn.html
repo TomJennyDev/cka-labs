@@ -488,7 +488,7 @@ ol.qchk b{flex:none}
 /* best practice list */
 details.bp{border-top:1px solid var(--line);padding:12px 0}
 details.bp:first-of-type{border-top:0}
-details.bp summary{cursor:pointer;font-weight:600;list-style:none;display:flex;gap:10px;align-items:baseline}
+details.bp summary{cursor:pointer;font-weight:600;list-style:none;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 details.bp summary::-webkit-details-marker{display:none}
 details.bp summary::before{content:"+";font:600 14px var(--f-mono);color:var(--accent);width:12px;flex:none}
 details.bp[open] summary::before{content:"−"}
@@ -600,11 +600,84 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 #cpMap .comp:hover > rect{stroke-width:2.6}
 
 @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+/* ---------- CKAD: thẻ năng lực, animation, bài tập (dùng chung cho learn.html và ckad.html) ---------- */
+.ck-bars{display:flex;flex-direction:column;gap:10px}
+.ck-bar{display:grid;grid-template-columns:minmax(0,1fr) 54px 70px;gap:10px;align-items:center;cursor:pointer;border:0;background:none;text-align:left;color:var(--ink);font:inherit;padding:0}
+.ck-bar .lab{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ck-bar .lab b{font-size:14.5px}.ck-bar .lab small{font:11.5px var(--f-mono);color:var(--muted)}
+.ck-bar .track{height:12px;background:var(--paper-2);border-radius:6px;overflow:hidden}
+.ck-bar .track i{display:block;height:100%;width:0;border-radius:6px;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.ck-bar .w{font:700 18px var(--f-display);text-align:right}
+.ck-bar .m{font:12px var(--f-mono);color:var(--muted)}
+.ck-bar:hover .lab b{color:var(--accent)}
+.ck-cmp{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))}
+.ck-cmp>div{border:1px solid var(--line);border-radius:10px;padding:12px;border-top-width:4px;display:flex;flex-direction:column;gap:6px}
+.ck-cmp .a{border-top-color:var(--node)}.ck-cmp .b{border-top-color:var(--accent)}.ck-cmp .c{border-top-color:var(--muted)}
+.ck-cmp ul{margin:0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:3px}
+.ck-topics{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))}
+.ck-topic{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:9px;background:var(--paper);min-width:0}
+.ck-topic .en{font:11.5px var(--f-mono);color:var(--muted);letter-spacing:.02em}
+.ck-topic .vi{font-weight:600;font-size:15.5px;line-height:1.45}
+.ck-topic .trap{font-size:13.5px;background:var(--pkt-soft);border-radius:7px;padding:8px 10px}
+.ck-links{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ck-links a{text-decoration:none}
+.ck-topic .pill{white-space:normal;text-align:left;max-width:100%;overflow-wrap:anywhere;cursor:pointer}
+.ck-src{font:600 11px var(--f-mono);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--muted);background:var(--paper)}
+.ck-src:hover{color:var(--accent);border-color:var(--accent)}
+.ck-ex{border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+.ck-ex>summary{list-style:none;display:flex;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;flex-wrap:wrap}
+.ck-ex>summary::-webkit-details-marker{display:none}
+.ck-ex>summary .t{font-weight:600;flex:1;min-width:200px}
+.ck-ex>summary .mins{font:12px var(--f-mono);color:var(--muted)}
+.ck-ex.done>summary .t::before{content:"✓ ";color:var(--node)}
+.ck-ex .body{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.ck-ex .task{white-space:pre-line;font-size:14.5px;line-height:1.6;background:var(--paper-2);border-radius:8px;padding:10px 12px}
+.ck-ex .hint{font-size:13.5px;border-left:3px solid var(--pkt);padding-left:10px}
+.ck-badge{font:600 11px var(--f-mono);padding:3px 8px;border-radius:999px}
+.ck-badge.ok{background:var(--node-soft);color:var(--node)}.ck-badge.no{background:var(--paper-2);color:var(--muted)}
+.dom-build{background:var(--accent-soft);color:var(--accent)}.dom-deploy{background:var(--node-soft);color:var(--node)}.dom-obs{background:var(--pkt-soft);color:var(--pkt)}.dom-env{background:var(--data-soft);color:var(--data)}.dom-net{background:var(--bad-soft);color:var(--bad)}
+.ck-dom{font:700 10.5px var(--f-mono);padding:3px 8px;border-radius:5px;letter-spacing:.04em;text-transform:uppercase}
+.ck-prog{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.ck-prog .meter{flex:1;max-width:320px}
+.ck-anim svg{min-width:640px}
+.ck-anim .cap{min-height:44px}
+.an-pod{fill:var(--paper);stroke:var(--accent);stroke-width:1.8;stroke-dasharray:6 4}
+.an-c{fill:var(--paper-2);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s,opacity .3s}
+.an-c.run{fill:var(--node-soft);stroke:var(--node)}.an-c.done{fill:var(--paper-2);stroke:var(--muted);opacity:.55}.an-c.start{fill:var(--pkt-soft);stroke:var(--pkt)}
+.an-c.v1{fill:var(--accent-soft);stroke:var(--accent)}.an-c.v2{fill:var(--node-soft);stroke:var(--node)}.an-c.term{fill:var(--bad-soft);stroke:var(--bad);opacity:.6}
+.an-vol{fill:var(--data-soft);stroke:var(--data);stroke-width:1.5}
+.an-ext{fill:var(--paper);stroke:var(--muted);stroke-width:1.5}
+.an-svc{fill:var(--paper);stroke:var(--ink);stroke-width:1.8}.an-svc.down{stroke:var(--bad);fill:var(--bad-soft)}
+.an-l{stroke:var(--line);stroke-width:1.6;fill:none}.an-l.on{stroke:var(--accent);stroke-width:2.2}.an-l.g{stroke:var(--node);stroke-width:2.2}
+.pkt.v1{fill:var(--accent)}.pkt.v2{fill:var(--node)}.pkt.raw{fill:var(--pkt)}.pkt.fmt{fill:var(--data)}
+.an-layer{stroke:var(--paper);stroke-width:2}
+.an-dl{font:600 12.5px var(--f-mono);fill:var(--muted)}.an-dl.on{fill:var(--accent)}
+.an-bar{fill:var(--node)}
+.ck-mock-top{position:sticky;top:64px;z-index:5;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.ck-clock{font:700 26px var(--f-mono)}
+.ck-clock.low{color:var(--bad)}
+.ck-mtask{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--paper)}
+.ck-mtask.pass{border-color:var(--node);background:var(--node-soft)}.ck-mtask.fail{border-color:var(--bad);background:var(--bad-soft)}
+.ck-mtask .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ck-mtask .hd b{flex:1}
+.ck-score{font:700 44px var(--f-display)}
+.ck-cheat td code{white-space:nowrap}
+.ck-cheatgrid{grid-template-columns:repeat(auto-fill,minmax(min(420px,100%),1fr))}
+.ch-row{display:flex;flex-direction:column;gap:3px;text-align:left;border:0;border-top:1px solid var(--line);background:none;padding:8px 2px;cursor:pointer;color:var(--ink);font:inherit;width:100%}
+.ch-row code{font-size:12.5px;white-space:pre-wrap;overflow-wrap:anywhere;background:none;border:0;padding:0;color:var(--ink)}
+.ch-row span{font-size:12.5px;color:var(--muted)}
+.ch-row:hover code{color:var(--accent)}
+.ch-row.copied span::after{content:"  · đã chép";color:var(--node);font-weight:600}
+
+.lc-two{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(min(420px,100%),1fr))}
+.tight{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:4px}
+.ck-comp{gap:12px}.ck-comp-h{display:flex;gap:10px;align-items:flex-start}.ck-comp-h>div{display:flex;flex-direction:column;gap:2px;min-width:0}.ck-comp-h b{font-size:15.5px;overflow-wrap:anywhere}
+.dom-cka{background:var(--accent-soft);color:var(--accent)}.dom-ckad{background:var(--node-soft);color:var(--node)}
 </style>
 
 <header class="top">
-  <a class="brand" href="learn.html#overview" style="color:inherit;text-decoration:none">CKA Labs <span class="tag">k8s v1.37</span></a>
-  <nav class="xnav" aria-label="Các phần"><a href="learn.html#overview" aria-current="page">Lý thuyết</a><a href="index.html#home">Lab thực hành</a><a href="ckad.html#overview">CKAD</a></nav>
+  <a class="brand" href="learn.html#overview" style="color:inherit;text-decoration:none">CKA · CKAD <span class="tag">k8s v1.37</span></a>
+  <nav class="xnav" aria-label="Các phần"><a href="learn.html#overview" aria-current="page">Lý thuyết</a><a href="index.html#home">Bài tập CKA</a><a href="ckad.html#overview">Bài tập CKAD</a></nav>
   <div class="meta"><span id="progTxt">0% checklist</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
 </header>
 <div class="layout">
@@ -615,14 +688,14 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 <section class="view" data-view="overview">
   <div class="hero">
     <div>
-      <p class="eyebrow">Certified Kubernetes Administrator · ôn theo curriculum v1.37</p>
+      <p class="eyebrow">CKA và CKAD · ôn theo curriculum Kubernetes v1.37</p>
       <h1>Nhìn cluster chạy, <em>rồi mới gõ lệnh.</em></h1>
-      <p class="lead">Bộ học tương tác cho CKA: kiến trúc, đường đi của một Pod từ <code>kubectl</code> xuống tới syscall trong kernel Linux, mạng Service, scheduling, storage, RBAC, vận hành kubeadm, troubleshooting và tối ưu hiệu năng. Có 162 khái niệm theo tài liệu kubernetes.io, kiến trúc 3 lớp, 9 animation cơ chế, mô phỏng probe, 68 bài tập phủ đủ 27 năng lực của đề và đề thi thử 120 phút.</p>
+      <p class="lead">Bộ học tương tác cho CKA và CKAD: kiến trúc, đường đi của một Pod từ <code>kubectl</code> xuống tới syscall trong kernel Linux, mạng Service, scheduling, storage, RBAC, vận hành kubeadm, troubleshooting và tối ưu hiệu năng. Có 162 khái niệm theo tài liệu kubernetes.io, kiến trúc 3 lớp, 9 animation cơ chế, mô phỏng probe. Toàn bộ lý thuyết CKA và CKAD gom ở trang này; bài tập nằm ở hai trang Bài tập CKA và Bài tập CKAD.</p>
       <div class="controls" style="margin-top:18px">
         <a class="btn primary" href="#flow" data-go="flow">Xem một Pod ra đời</a>
         <a class="btn" href="#commands" data-go="commands">Mở terminal mô phỏng</a>
         <a class="btn" href="#concepts" data-go="concepts">Thư viện khái niệm</a>
-        <a class="btn" href="#labs" data-go="labs">Bài tập theo domain</a>
+        <a class="btn" href="index.html#bank">Bài tập CKA theo domain ↗</a>
       </div>
     </div>
     <div class="term" id="heroTerm" aria-label="Terminal minh họa"></div>
@@ -1093,8 +1166,8 @@ k delete deploy web --cascade=orphan   # giữ ReplicaSet và Pod</pre></div>
 <section class="view" data-view="workloads" hidden>
   <header class="vh">
     <p class="eyebrow">Workloads &amp; Scheduling · 15%</p>
-    <h2>Rolling update và scheduler, chạy thử</h2>
-    <p class="lead">Hai bộ mô phỏng dưới đây dùng đúng luật của Deployment controller và các plugin Filter/Score của kube-scheduler (đã đơn giản hóa phần chấm điểm).</p>
+    <h2>Triển khai và scheduling, chạy thử</h2>
+    <p class="lead">Rolling update, bốn chiến lược đưa bản mới lên (rolling, recreate, blue/green, canary) và scheduler. Mô phỏng dùng đúng luật của Deployment controller và các plugin Filter/Score của kube-scheduler (đã đơn giản hóa phần chấm điểm).</p>
   </header>
   <div class="domap" data-dom="work"></div>
 
@@ -1117,6 +1190,8 @@ k rollout history deploy/web
 k rollout undo deploy/web --to-revision=2
 k annotate deploy/web kubernetes.io/change-cause="nâng nginx 1.27"</pre></div>
   </div>
+
+  <div class="panel col ck-anim" id="lcStrategy"></div>
 
   <div class="panel">
     <h3>kube-scheduler: Filter rồi Score</h3>
@@ -1657,7 +1732,7 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
 <section class="view" data-view="commands" hidden>
   <header class="vh">
     <p class="eyebrow">Thực chiến · lệnh</p>
-    <h2>Terminal mô phỏng và bảng lệnh</h2>
+    <h2>Terminal mô phỏng và cheatsheet CKA, CKAD</h2>
     <p class="lead">Gõ lệnh vào terminal (hoặc bấm gợi ý) để xem output mẫu của một cluster lab. Bấm vào lệnh bất kỳ trong bảng để chép.</p>
   </header>
   <div class="split">
@@ -1671,7 +1746,7 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
       <p class="small muted">Gõ <code>help</code> để xem danh sách, <code>clear</code> để xóa màn hình. Mũi tên lên/xuống để gọi lại lệnh cũ.</p>
     </div>
   </div>
-  <div class="controls"><input type="search" id="chQ" placeholder="Lọc lệnh: drain, jsonpath, etcd…" style="flex:1;min-width:200px" aria-label="Lọc lệnh"><span class="hint" id="chCount"></span></div>
+  <div class="controls"><div class="seg" role="group" id="chExam"><button type="button" data-ex="all" aria-pressed="true">Tất cả</button><button type="button" data-ex="cka" aria-pressed="false">CKA</button><button type="button" data-ex="ckad" aria-pressed="false">CKAD</button></div><input type="search" id="chQ" placeholder="Lọc lệnh: drain, jsonpath, etcd, cronjob…" style="flex:1;min-width:200px" aria-label="Lọc lệnh"><span class="hint" id="chCount"></span></div>
   <div class="cheat" id="cheat"></div>
 </section>
 
@@ -1686,17 +1761,51 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
   <div class="col" id="quizBox" style="gap:16px"></div>
 </section>
 
-<!-- ============ LABS ============ -->
-<section class="view" data-view="labs" hidden>
+
+<!-- ============ lý thuyết CKAD (learn-ckad.js) ============ -->
+<section class="view" data-view="exam" hidden>
   <header class="vh">
-    <p class="eyebrow">Thực chiến · bài tập kiểu đề thi</p>
-    <h2>Bài tập cho từng năng lực của 5 domain</h2>
-    <p class="lead">Mỗi năng lực trong curriculum có ít nhất một bài, viết theo giọng đề thi thật: một yêu cầu, một kết quả kiểm tra được. Tự làm trên lab của bạn trước, rồi mới mở lời giải. Nút đề thi thử bốc 17 câu theo đúng trọng số domain và chạy đồng hồ 120 phút.</p>
-    <p class="lead" style="font-size:15px">Muốn làm trên cluster thật có <b>script tự chấm</b>? Sang phần <a href="index.html#home">Lab thực hành</a>: 46 bài dựng sẵn tình huống, chấm ✔/✘ từng tiêu chí, và hai đề thi thử ở chế độ phòng thi.</p>
+    <p class="eyebrow">Nền tảng · hai kỳ thi</p>
+    <h2>Kỳ thi CKA &amp; CKAD</h2>
+    <p class="lead">Cùng hình thức: thi thực hành 2 giờ trên cluster thật. Khác nhau ở phạm vi: CKA vận hành cluster, CKAD viết và chạy ứng dụng.</p>
   </header>
-  <div class="controls"><div class="seg" id="labDoms"></div></div>
-  <div class="controls"><button class="btn primary" id="labMock">Tạo đề thi thử 120 phút</button><span class="pill cp" id="labTimer" hidden></span><span class="pill" id="labProg"></span><span class="small muted" id="labInfo"></span></div>
-  <div class="col" id="labList" style="gap:12px"></div>
+  <div id="lcExam" class="col" style="gap:18px"></div>
+</section>
+
+<section class="view" data-view="multi" hidden>
+  <header class="vh">
+    <p class="eyebrow">Workload &amp; ứng dụng · CKAD</p>
+    <h2>Pod nhiều container</h2>
+    <p class="lead">Một Pod chạy nhiều container chung mạng và volume. Bốn mẫu hay gặp: init, sidecar, adapter, ambassador.</p>
+  </header>
+  <div id="lcMulti" class="col" style="gap:18px"></div>
+</section>
+
+<section class="view" data-view="jobs" hidden>
+  <header class="vh">
+    <p class="eyebrow">Workload &amp; ứng dụng · CKA và CKAD</p>
+    <h2>Job &amp; CronJob</h2>
+    <p class="lead">Job chạy Pod tới khi xong. CronJob tạo Job theo lịch.</p>
+  </header>
+  <div id="lcJobs" class="col" style="gap:18px"></div>
+</section>
+
+<section class="view" data-view="image" hidden>
+  <header class="vh">
+    <p class="eyebrow">Workload &amp; ứng dụng · CKAD</p>
+    <h2>Container image &amp; API bị gỡ</h2>
+    <p class="lead">Build image bằng Dockerfile, đưa lên registry, và sửa manifest khi API cũ bị gỡ.</p>
+  </header>
+  <div id="lcImage" class="col" style="gap:18px"></div>
+</section>
+
+<section class="view" data-view="ckadcur" hidden>
+  <header class="vh">
+    <p class="eyebrow">Ôn thi · CKAD v1.37 · curriculum CNCF</p>
+    <h2>Curriculum CKAD theo domain</h2>
+    <p class="lead">Mỗi năng lực trong đề CKAD: một câu giải thích, một lệnh, một bẫy, và chỗ học sâu hơn trong trang này.</p>
+  </header>
+  <div id="lcCur" class="col" style="gap:18px"></div>
 </section>
 
 <!-- ============ CONCEPTS ============ -->
@@ -1832,10 +1941,12 @@ function addCopy(wrap, pre) {
 
 /* ---------- modules / nav ---------- */
 const MODULES = [
-  { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "arch", n: "01", t: "Kiến trúc cluster" }, { id: "flow", n: "02", t: "Một Pod ra đời" }, { id: "linux", n: "03", t: "Bên trong Linux" }, { id: "mech", n: "04", t: "Cơ chế động" }, { id: "wire", n: "05", t: "Giao tiếp & mã hóa" },
-  { g: "Domain thi" }, { id: "network", n: "06", t: "Mạng & Service" }, { id: "kinds", n: "07", t: "Workload resources" }, { id: "workloads", n: "08", t: "Rolling update & Scheduling" }, { id: "probes", n: "09", t: "Probes & tự phục hồi" }, { id: "storage", n: "10", t: "Storage" }, { id: "security", n: "11", t: "RBAC & bảo mật" }, { id: "ops", n: "12", t: "Vận hành cluster" }, { id: "trouble", n: "13", t: "Troubleshooting" },
-  { g: "Thực chiến" }, { id: "labs", n: "14", t: "Bài tập theo domain" }, { id: "best", n: "15", t: "Best practices & cấu trúc dự án" }, { id: "perf", n: "16", t: "Hiệu năng & QoS" }, { id: "scale", n: "17", t: "Scaling & ước lượng node" }, { id: "cases", n: "18", t: "Use case thực tế" }, { id: "quiz", n: "19", t: "Quiz" },
-  { g: "Tra cứu" }, { id: "concepts", n: "20", t: "Thư viện khái niệm" }, { id: "commands", n: "21", t: "Lệnh & terminal" }
+  { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "exam", n: "01", t: "Kỳ thi CKA & CKAD" }, { id: "arch", n: "02", t: "Kiến trúc cluster" }, { id: "flow", n: "03", t: "Một Pod ra đời" }, { id: "linux", n: "04", t: "Bên trong Linux" }, { id: "mech", n: "05", t: "Cơ chế động" }, { id: "wire", n: "06", t: "Giao tiếp & mã hóa" },
+  { g: "Workload & ứng dụng" }, { id: "kinds", n: "07", t: "Workload resources" }, { id: "multi", n: "08", t: "Pod nhiều container" }, { id: "jobs", n: "09", t: "Job & CronJob" }, { id: "workloads", n: "10", t: "Triển khai & scheduling" }, { id: "probes", n: "11", t: "Probes & tự phục hồi" }, { id: "image", n: "12", t: "Container image & API" },
+  { g: "Mạng · lưu trữ · bảo mật" }, { id: "network", n: "13", t: "Mạng & Service" }, { id: "storage", n: "14", t: "Storage" }, { id: "security", n: "15", t: "RBAC & bảo mật" },
+  { g: "Vận hành & tối ưu" }, { id: "ops", n: "16", t: "Vận hành cluster" }, { id: "trouble", n: "17", t: "Troubleshooting" }, { id: "perf", n: "18", t: "Hiệu năng & QoS" }, { id: "scale", n: "19", t: "Scaling & ước lượng node" }, { id: "best", n: "20", t: "Best practices, Helm & Kustomize" }, { id: "cases", n: "21", t: "Use case thực tế" },
+  { g: "Ôn thi" }, { id: "ckadcur", n: "22", t: "Curriculum CKAD" }, { id: "quiz", n: "23", t: "Quiz" },
+  { g: "Tra cứu" }, { id: "concepts", n: "24", t: "Thư viện khái niệm" }, { id: "commands", n: "25", t: "Lệnh & cheatsheet" }
 ];
 const onShow = {};
 let current = "overview";
@@ -2754,9 +2865,10 @@ function buildCmds() {
   $("#tsScr").innerHTML = '<span class="dim">Cluster lab: cp-1, worker-1, worker-2 · Kubernetes v1.37.0\nNamespace shop có một Pod đang CrashLoopBackOff. Thử tìm nguyên nhân.</span>\n\n';
   tsRun("kubectl get nodes");
   const box = $("#cheat");
-  CHEAT.forEach(([t, rows]) => {
-    const p = document.createElement("div"); p.className = "panel";
-    p.innerHTML = "<h3 style=\"margin:0\">" + esc(t) + "</h3>" + rows.map(r => '<div class="cmdrow" data-q="' + esc((r[0] + " " + r[1]).toLowerCase()) + '"><code tabindex="0" title="Bấm để chép">' + esc(r[0]) + "</code><span>" + esc(r[1]) + "</span></div>").join("");
+  const groups = CHEAT.map(([t, rows]) => ["cka", t, rows]).concat(CKAD.cheat.map(g => ["ckad", g.t, g.rows]));
+  groups.forEach(([ex, t, rows]) => {
+    const p = document.createElement("div"); p.className = "panel"; p.dataset.exam = ex;
+    p.innerHTML = "<h3 style=\"margin:0;display:flex;gap:8px;align-items:center\"><span class=\"ck-dom " + (ex === "cka" ? "dom-cka" : "dom-ckad") + "\">" + ex.toUpperCase() + "</span>" + esc(t) + "</h3>" + rows.map(r => '<div class="cmdrow" data-q="' + esc((r[0] + " " + r[1]).toLowerCase()) + '"><code tabindex="0" title="Bấm để chép">' + esc(r[0]) + "</code><span>" + esc(r[1]) + "</span></div>").join("");
     box.appendChild(p);
   });
   box.addEventListener("click", async e => {
@@ -2770,15 +2882,19 @@ function buildCmds() {
   box.addEventListener("keydown", e => { if (e.key === "Enter" && e.target.tagName === "CODE") e.target.click(); });
   const total = $$(".cmdrow").length;
   $("#chCount").textContent = total + " lệnh";
-  $("#chQ").addEventListener("input", e => {
-    const q = e.target.value.trim().toLowerCase(); let n = 0;
+  let chExam = "all";
+  const chFilter = () => {
+    const q = $("#chQ").value.trim().toLowerCase(); let n = 0;
     $$("#cheat .panel").forEach(p => {
       let any = false;
-      $$(".cmdrow", p).forEach(r => { const m = !q || r.dataset.q.includes(q); r.hidden = !m; if (m) { any = true; n++; } });
+      const exOk = chExam === "all" || p.dataset.exam === chExam;
+      $$(".cmdrow", p).forEach(r => { const m = exOk && (!q || r.dataset.q.includes(q)); r.hidden = !m; if (m) { any = true; n++; } });
       p.hidden = !any;
     });
     $("#chCount").textContent = n + " / " + total + " lệnh";
-  });
+  };
+  $("#chQ").addEventListener("input", chFilter);
+  $("#chExam").addEventListener("click", e => { const b = e.target.closest("[data-ex]"); if (!b) return; chExam = b.dataset.ex; $$("#chExam button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); chFilter(); });
 }
 
 /* ---------- 13 quiz ---------- */
@@ -2838,8 +2954,8 @@ function init() {
   buildArch(); buildFlow(); buildLinux(); buildNs();
   ["cgCpuReq", "cgCpuLim", "cgMemReq", "cgMemLim"].forEach(id => $("#" + id).addEventListener("change", calcCg)); calcCg();
   buildNet(); buildRu(); renderNodes(); $("#scRun").onclick = runSched; buildWl();
-  buildSt(); buildRbac(); buildOps(); buildTree(); buildPerf(); buildCases(); buildCmds(); initQuiz(); buildMech(); buildCx(); buildLabs();
-  onShow.flow = () => {}; onShow.workloads = () => {};
+  buildSt(); buildRbac(); buildOps(); buildTree(); buildPerf(); buildCases(); buildCmds(); initQuiz(); buildMech(); buildCx();
+  onShow.flow = onShow.flow || (() => {}); onShow.workloads = onShow.workloads || (() => {});
   const h = (location.hash || "").slice(1);
   show(h.startsWith("mech-") ? "mech" : (h || store.get("view", "overview")));
 }
@@ -3405,127 +3521,8 @@ function fillCx(d) {
 
 /* ---------- labs per competency ---------- */
 // [domain, competencyIndex, title, task, solution]
-const LABS = [
-  // ---- Troubleshooting 30%
-  ["trouble", 0, "Node NotReady", "Node worker-2 đang NotReady. Sửa để node về Ready, đảm bảo trạng thái giữ nguyên sau khi reboot.", "k get nodes ; k describe node worker-2 | grep -A5 Conditions\nssh worker-2\nsudo systemctl status kubelet          # inactive (dead)?\nsudo journalctl -u kubelet -n 50 --no-pager\n# nguyên nhân hay gặp: kubelet bị disable, sai đường dẫn trong config.yaml, swap bật, containerd dừng\nsudo systemctl enable --now kubelet\nsudo systemctl status containerd\nexit\nk get nodes -w"],
-  ["trouble", 0, "Node hết dung lượng đĩa", "Pod mới trên worker-1 bị Evicted với lý do DiskPressure. Tìm và giải phóng dung lượng, sau đó xác nhận condition DiskPressure = False.", "k describe node worker-1 | grep -i pressure\nssh worker-1\ndf -h / /var/lib/containerd /var/log\nsudo crictl rmi --prune\nsudo journalctl --vacuum-size=200M\nsudo du -sh /var/log/pods/* | sort -h | tail\nexit\nk get pods -A --field-selector status.phase=Failed -o name | xargs kubectl delete"],
-  ["trouble", 1, "kube-apiserver không lên", "Sau khi ai đó sửa cấu hình, kubectl báo connection refused. Khôi phục kube-apiserver.", "ssh cp-1\nsudo crictl ps -a | grep kube-apiserver\nsudo crictl logs $(sudo crictl ps -a --name kube-apiserver -q | head -1) 2>&1 | tail\n# hoặc nếu container không được tạo:\nsudo journalctl -u kubelet | grep -i apiserver | tail\nsudo vi /etc/kubernetes/manifests/kube-apiserver.yaml\n# sửa: --etcd-servers=https://127.0.0.1:2379 (không phải 2380), đường dẫn cert, lỗi thụt lề YAML\nwatch sudo crictl ps --name kube-apiserver\nk get nodes"],
-  ["trouble", 1, "Pod mới đứng Pending, không có event", "Mọi Pod mới tạo đều Pending và không có event nào. Tìm và sửa thành phần bị lỗi.", "k get pods -n kube-system | grep scheduler    # CrashLoopBackOff hoặc không có\nsudo crictl ps -a | grep scheduler\nsudo crictl logs <id>\nsudo vi /etc/kubernetes/manifests/kube-scheduler.yaml\n# lỗi hay gặp: sai image tag, sai --kubeconfig=/etc/kubernetes/scheduler.conf, sai command\nk get pods -w"],
-  ["trouble", 1, "Deployment không tạo Pod", "Deployment web đã được tạo nhưng không có ReplicaSet nào. Sửa control plane để Deployment hoạt động.", "k get rs -l app=web               # trống\nk -n kube-system get pod -l component=kube-controller-manager\nsudo crictl logs $(sudo crictl ps -a --name kube-controller-manager -q | head -1) | tail\nsudo vi /etc/kubernetes/manifests/kube-controller-manager.yaml\nk get rs,pods -l app=web"],
-  ["trouble", 2, "Pod ăn CPU nhiều nhất", "Trong namespace monitoring, tìm Pod dùng CPU nhiều nhất và ghi tên vào /opt/answers/top-cpu.txt.", "k top pod -n monitoring --sort-by=cpu --no-headers | head -1 | awk '{print $1}' > /opt/answers/top-cpu.txt\ncat /opt/answers/top-cpu.txt"],
-  ["trouble", 2, "Node đủ điều kiện", "Đếm số node Ready không có taint NoSchedule và ghi con số vào /opt/answers/nodes.txt.", "k get nodes\nk describe nodes | grep -E '^Name:|^Taints:'\n# hoặc tự động:\nk get nodes -o jsonpath='{range .items[*]}{.metadata.name} {.spec.taints[*].effect}{\"\\n\"}{end}' | grep -vc NoSchedule > /opt/answers/nodes.txt"],
-  ["trouble", 3, "Lọc log lỗi", "Pod api trong namespace shop có 2 container. Lấy các dòng chứa ERROR từ lần chạy trước của container app và ghi vào /opt/answers/api-errors.log.", "k get pod api -n shop -o jsonpath='{.spec.containers[*].name}'\nk logs api -n shop -c app --previous | grep ERROR > /opt/answers/api-errors.log"],
-  ["trouble", 3, "Sidecar đưa log file ra stdout", "Pod legacy ghi log vào /var/log/legacy/app.log. Thêm sidecar busybox tên log-tail in nội dung file đó ra stdout để kubectl logs đọc được, không đổi image của container chính.", "k get pod legacy -o yaml > legacy.yaml\n# thêm volume emptyDir 'logs' gắn vào /var/log/legacy ở container chính\n# thêm vào initContainers:\n- name: log-tail\n  image: busybox:1.36\n  restartPolicy: Always\n  command: ['sh','-c','tail -n+1 -F /var/log/legacy/app.log']\n  volumeMounts: [{name: logs, mountPath: /var/log/legacy}]\nk replace --force -f legacy.yaml\nk logs legacy -c log-tail"],
-  ["trouble", 4, "Service không có endpoint", "Service web trong namespace shop không trả lời. Sửa cho đến khi gọi được web.shop từ một Pod khác.", "k get endpointslices -n shop -l kubernetes.io/service-name=web\nk get svc web -n shop -o jsonpath='{.spec.selector}' ; echo\nk get pods -n shop --show-labels\nk edit svc web -n shop       # sửa selector, kiểm tra cả targetPort\nk run t --image=busybox:1.36 -n shop --rm -it --restart=Never -- wget -qO- -T3 web"],
-  ["trouble", 4, "DNS hỏng toàn cluster", "Pod không phân giải được tên Service nào. Tìm nguyên nhân và sửa.", "k run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup kubernetes.default\nk -n kube-system get deploy coredns ; k -n kube-system get pods -l k8s-app=kube-dns\nk -n kube-system logs -l k8s-app=kube-dns\nk -n kube-system get cm coredns -o yaml     # Corefile sai cú pháp?\nk -n kube-system scale deploy coredns --replicas=2\nk -n kube-system get svc kube-dns ; k -n kube-system get endpointslices -l k8s-app=kube-dns"],
-  ["trouble", 0, "Pod CrashLoopBackOff do OOM", "Deployment report trong namespace batch liên tục restart. Tìm nguyên nhân và sửa sao cho Pod chạy ổn định, giữ memory limit tối đa 1Gi.", "k get pods -n batch\nk describe pod -n batch -l app=report | grep -A4 'Last State'   # OOMKilled, 137\nk top pod -n batch\nk set resources deploy report -n batch --requests=memory=768Mi --limits=memory=1Gi\nk rollout status deploy report -n batch"],
-
-  // ---- Cluster Architecture 25%
-  ["arch", 0, "Role cho ServiceAccount", "Tạo ServiceAccount deployer trong namespace ci, cho phép nó tạo, sửa và liệt kê Deployment cùng StatefulSet chỉ trong namespace ci.", "k create sa deployer -n ci\nk create role deployer -n ci --verb=create,update,patch,list,get --resource=deployments,statefulsets\nk create rolebinding deployer -n ci --role=deployer --serviceaccount=ci:deployer\nk auth can-i create deployments -n ci --as=system:serviceaccount:ci:deployer     # yes\nk auth can-i create deployments -n default --as=system:serviceaccount:ci:deployer # no"],
-  ["arch", 0, "ClusterRole cho nhóm", "Nhóm platform-ops cần xem node và PersistentVolume trên toàn cluster, không được sửa.", "k create clusterrole node-pv-viewer --verb=get,list,watch --resource=nodes,persistentvolumes\nk create clusterrolebinding platform-ops-view --clusterrole=node-pv-viewer --group=platform-ops\nk auth can-i list pv --as=x --as-group=platform-ops      # yes\nk auth can-i delete nodes --as=x --as-group=platform-ops # no"],
-  ["arch", 0, "User mới qua CSR", "Tạo quyền truy cập cho user dev1: key, CSR được duyệt, context dev1@lab dùng namespace dev, và chỉ được xem Pod trong dev.", "openssl genrsa -out dev1.key 2048\nopenssl req -new -key dev1.key -subj '/CN=dev1' -out dev1.csr\ncat <<EOF | k apply -f -\napiVersion: certificates.k8s.io/v1\nkind: CertificateSigningRequest\nmetadata: {name: dev1}\nspec:\n  request: $(base64 -w0 dev1.csr)\n  signerName: kubernetes.io/kube-apiserver-client\n  usages: [client auth]\nEOF\nk certificate approve dev1\nk get csr dev1 -o jsonpath='{.status.certificate}' | base64 -d > dev1.crt\nk config set-credentials dev1 --client-key=dev1.key --client-certificate=dev1.crt --embed-certs\nk config set-context dev1@lab --cluster=kubernetes --user=dev1 --namespace=dev\nk create role pod-view -n dev --verb=get,list,watch --resource=pods\nk create rolebinding dev1-pod-view -n dev --role=pod-view --user=dev1\nk --context=dev1@lab get pods"],
-  ["arch", 1, "Chuẩn bị node mới", "Chuẩn bị node04 (Ubuntu) để join cluster v1.37: kernel module, sysctl, containerd với systemd cgroup, kubeadm/kubelet/kubectl đúng phiên bản và giữ không tự nâng.", "# module + sysctl: xem module Bên trong Linux\nsudo apt-get update && sudo apt-get install -y containerd apt-transport-https ca-certificates curl gpg\nsudo mkdir -p /etc/containerd && containerd config default | sudo tee /etc/containerd/config.toml\nsudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml && sudo systemctl restart containerd\ncurl -fsSL https://pkgs.k8s.io/core:/stable:/v1.37/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\necho 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.37/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list\nsudo apt-get update && sudo apt-get install -y kubelet kubeadm kubectl && sudo apt-mark hold kubelet kubeadm kubectl"],
-  ["arch", 2, "Join worker", "Thêm node04 vào cluster bằng kubeadm.", "# trên cp-1\nkubeadm token create --print-join-command\n# trên node04\nsudo kubeadm join 10.0.0.10:6443 --token <t> --discovery-token-ca-cert-hash sha256:<h>\n# trên cp-1\nk get nodes -w"],
-  ["arch", 2, "Dựng cluster bằng kubeadm", "Khởi tạo control plane với pod network 10.244.0.0/16, cấu hình kubectl cho user hiện tại, cài CNI để node Ready.", "sudo kubeadm init --pod-network-cidr=10.244.0.0/16 --kubernetes-version=v1.37.0\nmkdir -p $HOME/.kube && sudo cp /etc/kubernetes/admin.conf $HOME/.kube/config && sudo chown $(id -u):$(id -g) $HOME/.kube/config\nk apply -f <manifest CNI được cung cấp>\nk get nodes ; k get pods -n kube-system"],
-  ["arch", 3, "Nâng control plane", "Nâng cp-1 từ v1.36 lên v1.37.0 (chỉ control plane, kể cả kubelet và kubectl). Worker giữ nguyên.", "# xem runbook trong module Vận hành cluster\nsudo kubeadm upgrade plan\nsudo kubeadm upgrade apply v1.37.0\nk drain cp-1 --ignore-daemonsets\n# nâng gói kubelet kubectl, daemon-reload, restart kubelet\nk uncordon cp-1\nk get nodes"],
-  ["arch", 3, "Sao lưu và khôi phục etcd", "Chụp snapshot etcd vào /opt/etcd-backup.db. Sau đó khôi phục từ /opt/etcd-backup-old.db được cung cấp sẵn.", "sudo ETCDCTL_API=3 etcdctl --endpoints=https://127.0.0.1:2379 \\\n  --cacert=/etc/kubernetes/pki/etcd/ca.crt --cert=/etc/kubernetes/pki/etcd/server.crt \\\n  --key=/etc/kubernetes/pki/etcd/server.key snapshot save /opt/etcd-backup.db\nsudo etcdutl snapshot restore /opt/etcd-backup-old.db --data-dir /var/lib/etcd-restore\nsudo vi /etc/kubernetes/manifests/etcd.yaml     # hostPath etcd-data → /var/lib/etcd-restore\nwatch sudo crictl ps --name etcd\nk get pods -A"],
-  ["arch", 4, "Thêm control plane thứ hai", "Cluster được dựng với --control-plane-endpoint lb.lab:6443. Đưa cp-2 vào làm control plane.", "# trên cp-1: tải lại cert và lấy khóa\nsudo kubeadm init phase upload-certs --upload-certs     # in ra certificate key\nkubeadm token create --print-join-command\n# trên cp-2\nsudo kubeadm join lb.lab:6443 --token <t> --discovery-token-ca-cert-hash sha256:<h> \\\n  --control-plane --certificate-key <key>\nk get nodes ; k -n kube-system get pods -l tier=control-plane -o wide"],
-  ["arch", 5, "Cài chart Helm đúng phiên bản", "Cài chart bitnami/nginx phiên bản 18.2.0 thành release web trong namespace web với 3 replica, sau đó nâng service type lên NodePort.", "helm repo add bitnami https://charts.bitnami.com/bitnami && helm repo update\nhelm search repo bitnami/nginx --versions | head\nhelm install web bitnami/nginx --version 18.2.0 -n web --create-namespace --set replicaCount=3\nhelm upgrade web bitnami/nginx --version 18.2.0 -n web --reuse-values --set service.type=NodePort\nhelm list -n web ; k get svc -n web"],
-  ["arch", 5, "Overlay Kustomize", "Thư mục /opt/app có base. Tạo overlay prod đặt namespace prod, image nginx:1.27, 4 replica rồi áp dụng.", "mkdir -p /opt/app/overlays/prod && cat > /opt/app/overlays/prod/kustomization.yaml <<EOF\nresources: [../../base]\nnamespace: prod\nimages:\n- {name: nginx, newTag: \"1.27\"}\nreplicas:\n- {name: web, count: 4}\nEOF\nk kustomize /opt/app/overlays/prod | grep -E 'namespace|image|replicas'\nk create ns prod ; k apply -k /opt/app/overlays/prod"],
-  ["arch", 6, "Interface mở rộng của cluster", "Ghi vào /opt/answers/interfaces.txt: tên plugin CNI đang dùng, container runtime và endpoint của nó, và driver CSI đã cài.", "ls /etc/cni/net.d/ ; k get pods -n kube-system -o wide | grep -E 'calico|cilium|flannel'\nk get nodes -o jsonpath='{.items[0].status.nodeInfo.containerRuntimeVersion}'\nsudo cat /var/lib/kubelet/kubeadm-flags.env /etc/crictl.yaml 2>/dev/null | grep -i endpoint\nk get csidrivers"],
-  ["arch", 7, "Cài operator và dùng CRD", "Cài cert-manager bằng Helm, liệt kê các CRD thuộc group cert-manager.io vào /opt/answers/crds.txt và ghi field spec cần để tạo Certificate.", "helm repo add jetstack https://charts.jetstack.io && helm repo update\nhelm install cert-manager jetstack/cert-manager -n cert-manager --create-namespace --set crds.enabled=true\nk get crd | grep cert-manager.io > /opt/answers/crds.txt\nk explain certificate.spec | head -40\nk get pods -n cert-manager"],
-  ["arch", 7, "Tự tạo CRD", "Tạo CRD Backup (group ops.example.com, v1, Namespaced, shortName bk) với spec.schedule kiểu string, sau đó tạo một Backup tên nightly.", "# YAML CRD: xem Thư viện khái niệm → CustomResourceDefinition\nk apply -f backup-crd.yaml\nk get crd backups.ops.example.com\ncat <<EOF | k apply -f -\napiVersion: ops.example.com/v1\nkind: Backup\nmetadata: {name: nightly}\nspec: {schedule: \"0 2 * * *\"}\nEOF\nk get bk"],
-  ["arch", 2, "Gia hạn chứng chỉ", "Kiểm tra hạn chứng chỉ control plane, ghi ngày hết hạn của cert apiserver vào /opt/answers/apiserver-expiry.txt rồi gia hạn toàn bộ.", "sudo kubeadm certs check-expiration\nsudo openssl x509 -in /etc/kubernetes/pki/apiserver.crt -noout -enddate | cut -d= -f2 > /opt/answers/apiserver-expiry.txt\nsudo kubeadm certs renew all\n# restart static pod: di chuyển manifest ra rồi vào lại, hoặc restart kubelet\nsudo systemctl restart kubelet"],
-
-  // ---- Services & Networking 20%
-  ["net", 0, "Kết nối giữa Pod", "Tạo Pod client trong namespace a và Pod server (nginx) trong namespace b. Ghi IP của server và xác nhận client gọi được bằng IP lẫn bằng tên Service.", "k create ns a ; k create ns b\nk run server -n b --image=nginx:1.27 --port=80 --expose\nk run client -n a --image=busybox:1.36 -- sleep 3600\nk get pod server -n b -o jsonpath='{.status.podIP}'\nk exec -n a client -- wget -qO- -T3 <ip>\nk exec -n a client -- wget -qO- -T3 server.b.svc.cluster.local"],
-  ["net", 1, "Default deny và mở một đường", "Trong namespace backend: chặn mọi ingress, rồi chỉ cho Pod app=api nhận traffic cổng 8080 từ Pod app=web ở namespace frontend.", "cat <<EOF | k apply -f -\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: deny-all, namespace: backend}\nspec: {podSelector: {}, policyTypes: [Ingress]}\n---\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: web-to-api, namespace: backend}\nspec:\n  podSelector: {matchLabels: {app: api}}\n  policyTypes: [Ingress]\n  ingress:\n  - from:\n    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: frontend}}\n      podSelector: {matchLabels: {app: web}}\n    ports: [{protocol: TCP, port: 8080}]\nEOF"],
-  ["net", 1, "Egress chỉ ra DB và DNS", "Pod app=api trong backend chỉ được gọi ra Pod app=db cổng 5432 và DNS.", "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: api-egress, namespace: backend}\nspec:\n  podSelector: {matchLabels: {app: api}}\n  policyTypes: [Egress]\n  egress:\n  - to: [{podSelector: {matchLabels: {app: db}}}]\n    ports: [{port: 5432, protocol: TCP}]\n  - to: [{namespaceSelector: {}, podSelector: {matchLabels: {k8s-app: kube-dns}}}]\n    ports: [{port: 53, protocol: UDP}, {port: 53, protocol: TCP}]"],
-  ["net", 2, "NodePort cố định", "Expose Deployment web (container port 8080) bằng Service NodePort tên web-np, port 80, nodePort 30080.", "k expose deploy web --name=web-np --type=NodePort --port=80 --target-port=8080 $do > np.yaml\n# thêm nodePort: 30080 dưới ports\nk apply -f np.yaml\ncurl http://<node-ip>:30080"],
-  ["net", 2, "Headless Service cho StatefulSet", "StatefulSet db có 2 replica. Tạo headless Service db và xác nhận phân giải được db-0.db.", "k create svc clusterip db --clusterip=None --tcp=5432\nk get sts db -o jsonpath='{.spec.serviceName}'   # phải là db\nk run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup db-0.db"],
-  ["net", 2, "Giữ IP client", "Service LoadBalancer web cần thấy IP thật của client. Cấu hình phù hợp.", "k patch svc web -p '{\"spec\":{\"externalTrafficPolicy\":\"Local\"}}'\nk get svc web -o jsonpath='{.spec.healthCheckNodePort}'"],
-  ["net", 3, "Gateway và HTTPRoute", "GatewayClass envoy đã có. Tạo Gateway web-gw (ns infra, HTTP 80, nhận route mọi namespace) và HTTPRoute trong ns shop: /api tới Service api:8080, còn lại tới web:80, host shop.lab.", "apiVersion: gateway.networking.k8s.io/v1\nkind: Gateway\nmetadata: {name: web-gw, namespace: infra}\nspec:\n  gatewayClassName: envoy\n  listeners:\n  - {name: http, protocol: HTTP, port: 80, allowedRoutes: {namespaces: {from: All}}}\n---\napiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nmetadata: {name: shop, namespace: shop}\nspec:\n  parentRefs: [{name: web-gw, namespace: infra}]\n  hostnames: [shop.lab]\n  rules:\n  - matches: [{path: {type: PathPrefix, value: /api}}]\n    backendRefs: [{name: api, port: 8080}]\n  - backendRefs: [{name: web, port: 80}]\n---\nk get gateway -n infra ; k describe httproute shop -n shop | grep -A6 Conditions"],
-  ["net", 3, "Chuyển Ingress sang HTTPRoute", "Ingress legacy trong ns shop định tuyến host old.lab tới Service web:80 với TLS secret old-tls. Viết HTTPRoute và listener HTTPS tương đương trên Gateway web-gw.", "# listener thêm vào Gateway web-gw:\n- name: https\n  protocol: HTTPS\n  port: 443\n  hostname: old.lab\n  tls: {certificateRefs: [{name: old-tls, namespace: shop}]}   # cần ReferenceGrant trong shop\n  allowedRoutes: {namespaces: {from: All}}\n# HTTPRoute:\nspec:\n  parentRefs: [{name: web-gw, namespace: infra, sectionName: https}]\n  hostnames: [old.lab]\n  rules: [{backendRefs: [{name: web, port: 80}]}]"],
-  ["net", 4, "Ingress với TLS", "Tạo Ingress shop (class nginx) cho host shop.lab: /api tới api:8080, / tới web:80, TLS bằng Secret shop-tls.", "k create secret tls shop-tls --cert=shop.crt --key=shop.key -n shop\nk create ingress shop -n shop --class=nginx \\\n  --rule='shop.lab/api*=api:8080,tls=shop-tls' --rule='shop.lab/*=web:80,tls=shop-tls'\nk describe ingress shop -n shop"],
-  ["net", 5, "CoreDNS forward", "Truy vấn cho zone corp.internal phải chuyển tới DNS 10.0.0.53. Cấu hình CoreDNS và kiểm tra.", "k -n kube-system edit cm coredns\n# thêm block:\ncorp.internal:53 {\n    errors\n    cache 30\n    forward . 10.0.0.53\n}\nk -n kube-system rollout restart deploy coredns\nk run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup host1.corp.internal"],
-  ["net", 5, "Tra thông tin DNS cluster", "Ghi vào /opt/answers/dns.txt: ClusterIP của Service kube-dns và cluster domain.", "k -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIP}' > /opt/answers/dns.txt\necho >> /opt/answers/dns.txt\nsudo grep -A1 clusterDomain /var/lib/kubelet/config.yaml >> /opt/answers/dns.txt"],
-
-  // ---- Workloads & Scheduling 15%
-  ["work", 0, "Rollout và rollback", "Deployment web chạy nginx:1.26. Nâng lên nginx:1.27 có ghi change-cause, rồi quay lại revision trước.", "k set image deploy/web nginx=nginx:1.27\nk annotate deploy/web kubernetes.io/change-cause='nginx 1.27' --overwrite\nk rollout status deploy/web\nk rollout history deploy/web\nk rollout undo deploy/web\nk get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}'"],
-  ["work", 0, "Chiến lược rollout không gián đoạn", "Cấu hình Deployment api: maxSurge 2, maxUnavailable 0, giữ tối đa 5 revision.", "k patch deploy api -p '{\"spec\":{\"revisionHistoryLimit\":5,\"strategy\":{\"type\":\"RollingUpdate\",\"rollingUpdate\":{\"maxSurge\":2,\"maxUnavailable\":0}}}}'\nk get deploy api -o jsonpath='{.spec.strategy}'"],
-  ["work", 1, "ConfigMap file và Secret env", "Tạo ConfigMap app-cfg từ file app.properties, mount vào /etc/app; tạo Secret db-cred (password=s3cr3t) và đưa vào biến DB_PASSWORD của Deployment api.", "k create cm app-cfg --from-file=app.properties\nk create secret generic db-cred --from-literal=password=s3cr3t\nk set env deploy/api --from=secret/db-cred --prefix=DB_      # tạo DB_PASSWORD\n# volume: k edit deploy api\nvolumes: [{name: cfg, configMap: {name: app-cfg}}]\nvolumeMounts: [{name: cfg, mountPath: /etc/app}]\nk exec deploy/api -- sh -c 'ls /etc/app; echo $DB_PASSWORD'"],
-  ["work", 2, "HPA với behavior", "Tạo HPA cho Deployment api: CPU 60%, 2 đến 8 replica, scale down chờ 120 giây.", "k autoscale deploy api --min=2 --max=8 --cpu-percent=60\nk patch hpa api -p '{\"spec\":{\"behavior\":{\"scaleDown\":{\"stabilizationWindowSeconds\":120}}}}'\nk describe hpa api"],
-  ["work", 2, "Resize Pod tại chỗ", "Pod worker cần tăng CPU request lên 500m mà không bị tạo lại.", "k patch pod worker --subresource resize -p '{\"spec\":{\"containers\":[{\"name\":\"worker\",\"resources\":{\"requests\":{\"cpu\":\"500m\"}}}]}}'\nk get pod worker -o jsonpath='{.status.containerStatuses[0].resources}{\"\\n\"}{.status.containerStatuses[0].restartCount}'"],
-  ["work", 3, "Ba loại probe", "Thêm vào Deployment api: startupProbe HTTP /healthz:8080 (tối đa 60 giây), readinessProbe /ready, livenessProbe /healthz mỗi 10 giây.", "startupProbe:\n  httpGet: {path: /healthz, port: 8080}\n  periodSeconds: 2\n  failureThreshold: 30\nreadinessProbe:\n  httpGet: {path: /ready, port: 8080}\nlivenessProbe:\n  httpGet: {path: /healthz, port: 8080}\n  periodSeconds: 10"],
-  ["work", 3, "PDB và drain", "Đảm bảo Deployment web (4 replica) luôn còn ít nhất 3 Pod khi bảo trì node, rồi drain worker-1.", "k create pdb web --selector=app=web --min-available=3\nk drain worker-1 --ignore-daemonsets --delete-emptydir-data\nk get pdb web ; k uncordon worker-1"],
-  ["work", 3, "DaemonSet chạy cả control plane", "Tạo DaemonSet node-agent (busybox, sleep) chạy trên mọi node, kể cả control plane.", "k create deploy node-agent --image=busybox:1.36 $do -- sleep infinity > ds.yaml\n# kind: DaemonSet, xóa replicas, strategy, status; thêm:\ntolerations:\n- {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}\nk apply -f ds.yaml ; k get ds node-agent -o wide"],
-  ["work", 3, "Init container chờ phụ thuộc", "Pod web chỉ khởi động sau khi Service db phân giải được.", "initContainers:\n- name: wait-db\n  image: busybox:1.36\n  command: ['sh','-c','until nslookup db.default.svc.cluster.local; do sleep 2; done']\nk get pod web     # Init:0/1 cho tới khi có Service db"],
-  ["work", 4, "nodeAffinity và toleration", "Pod gpu-job chỉ chạy trên node có label accelerator=nvidia; các node đó có taint gpu=true:NoSchedule.", "k label node worker-3 accelerator=nvidia\nk taint node worker-3 gpu=true:NoSchedule\nspec:\n  tolerations: [{key: gpu, operator: Equal, value: \"true\", effect: NoSchedule}]\n  affinity:\n    nodeAffinity:\n      requiredDuringSchedulingIgnoredDuringExecution:\n        nodeSelectorTerms:\n        - matchExpressions: [{key: accelerator, operator: In, values: [nvidia]}]"],
-  ["work", 4, "Quota và LimitRange", "Namespace team-a: tổng requests.cpu tối đa 2, requests.memory 4Gi, 10 Pod; container không khai báo thì nhận request 100m/128Mi và limit 500m/256Mi.", "k create quota team-a -n team-a --hard=requests.cpu=2,requests.memory=4Gi,pods=10\ncat <<EOF | k apply -f -\napiVersion: v1\nkind: LimitRange\nmetadata: {name: defaults, namespace: team-a}\nspec:\n  limits:\n  - type: Container\n    defaultRequest: {cpu: 100m, memory: 128Mi}\n    default: {cpu: 500m, memory: 256Mi}\nEOF\nk describe quota,limitrange -n team-a"],
-  ["work", 4, "PriorityClass", "Tạo PriorityClass critical-app (value 100000, không là mặc định) và gán cho Deployment payments.", "k create priorityclass critical-app --value=100000 --description='payments'\nk patch deploy payments -p '{\"spec\":{\"template\":{\"spec\":{\"priorityClassName\":\"critical-app\"}}}}'\nk get pods -l app=payments -o jsonpath='{.items[*].spec.priority}'"],
-  ["work", 4, "Static pod trên node", "Tạo static pod web-static (nginx) trên worker-1.", "ssh worker-1\nsudo grep staticPodPath /var/lib/kubelet/config.yaml\nkubectl run web-static --image=nginx:1.27 --dry-run=client -o yaml | sudo tee /etc/kubernetes/manifests/web-static.yaml\nexit\nk get pods | grep web-static-worker-1"],
-  ["work", 4, "Lập lịch thủ công", "Scheduler không chạy. Đặt Pod manual lên worker-2 ngay.", "k run manual --image=nginx:1.27 $do > m.yaml\n# thêm spec.nodeName: worker-2\nk apply -f m.yaml ; k get pod manual -o wide"],
-  ["work", 4, "Trải đều qua zone", "Deployment web 6 replica phải chia đều qua các zone (lệch tối đa 1), không được đặt nếu vi phạm.", "topologySpreadConstraints:\n- maxSkew: 1\n  topologyKey: topology.kubernetes.io/zone\n  whenUnsatisfiable: DoNotSchedule\n  labelSelector: {matchLabels: {app: web}}"],
-
-  // ---- Storage 10%
-  ["stor", 0, "StorageClass mặc định", "Tạo StorageClass local-wait (provisioner rancher.io/local-path, WaitForFirstConsumer, Delete) và đặt làm mặc định thay cho lớp hiện tại.", "k get sc\nk patch sc <lớp-cũ> -p '{\"metadata\":{\"annotations\":{\"storageclass.kubernetes.io/is-default-class\":\"false\"}}}'\ncat <<EOF | k apply -f -\napiVersion: storage.k8s.io/v1\nkind: StorageClass\nmetadata:\n  name: local-wait\n  annotations: {storageclass.kubernetes.io/is-default-class: \"true\"}\nprovisioner: rancher.io/local-path\nvolumeBindingMode: WaitForFirstConsumer\nreclaimPolicy: Delete\nEOF\nk get sc"],
-  ["stor", 0, "Dynamic provisioning và Pod", "Tạo PVC data (2Gi, RWO, lớp local-wait) và Pod writer ghi ngày giờ vào /data/out.txt. Xác nhận PV được tạo tự động.", "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata: {name: data}\nspec: {accessModes: [ReadWriteOnce], storageClassName: local-wait, resources: {requests: {storage: 2Gi}}}\n---\napiVersion: v1\nkind: Pod\nmetadata: {name: writer}\nspec:\n  containers:\n  - {name: w, image: busybox:1.36, command: ['sh','-c','date > /data/out.txt; sleep 3600'], volumeMounts: [{name: d, mountPath: /data}]}\n  volumes: [{name: d, persistentVolumeClaim: {claimName: data}}]\n---\nk get pvc data ; k get pv ; k exec writer -- cat /data/out.txt"],
-  ["stor", 1, "PV hostPath tạo tay", "Tạo PV pv-log 1Gi, RWO, Retain, storageClassName manual, hostPath /mnt/log; PVC log-claim bind vào nó; Pod logger mount ở /var/log/app.", "apiVersion: v1\nkind: PersistentVolume\nmetadata: {name: pv-log}\nspec: {capacity: {storage: 1Gi}, accessModes: [ReadWriteOnce], persistentVolumeReclaimPolicy: Retain, storageClassName: manual, hostPath: {path: /mnt/log}}\n---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata: {name: log-claim}\nspec: {accessModes: [ReadWriteOnce], storageClassName: manual, resources: {requests: {storage: 1Gi}}}\n---\nk get pv pv-log    # Bound"],
-  ["stor", 1, "emptyDir chia sẻ", "Pod share có hai container: writer ghi file vào /shared mỗi 5 giây, reader đọc từ đó. Volume dùng RAM, giới hạn 64Mi.", "volumes:\n- name: shared\n  emptyDir: {medium: Memory, sizeLimit: 64Mi}\ncontainers:\n- {name: writer, image: busybox:1.36, command: ['sh','-c','while true; do date >> /shared/t; sleep 5; done'], volumeMounts: [{name: shared, mountPath: /shared}]}\n- {name: reader, image: busybox:1.36, command: ['sh','-c','tail -F /shared/t'], volumeMounts: [{name: shared, mountPath: /shared}]}"],
-  ["stor", 2, "Mở rộng PVC", "Tăng PVC data từ 2Gi lên 5Gi.", "k get sc local-wait -o jsonpath='{.allowVolumeExpansion}'   # phải true\nk patch pvc data -p '{\"spec\":{\"resources\":{\"requests\":{\"storage\":\"5Gi\"}}}}'\nk get pvc data -w"],
-  ["stor", 2, "Tái sử dụng PV Released", "PV pv-old ở trạng thái Released sau khi PVC cũ bị xóa. Cho nó Available để PVC mới bind được, giữ nguyên dữ liệu.", "k get pv pv-old -o jsonpath='{.spec.claimRef}'\nk patch pv pv-old --type=json -p '[{\"op\":\"remove\",\"path\":\"/spec/claimRef\"}]'\nk get pv pv-old     # Available"],
-  ["stor", 2, "Snapshot và khôi phục", "Chụp VolumeSnapshot data-snap từ PVC data (class csi-snap) rồi tạo PVC data-restore từ snapshot đó.", "# VolumeSnapshot: xem Thư viện khái niệm → Volume snapshot\nk get volumesnapshot data-snap -o jsonpath='{.status.readyToUse}'\n# PVC data-restore với dataSource: {name: data-snap, kind: VolumeSnapshot, apiGroup: snapshot.storage.k8s.io}\nk get pvc data-restore"]
-];
-const MOCK_PLAN = { trouble: 5, arch: 4, net: 3, work: 3, stor: 2 };
-let labDom = "all", labComp = null, labMock = null, labTimer = null, labDone = store.get("labs", {});
-function buildLabs() {
-  const seg = $("#labDoms");
-  [["all", "Tất cả"]].concat(DOMAINS.map(d => [d.key, d.name.split(",")[0] + " " + d.w + "%"])).forEach(([k, n]) => {
-    const b = document.createElement("button"); b.type = "button"; b.dataset.k = k; b.textContent = n + " (" + (k === "all" ? LABS.length : LABS.filter(l => l[0] === k).length) + ")";
-    b.onclick = () => { labDom = k; labComp = null; labMock = null; stopMock(); renderLabs(); };
-    seg.appendChild(b);
-  });
-  $("#labMock").onclick = startMock;
-  $("#labList").addEventListener("click", e => {
-    const b = e.target.closest("[data-sol]"); if (!b) return;
-    const s = b.parentElement.parentElement.querySelector(".sol"); s.hidden = !s.hidden; b.textContent = s.hidden ? "Xem lời giải" : "Ẩn lời giải";
-  });
-  $("#labList").addEventListener("change", e => { const k = e.target.dataset.lab; if (k == null) return; labDone[k] = e.target.checked; store.set("labs", labDone); updLabProg(); });
-  renderLabs();
-}
-function renderLabs() {
-  $$("#labDoms button").forEach(b => b.setAttribute("aria-pressed", !labMock && b.dataset.k === labDom));
-  const list = $("#labList"); list.innerHTML = "";
-  let idx = LABS.map((l, i) => i);
-  if (labMock) idx = labMock;
-  else idx = idx.filter(i => (labDom === "all" || LABS[i][0] === labDom) && (labComp == null || LABS[i][1] === labComp));
-  const info = $("#labInfo");
-  info.innerHTML = labMock ? "Đề thi thử: " + labMock.length + " câu, chia theo trọng số domain." : labComp != null ? "Đang lọc theo năng lực: <b>" + esc(DOMAINS.find(d => d.key === labDom).items[labComp]) + '</b> · <button class="linkbtn" id="labAll">bỏ lọc</button>' : "";
-  if ($("#labAll")) $("#labAll").onclick = () => { labComp = null; renderLabs(); };
-  idx.forEach((i, n) => {
-    const l = LABS[i], dm = DOMAINS.find(d => d.key === l[0]);
-    const c = document.createElement("div"); c.className = "panel lab";
-    c.innerHTML = '<div class="lab-h"><span class="lab-n">' + (labMock ? "Câu " + (n + 1) : "#" + String(i + 1).padStart(2, "0")) + '</span><span class="pill" style="border-color:transparent;background:var(--paper-2)"><i class="sw" style="background:' + dm.color + '"></i>' + esc(dm.name.split(",")[0]) + '</span><span class="small muted">' + esc(dm.items[l[1]]) + '</span></div><h4>' + esc(l[2]) + '</h4><p>' + esc(l[3]) + '</p><div class="controls"><button class="btn" type="button" data-sol>Xem lời giải</button><label class="check"><input type="checkbox" data-lab="' + i + '"' + (labDone[i] ? " checked" : "") + "> Đã tự làm được</label></div>";
-    const s = document.createElement("div"); s.className = "sol"; s.hidden = true; s.appendChild(codeBlock(l[4])); c.appendChild(s);
-    list.appendChild(c);
-  });
-  updLabProg();
-}
-function updLabProg() {
-  const done = Object.keys(labDone).filter(k => labDone[k]).length;
-  $("#labProg").textContent = done + " / " + LABS.length + " bài đã làm";
-}
-function startMock() {
-  const pick = [];
-  Object.entries(MOCK_PLAN).forEach(([d, n]) => { const pool = LABS.map((l, i) => i).filter(i => LABS[i][0] === d).sort(() => Math.random() - .5); pick.push(...pool.slice(0, n)); });
-  labMock = pick; renderLabs(); stopMock();
-  const end = Date.now() + 120 * 60000, t = $("#labTimer"); t.hidden = false;
-  const tick = () => { const ms = end - Date.now(); if (ms <= 0) { t.textContent = "Hết giờ"; t.className = "pill bad"; return stopMock(true); } const m = Math.floor(ms / 60000), s = Math.floor(ms / 1000) % 60; t.textContent = "⏱ " + m + ":" + String(s).padStart(2, "0"); t.className = "pill " + (m < 15 ? "bad" : "cp"); };
-  tick(); labTimer = setInterval(tick, 1000);
-  $("#labMock").textContent = "↺ Đề thi thử mới";
-}
-function stopMock(keep) { clearInterval(labTimer); labTimer = null; if (!keep && $("#labTimer")) $("#labTimer").hidden = true; }
-function openLabs(dom, comp) { labDom = dom; labComp = comp; labMock = null; stopMock(); show("labs"); renderLabs(); }
+/* bài tập CKA nằm ở index.html#bank (dữ liệu CKA_BANK do build.py nhúng từ src/cka/bank.json) */
+function openLabs(dom, comp) { location.href = "index.html#bank" + (dom ? "-" + dom + (comp == null ? "" : "-" + comp) : ""); }
 
 /* ---------- extra quiz ---------- */
 QUIZ.push(
@@ -3635,7 +3632,7 @@ function renderDomap(box) {
   const comps = d.items.map((t, i) => [t, i]).filter(([, i]) => !only || only.includes(i));
   box.className = "panel domap";
   box.innerHTML = '<div class="controls" style="justify-content:space-between"><h3 style="margin:0">Bản đồ năng lực · ' + esc(d.name) + " " + d.w + '%</h3><span class="small muted">Bấm một khái niệm để mở ngay tại đây</span></div>' +
-    comps.map(([t, i]) => { const names = COMP_MAP[key][i] || [], labs = LABS.filter(l => l[0] === key && l[1] === i).length;
+    comps.map(([t, i]) => { const names = COMP_MAP[key][i] || [], labs = CKA_BANK.filter(l => l.d === key && l.c === i).length;
       return '<div class="comp"><div class="comp-h"><b>' + esc(t) + '</b><button type="button" class="linkbtn" data-lab="' + key + ":" + i + '">' + labs + " bài tập →</button></div><div class=\"comp-cx\">" +
         names.map(n => { const k = CX.findIndex(c => c[1] === n); return k < 0 ? "" : '<button type="button" data-cx="' + k + '">' + esc(n) + "</button>"; }).join("") + '</div><div class="comp-open"></div></div>'; }).join("");
   box.addEventListener("click", e => {
@@ -3652,11 +3649,6 @@ function renderDomap(box) {
 }
 
 /* ---------- more labs ---------- */
-LABS.push(
-  ["work", 3, "Readiness bằng lệnh exec", "Pod cache chỉ được nhận traffic khi file /tmp/ready tồn tại. Cấu hình readinessProbe kiểu exec kiểm tra mỗi 5 giây, rồi tạo file để Pod thành Ready.", "readinessProbe:\n  exec: {command: [\"test\", \"-f\", \"/tmp/ready\"]}\n  periodSeconds: 5\n---\nk get pod cache          # READY 0/1\nk exec cache -- touch /tmp/ready\nk get pod cache -w       # READY 1/1"],
-  ["trouble", 3, "Liveness giết app khởi động chậm", "Pod report-api restart liên tục, log cho thấy app chưa kịp khởi động xong. App cần khoảng 90 giây để sẵn sàng. Sửa cấu hình probe mà không tăng initialDelaySeconds của liveness.", "k describe pod -l app=report-api | grep -E 'Liveness|Killing'\nk edit deploy report-api\n# thêm:\nstartupProbe:\n  httpGet: {path: /healthz, port: 8080}\n  periodSeconds: 10\n  failureThreshold: 12      # tối đa 120 giây\nk rollout status deploy report-api"],
-  ["net", 2, "Service rỗng vì readiness", "Service api có selector đúng nhưng EndpointSlice không có địa chỉ nào. Các Pod Running 0/1. Tìm và sửa.", "k get pods -l app=api       # READY 0/1\nk describe pod -l app=api | grep -A3 Readiness\n# readinessProbe trỏ sai port 8081, app nghe 8080\nk edit deploy api\nk get endpointslices -l kubernetes.io/service-name=api"]
-);
 QUIZ.push(
   ["readinessProbe của Pod trượt liên tục. Điều gì xảy ra?", ["kubelet restart container", "Pod bị xóa", "Pod Ready=False và bị rút khỏi EndpointSlice, không restart", "Node bị taint"], 2, "Readiness chỉ điều khiển việc nhận traffic. Restart là việc của liveness và startup.", "k get pod <pod>   # READY 0/1, RESTARTS không tăng"],
   ["App cần 2 phút để khởi động. Cách cấu hình đúng?", ["livenessProbe initialDelaySeconds: 120", "startupProbe với failureThreshold × periodSeconds ≥ 120, liveness giữ nhanh", "Bỏ liveness", "Đặt timeoutSeconds: 120"], 1, "startupProbe che giai đoạn khởi động; sau khi thành công, liveness chạy với chu kỳ ngắn để phát hiện treo nhanh.", "k explain pod.spec.containers.startupProbe"],
@@ -3667,13 +3659,6 @@ QUIZ.push(
 CX.push(
   ["arch", "kube-controller-manager", "arch trouble", "Một tiến trình chạy hơn hai chục controller: deployment, replicaset, statefulset, daemonset, job, cronjob, node lifecycle, taint-eviction, endpointslice, serviceaccount, namespace, garbage collector, persistentvolume-binder, attach-detach, horizontal-pod-autoscaler, resourcequota, disruption, csr… Chạy leader election khi có nhiều control plane. Chọn controller bằng cờ --controllers.", "k -n kube-system get pod -l component=kube-controller-manager\nsudo grep -E 'controllers|cluster-cidr|node-monitor' /etc/kubernetes/manifests/kube-controller-manager.yaml\nk -n kube-system exec kube-controller-manager-cp-1 -- kube-controller-manager -h | grep -A3 -- '--controllers'", "Controller-manager chết thì không gì tự sửa: Deployment không tạo Pod, node chết không bị đánh NotReady, PVC không bind.", "reference/command-line-tools-reference/kube-controller-manager/", "arch-cp"],
   ["arch", "Node lifecycle controller", "trouble arch", "Controller trong kube-controller-manager theo dõi Lease và status của mọi Node. Quá node-monitor-grace-period (mặc định 50 giây) không có heartbeat thì đặt Ready=Unknown và gắn taint node.kubernetes.io/unreachable (hoặc not-ready) với effect NoExecute. Taint-eviction controller đuổi Pod khi hết tolerationSeconds (mặc định 300 giây). Nó cũng gắn taint theo condition như memory-pressure, disk-pressure, và xóa Node khi máy cloud không còn (cùng cloud-controller-manager).", "k get nodes\nk describe node worker-2 | grep -E 'Taints|Ready'\nk get lease -n kube-node-lease\nsudo grep node-monitor-grace-period /etc/kubernetes/manifests/kube-controller-manager.yaml", "Không thấy cờ trong manifest nghĩa là đang dùng mặc định 50 giây.", "concepts/architecture/nodes/#node-controller", "mech-node"]
-);
-LABS.push(
-  ["work", 3, "Job chạy song song", "Tạo Job batch-sum (image busybox:1.36, lệnh echo done) cần 6 lần thành công, tối đa 2 Pod chạy cùng lúc, thử lại tối đa 3 lần, tự xóa 120 giây sau khi xong.", "k create job batch-sum --image=busybox:1.36 $do -- sh -c 'echo done' > job.yaml\n# thêm dưới spec:\n  completions: 6\n  parallelism: 2\n  backoffLimit: 3\n  ttlSecondsAfterFinished: 120\nk apply -f job.yaml\nk get job batch-sum -w          # COMPLETIONS 6/6\nk get pods -l job-name=batch-sum"],
-  ["work", 0, "Xóa Deployment nhưng giữ Pod", "Xóa Deployment legacy trong namespace app mà không làm dừng ReplicaSet và Pod đang chạy. Xác nhận ReplicaSet không còn ownerReferences.", "k delete deploy legacy -n app --cascade=orphan\nk get rs,pods -n app -l app=legacy\nk get rs -n app -l app=legacy -o jsonpath='{.items[0].metadata.ownerReferences}'   # rỗng"],
-  ["trouble", 0, "Namespace kẹt Terminating", "Namespace old-team đứng Terminating hơn 10 phút. Tìm object còn giữ nó và xử lý.", "k get ns old-team -o jsonpath='{.status.conditions}' ; echo\nk api-resources --verbs=list --namespaced -o name \\\n  | xargs -n1 kubectl get -n old-team --ignore-not-found --show-kind\n# thường là custom resource còn finalizer mà operator đã bị gỡ\nk get <kind> <name> -n old-team -o jsonpath='{.metadata.finalizers}'\nk patch <kind> <name> -n old-team --type=merge -p '{\"metadata\":{\"finalizers\":null}}'   # chỉ khi chắc chắn"],
-  ["arch", 0, "ServiceAccount cho Pod đọc ConfigMap", "Trong namespace app: Pod reader dùng ServiceAccount reader-sa và được get, list ConfigMap trong app. ServiceAccount default không được tự gắn token vào Pod.", "k create sa reader-sa -n app\nk create role cm-read -n app --verb=get,list --resource=configmaps\nk create rolebinding reader-sa-cm -n app --role=cm-read --serviceaccount=app:reader-sa\nk patch sa default -n app -p '{\"automountServiceAccountToken\":false}'\nk run reader -n app --image=bitnami/kubectl \\\n  --overrides='{\"spec\":{\"serviceAccountName\":\"reader-sa\"}}' -- sleep 3600\nk exec -n app reader -- kubectl get cm\nk auth can-i list cm -n app --as=system:serviceaccount:app:reader-sa"],
-  ["net", 2, "Service trỏ ra DB ngoài cluster", "Tạo Service legacy-db (không selector, port 5432) trỏ tới 10.0.5.20:5432 bằng EndpointSlice tự tạo.", "cat <<EOF | k apply -f -\napiVersion: v1\nkind: Service\nmetadata: {name: legacy-db}\nspec:\n  ports: [{port: 5432, protocol: TCP}]\n---\napiVersion: discovery.k8s.io/v1\nkind: EndpointSlice\nmetadata:\n  name: legacy-db-1\n  labels: {kubernetes.io/service-name: legacy-db}\naddressType: IPv4\nports: [{port: 5432, protocol: TCP}]\nendpoints: [{addresses: [\"10.0.5.20\"]}]\nEOF\nk get endpointslices -l kubernetes.io/service-name=legacy-db"]
 );
 COMP_MAP.trouble[0].push("Node lifecycle controller");
 COMP_MAP.trouble[1].push("kube-controller-manager");
@@ -3686,7 +3671,7 @@ QUIZ.push(
 /* ---------- 01 architecture (3 layers) ---------- */
 Object.assign(ARCH_INFO, {
   client: { t: "kubectl và admin", tag: "bên ngoài", role: "Người vận hành và công cụ gọi REST API của cluster qua HTTPS :6443, xác thực bằng client certificate, token hoặc OIDC trong kubeconfig.", run: "Không chạy trong cluster. kubeconfig ở ~/.kube/config hoặc $KUBECONFIG.", check: "kubectl config view --minify\nkubectl auth whoami\nkubectl cluster-info", fail: "\"connection refused\" hoặc \"x509: certificate signed by unknown authority\": sai server, sai CA hoặc apiserver chết.", go: ["concepts", "Thư viện: kubeconfig"] },
-  ci: { t: "CI/CD và GitOps", tag: "bên ngoài", role: "Pipeline (GitHub Actions, GitLab CI) hoặc GitOps controller (Argo CD, Flux) đưa manifest từ Git vào cluster bằng apply, Helm hoặc Kustomize. Nên dùng ServiceAccount riêng với RBAC tối thiểu.", run: "Ngoài cluster (CI) hoặc chạy như Deployment trong cluster (Argo CD, Flux).", check: "kubectl auth can-i --list --as=system:serviceaccount:ci:deployer -n prod", fail: "403 Forbidden khi deploy: thiếu RBAC cho ServiceAccount của pipeline.", go: ["labs", "Bài tập RBAC"] },
+  ci: { t: "CI/CD và GitOps", tag: "bên ngoài", role: "Pipeline (GitHub Actions, GitLab CI) hoặc GitOps controller (Argo CD, Flux) đưa manifest từ Git vào cluster bằng apply, Helm hoặc Kustomize. Nên dùng ServiceAccount riêng với RBAC tối thiểu.", run: "Ngoài cluster (CI) hoặc chạy như Deployment trong cluster (Argo CD, Flux).", check: "kubectl auth can-i --list --as=system:serviceaccount:ci:deployer -n prod", fail: "403 Forbidden khi deploy: thiếu RBAC cho ServiceAccount của pipeline.", go: ["security", "RBAC & bảo mật"] },
   users: { t: "Người dùng cuối", tag: "bên ngoài", role: "Traffic ứng dụng từ internet đi vào cloud load balancer, tới Gateway hoặc Ingress controller, rồi tới Service và Pod.", run: "Đường đi: DNS công khai → LB → NodePort/Pod của controller → Service → Pod.", check: "curl -v https://shop.example.com\nkubectl get gateway,httproute -A", fail: "404 từ Gateway: không route nào khớp host/path. 503: backend không có endpoint Ready.", go: ["mech", "Animation Gateway routing"] },
   cloudlb: { t: "Cloud load balancer", tag: "bên ngoài", role: "Được cloud-controller-manager tạo cho Service type LoadBalancer. Chuyển traffic tới NodePort trên các node (hoặc thẳng tới IP Pod với một số CNI).", run: "Do nhà cung cấp cloud quản lý. On-prem dùng MetalLB, kube-vip.", check: "kubectl get svc -A | grep LoadBalancer\nkubectl describe svc <svc> | grep -i -A3 events", fail: "EXTERNAL-IP <pending>: không có CCM hoặc MetalLB." },
   registry: { t: "Image registry", tag: "bên ngoài", role: "Nơi containerd trên mỗi node kéo image (docker.io, ghcr.io, registry nội bộ). Registry private cần imagePullSecrets.", run: "containerd tự kéo khi tạo container theo imagePullPolicy; mirror cấu hình trong /etc/containerd/certs.d.", check: "sudo crictl pull nginx:1.27\nkubectl describe pod <pod> | grep -i pull", fail: "ErrImagePull / ImagePullBackOff.", go: ["trouble", "Cây chẩn đoán ImagePullBackOff"] },
@@ -3955,7 +3940,7 @@ function cmInfo(k) {
   d.innerHTML = "<h4>" + esc(c[0]) + ' controller</h4><p class="small">' + esc(c[1]) + "</p>";
   d.appendChild(codeBlock(c[2]));
   const links = document.createElement("div"); links.className = "comp"; links.style.borderTop = "0";
-  const lab = r[2] ? r[2].split(":") : null, nlab = lab ? LABS.filter(l => l[0] === lab[0] && l[1] === +lab[1]).length : 0;
+  const lab = r[2] ? r[2].split(":") : null, nlab = lab ? CKA_BANK.filter(l => l.d === lab[0] && l.c === +lab[1]).length : 0;
   let go = "";
   if (r[1]) { const [m, sub] = r[1].split("-"); go = '<a href="#' + m + '" data-go="' + m + '"' + (sub ? ' data-mech="' + sub + '"' : "") + ' style="font-weight:600;text-decoration:none;font-size:13px">' + (sub ? "Xem animation →" : "Xem mô phỏng →") + "</a>"; }
   links.innerHTML = '<div class="comp-h"><span class="small muted">Khái niệm liên quan</span><span style="display:flex;gap:14px">' + go + (lab ? '<button type="button" class="linkbtn" data-lab="' + r[2] + '">' + nlab + " bài tập →</button>" : "") + '</span></div><div class="comp-cx">' + r[0].map(n => { const i = CX.findIndex(x => x[1] === n); return i < 0 ? "" : '<button type="button" data-cx="' + i + '">' + esc(n) + "</button>"; }).join("") + '</div><div class="comp-open"></div>';
