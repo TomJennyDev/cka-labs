@@ -311,7 +311,24 @@ def main():
                   + lhead + "[hidden]{display:none!important}\n</style>\n</head>\n<body>\n" + lbody + "\n</body>\n</html>\n")
     write(os.path.join(ROOT, "docs", "learn.html"), learn_full)
     write(os.path.join(ROOT, "build", "learn.html"), learn_full)
-    print("built %d labs, %d in test suite" % (len(labs), len(tested)))
+
+    # CKAD page: data from src/ckad, styles shared with learn.html
+    with open(os.path.join(ROOT, "src", "ckad", "topics.yaml"), encoding="utf-8") as f:
+        ck = yaml.safe_load(f)
+    with open(os.path.join(ROOT, "src", "ckad", "exercises.yaml"), encoding="utf-8") as f:
+        ck["exercises"] = yaml.safe_load(f)
+    with open(os.path.join(ROOT, "tools", "ckad.html"), encoding="utf-8") as f:
+        ckad = f.read()
+    with open(os.path.join(ROOT, "tools", "ckad.js"), encoding="utf-8") as f:
+        ckjs = f.read()
+    style = learn[learn.index("<style>"):learn.index("</style>") + len("</style>")]
+    safe = lambda t: t.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT")
+    ckad = (ckad.replace("<!--LEARN_STYLE-->", style.replace("</style>", "[hidden]{display:none!important}\n</style>"))
+                .replace("/*CKAD_DATA*/", safe("const CKAD = " + json.dumps(ck, ensure_ascii=False) + ";"))
+                .replace("/*CKAD_JS*/", safe(ckjs)))
+    write(os.path.join(ROOT, "docs", "ckad.html"), ckad)
+    write(os.path.join(ROOT, "build", "ckad.html"), ckad)
+    print("built %d labs, %d in test suite, CKAD %d exercises" % (len(labs), len(tested), len(ck["exercises"])))
 
 
 if __name__ == "__main__":

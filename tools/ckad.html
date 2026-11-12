@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CKAD Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<!--LEARN_STYLE-->
+<style>
+/* ---------- riêng trang CKAD ---------- */
+.ck-bars{display:flex;flex-direction:column;gap:10px}
+.ck-bar{display:grid;grid-template-columns:minmax(0,1fr) 54px 70px;gap:10px;align-items:center;cursor:pointer;border:0;background:none;text-align:left;color:var(--ink);font:inherit;padding:0}
+.ck-bar .lab{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ck-bar .lab b{font-size:14.5px}.ck-bar .lab small{font:11.5px var(--f-mono);color:var(--muted)}
+.ck-bar .track{height:12px;background:var(--paper-2);border-radius:6px;overflow:hidden}
+.ck-bar .track i{display:block;height:100%;width:0;border-radius:6px;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.ck-bar .w{font:700 18px var(--f-display);text-align:right}
+.ck-bar .m{font:12px var(--f-mono);color:var(--muted)}
+.ck-bar:hover .lab b{color:var(--accent)}
+.ck-cmp{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))}
+.ck-cmp>div{border:1px solid var(--line);border-radius:10px;padding:12px;border-top-width:4px;display:flex;flex-direction:column;gap:6px}
+.ck-cmp .a{border-top-color:var(--node)}.ck-cmp .b{border-top-color:var(--accent)}.ck-cmp .c{border-top-color:var(--muted)}
+.ck-cmp ul{margin:0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:3px}
+.ck-topics{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))}
+.ck-topic{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:9px;background:var(--paper);min-width:0}
+.ck-topic .en{font:11.5px var(--f-mono);color:var(--muted);letter-spacing:.02em}
+.ck-topic .vi{font-weight:600;font-size:15.5px;line-height:1.45}
+.ck-topic .trap{font-size:13.5px;background:var(--pkt-soft);border-radius:7px;padding:8px 10px}
+.ck-links{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ck-links a{text-decoration:none}
+.ck-topic .pill{white-space:normal;text-align:left;max-width:100%;overflow-wrap:anywhere;cursor:pointer}
+.ck-src{font:600 11px var(--f-mono);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--muted);background:var(--paper)}
+.ck-src:hover{color:var(--accent);border-color:var(--accent)}
+.ck-ex{border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+.ck-ex>summary{list-style:none;display:flex;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;flex-wrap:wrap}
+.ck-ex>summary::-webkit-details-marker{display:none}
+.ck-ex>summary .t{font-weight:600;flex:1;min-width:200px}
+.ck-ex>summary .mins{font:12px var(--f-mono);color:var(--muted)}
+.ck-ex.done>summary .t::before{content:"✓ ";color:var(--node)}
+.ck-ex .body{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.ck-ex .task{white-space:pre-line;font-size:14.5px;line-height:1.6;background:var(--paper-2);border-radius:8px;padding:10px 12px}
+.ck-ex .hint{font-size:13.5px;border-left:3px solid var(--pkt);padding-left:10px}
+.ck-badge{font:600 11px var(--f-mono);padding:3px 8px;border-radius:999px}
+.ck-badge.ok{background:var(--node-soft);color:var(--node)}.ck-badge.no{background:var(--paper-2);color:var(--muted)}
+.dom-build{background:var(--accent-soft);color:var(--accent)}.dom-deploy{background:var(--node-soft);color:var(--node)}.dom-obs{background:var(--pkt-soft);color:var(--pkt)}.dom-env{background:var(--data-soft);color:var(--data)}.dom-net{background:var(--bad-soft);color:var(--bad)}
+.ck-dom{font:700 10.5px var(--f-mono);padding:3px 8px;border-radius:5px;letter-spacing:.04em;text-transform:uppercase}
+.ck-prog{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.ck-prog .meter{flex:1;max-width:320px}
+.ck-anim svg{min-width:640px}
+.ck-anim .cap{min-height:44px}
+.an-pod{fill:var(--paper);stroke:var(--accent);stroke-width:1.8;stroke-dasharray:6 4}
+.an-c{fill:var(--paper-2);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s,opacity .3s}
+.an-c.run{fill:var(--node-soft);stroke:var(--node)}.an-c.done{fill:var(--paper-2);stroke:var(--muted);opacity:.55}.an-c.start{fill:var(--pkt-soft);stroke:var(--pkt)}
+.an-c.v1{fill:var(--accent-soft);stroke:var(--accent)}.an-c.v2{fill:var(--node-soft);stroke:var(--node)}.an-c.term{fill:var(--bad-soft);stroke:var(--bad);opacity:.6}
+.an-vol{fill:var(--data-soft);stroke:var(--data);stroke-width:1.5}
+.an-ext{fill:var(--paper);stroke:var(--muted);stroke-width:1.5}
+.an-svc{fill:var(--paper);stroke:var(--ink);stroke-width:1.8}.an-svc.down{stroke:var(--bad);fill:var(--bad-soft)}
+.an-l{stroke:var(--line);stroke-width:1.6;fill:none}.an-l.on{stroke:var(--accent);stroke-width:2.2}.an-l.g{stroke:var(--node);stroke-width:2.2}
+.pkt.v1{fill:var(--accent)}.pkt.v2{fill:var(--node)}.pkt.raw{fill:var(--pkt)}.pkt.fmt{fill:var(--data)}
+.an-layer{stroke:var(--paper);stroke-width:2}
+.an-dl{font:600 12.5px var(--f-mono);fill:var(--muted)}.an-dl.on{fill:var(--accent)}
+.an-bar{fill:var(--node)}
+.ck-mock-top{position:sticky;top:64px;z-index:5;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.ck-clock{font:700 26px var(--f-mono)}
+.ck-clock.low{color:var(--bad)}
+.ck-mtask{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--paper)}
+.ck-mtask.pass{border-color:var(--node);background:var(--node-soft)}.ck-mtask.fail{border-color:var(--bad);background:var(--bad-soft)}
+.ck-mtask .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ck-mtask .hd b{flex:1}
+.ck-score{font:700 44px var(--f-display)}
+.ck-cheat td code{white-space:nowrap}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="ckad.html#overview" style="color:inherit;text-decoration:none">CKAD Labs <span class="tag">k8s v1.37</span></a>
+  <nav class="xnav" aria-label="Phần"><a href="learn.html#overview">Lý thuyết CKA</a><a href="index.html#home">Lab CKA</a><a href="ckad.html#overview" aria-current="page">CKAD</a></nav>
+  <div class="meta"><span id="progTxt">0/0 bài</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
+</header>
+<div class="layout">
+<nav class="rail" aria-label="Mục"><ol id="rail"></ol></nav>
+<main id="main"></main>
+</div>
+<script>
+/*CKAD_DATA*/
+</script>
+<script>
+/*CKAD_JS*/
+</script>
+</body>
+</html>

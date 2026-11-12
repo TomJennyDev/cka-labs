@@ -1,0 +1,1076 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CKAD Labs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: phòng điều khiển cluster — rail module bên trái, sân khấu SVG rộng cho animation, code dạng terminal */
+:root{
+  --bg:#EAEFF4; --paper:#FFFFFF; --paper-2:#F4F6F9; --ink:#0F1E31; --muted:#56657A; --line:#D2DAE4;
+  --accent:#2457D6; --accent-soft:#E0E8FB;
+  --node:#0C8770; --node-soft:#DBF2EC;
+  --data:#7C46C4; --data-soft:#EEE4FA;
+  --pkt:#DB8506; --pkt-soft:#FCEED6;
+  --bad:#C93A35; --bad-soft:#FBE2E1;
+  --term-bg:#12223A; --term-fg:#DCE6F2; --term-dim:#8396AF; --term-acc:#F2B04A; --term-ok:#5BD3B5; --term-key:#9DBEFF; --term-bad:#FF8A84;
+  --f-display:"Bricolage Grotesque","Be Vietnam Pro",system-ui,sans-serif;
+  --f-body:"Be Vietnam Pro",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0A1320; --paper:#111D2E; --paper-2:#0D1828; --ink:#E2E9F2; --muted:#93A2B6; --line:#24344C;
+  --accent:#86A8FF; --accent-soft:#1A2B4B; --node:#45C9AC; --node-soft:#11302B; --data:#BA90F2; --data-soft:#291F42;
+  --pkt:#F4AD47; --pkt-soft:#3A2A10; --bad:#F2746E; --bad-soft:#3D1D1D;
+  --term-bg:#060D17; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0A1320; --paper:#111D2E; --paper-2:#0D1828; --ink:#E2E9F2; --muted:#93A2B6; --line:#24344C;
+  --accent:#86A8FF; --accent-soft:#1A2B4B; --node:#45C9AC; --node-soft:#11302B; --data:#BA90F2; --data-soft:#291F42;
+  --pkt:#F4AD47; --pkt-soft:#3A2A10; --bad:#F2746E; --bad-soft:#3D1D1D;
+  --term-bg:#060D17; color-scheme:dark}
+
+*{box-sizing:border-box}
+html,body{background:var(--bg)}
+body{color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:40;background:var(--paper)}
+a{color:var(--accent)}
+code{font-family:var(--f-mono);font-size:.88em;background:var(--paper-2);border:1px solid var(--line);padding:1px 5px;border-radius:4px;overflow-wrap:anywhere}
+:focus-visible{outline:2px solid var(--pkt);outline-offset:2px}
+
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:var(--paper);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;height:52px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:800;font-size:19px;letter-spacing:-.01em;white-space:nowrap}
+.xnav{display:flex;gap:4px;margin-left:6px}.xnav a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:6px;white-space:nowrap}.xnav a[aria-current="page"]{color:var(--ink);background:var(--paper-2)}
+@media (max-width:560px){.xnav{margin-left:0}.xnav a{padding:6px 7px;font-size:13px}.top .meta,.brand .tag{display:none!important}.top{gap:8px}}
+.plan li>div{min-width:0;overflow-wrap:anywhere}
+.mmd{overflow-x:auto;text-align:center;padding:4px 0;contain:paint}
+.mmd pre.mermaid{background:none;margin:0;font:12px/1.5 var(--f-mono);color:var(--ink);text-align:left;white-space:pre-wrap}
+.mmd svg{height:auto}
+@media (max-width:640px){.mmd svg{min-width:560px}}
+#kindsCmp th:first-child,#kindsCmp tbody th{position:sticky;left:0;background:var(--paper)}
+#kindsCmp td{min-width:120px;font-size:13.5px}
+.brand .tag{font:600 11px/1 var(--f-mono);color:var(--accent);background:var(--accent-soft);padding:5px 7px;border-radius:4px}
+.top .meta{margin-left:auto;display:flex;align-items:center;gap:10px;font:12px var(--f-mono);color:var(--muted);white-space:nowrap}
+.meter{width:80px;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.meter i{display:block;height:100%;width:0;background:var(--node);transition:width .4s}
+
+.layout{display:grid;grid-template-columns:minmax(0,1fr)}
+.rail{position:sticky;top:calc(env(safe-area-inset-top,0px) + 52px);z-index:25;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:thin}
+.rail ol{display:flex;gap:2px;list-style:none;margin:0;padding-block:8px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));white-space:nowrap}
+.rail .grp{display:none}
+.rail a{display:flex;gap:9px;align-items:baseline;padding:6px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500;font-size:14px;line-height:1.35}
+.rail a .n{font:600 11px var(--f-mono);opacity:.75}
+.rail a:hover{color:var(--ink)}
+.rail a[aria-current="page"]{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.rail a[aria-current="page"] .n{color:var(--accent);opacity:1}
+@media (min-width:1024px){
+  .layout{grid-template-columns:236px minmax(0,1fr)}
+  .rail{top:calc(env(safe-area-inset-top,0px) + 52px);height:calc(100vh - 52px);align-self:start;border-bottom:0;border-right:1px solid var(--line);overflow-y:auto}
+  .rail ol{flex-direction:column;padding:14px 12px 40px;white-space:normal}
+  .rail .grp{display:block;font:600 11px var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:16px 10px 6px}
+  .rail .grp:first-child{padding-top:4px}
+}
+
+main{min-width:0;padding-block:28px 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.view{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:24px}
+.vh{display:flex;flex-direction:column;gap:6px}
+.vh h2{font-family:var(--f-display);font-weight:800;font-size:clamp(28px,4vw,42px);line-height:1.06;letter-spacing:-.02em;margin:0;text-wrap:balance}
+.eyebrow{font:600 12px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--accent);margin:0}
+.lead{max-width:72ch;color:var(--muted);margin:0;font-size:16px}
+h3{font-family:var(--f-display);font-weight:600;font-size:21px;line-height:1.2;margin:0 0 10px;letter-spacing:-.01em;text-wrap:balance}
+h4{font-size:15px;margin:0 0 6px;font-weight:700}
+p{margin:0 0 10px}
+p:last-child{margin-bottom:0}
+.muted{color:var(--muted)}
+.small{font-size:13px}
+.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:20px;min-width:0}
+.split{display:grid;grid-template-columns:minmax(0,1fr);gap:20px}
+@media (min-width:920px){.split{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr)}.split.even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media (min-width:920px) and (max-width:1439px){.split.wide{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+ul.tight,ol.tight{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+
+.stage{background:var(--paper);border:1px solid var(--line);border-radius:10px;overflow-x:auto;min-width:0}
+.stage svg{display:block;width:100%;min-width:760px;height:auto}
+.stage.sm svg{min-width:560px}
+.controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.hint{font-size:13px;color:var(--muted)}
+.btn{font:600 13px var(--f-body);border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:8px 14px;border-radius:7px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;line-height:1.2}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+.btn:disabled{opacity:.45;cursor:default}
+.seg{display:inline-flex;flex-wrap:wrap;gap:4px;padding:3px;background:var(--paper-2);border:1px solid var(--line);border-radius:8px}
+.seg button{font:600 12.5px var(--f-body);border:0;background:transparent;color:var(--muted);padding:6px 11px;border-radius:6px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--paper);color:var(--ink);box-shadow:0 0 0 1px var(--line)}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;font-weight:600;color:var(--muted)}
+select,input[type=text],input[type=search]{font:14px var(--f-body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:7px;padding:7px 9px;min-width:0}
+input[type=range]{accent-color:var(--accent);width:100%}
+.check{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
+.check input{accent-color:var(--node);width:16px;height:16px}
+.formrow{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+
+pre.code{background:var(--term-bg);color:var(--term-fg);font:12.8px/1.62 var(--f-mono);padding:14px 16px;border-radius:8px;overflow-x:auto;margin:0;position:relative;tab-size:2}
+pre.code .c{color:var(--term-dim)}
+pre.code .k{color:var(--term-key)}
+pre.code .p{color:var(--term-acc)}
+pre.code .s{color:var(--term-ok)}
+.codewrap{position:relative;min-width:0}
+pre.code{padding-right:58px}
+.copy{position:absolute;top:8px;right:8px;font:600 11px var(--f-mono);background:rgba(255,255,255,.08);color:var(--term-fg);border:1px solid rgba(255,255,255,.18);border-radius:5px;padding:4px 8px;cursor:pointer;z-index:2}
+.copy:hover{background:rgba(255,255,255,.16)}
+
+.tbl{overflow-x:auto;min-width:0}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{font:600 11.5px var(--f-mono);text-transform:uppercase;letter-spacing:.05em;color:var(--muted);white-space:nowrap}
+td code{white-space:nowrap}
+td.num,th.num{font-variant-numeric:tabular-nums}
+
+.pill{display:inline-block;font:600 11px/1 var(--f-mono);padding:4px 7px;border-radius:999px;background:var(--paper-2);border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.pill.ok{background:var(--node-soft);border-color:transparent;color:var(--node)}
+.pill.bad{background:var(--bad-soft);border-color:transparent;color:var(--bad)}
+.pill.warn{background:var(--pkt-soft);border-color:transparent;color:var(--pkt)}
+.pill.cp{background:var(--accent-soft);border-color:transparent;color:var(--accent)}
+
+/* SVG primitives */
+.sv-t{fill:var(--ink);font:600 14px var(--f-body)}
+.sv-tb{fill:var(--ink);font:700 15px var(--f-body)}
+.sv-s{fill:var(--muted);font:11.5px var(--f-mono)}
+.sv-lbl{fill:var(--muted);font:600 11px var(--f-mono);letter-spacing:.08em}
+.sv-box{fill:var(--paper);stroke:var(--line);stroke-width:1.5}
+.sv-cp{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+.sv-node{fill:var(--node-soft);stroke:var(--node);stroke-width:1.5}
+.sv-data{fill:var(--data-soft);stroke:var(--data);stroke-width:1.5}
+.sv-pkt{fill:var(--pkt-soft);stroke:var(--pkt);stroke-width:1.5}
+.sv-bad{fill:var(--bad-soft);stroke:var(--bad);stroke-width:1.5}
+.sv-zone{fill:none;stroke:var(--muted);stroke-opacity:.5;stroke-width:1.3;stroke-dasharray:6 5}
+.sv-zonefill{fill:var(--paper-2);stroke:var(--line);stroke-width:1.3}
+.sv-wire{stroke:var(--line);stroke-width:1.6;fill:none}
+.sv-wire.on{stroke:var(--pkt);stroke-width:2.4}
+.sv-life{stroke:var(--line);stroke-width:1.4;stroke-dasharray:4 5}
+.pkt{fill:var(--pkt);stroke:var(--paper);stroke-width:2}
+.pkt.blue{fill:var(--accent)}
+.comp{cursor:pointer}
+.comp:hover rect{stroke-width:2.4}
+.comp.sel rect{stroke:var(--pkt);stroke-width:3}
+.lit rect,.lit path.shape{stroke:var(--pkt) !important;stroke-width:3 !important}
+.dim{opacity:.32}
+.future{opacity:.14}
+.fstep.dim{opacity:.5}
+.fade-in{animation:fi .35s ease both}
+@keyframes fi{from{opacity:.2}to{opacity:1}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* Hero */
+.hero{display:grid;grid-template-columns:minmax(0,1fr);gap:24px;align-items:center}
+@media (min-width:980px){.hero{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+.hero h1{font-family:var(--f-display);font-weight:800;font-size:clamp(36px,5.6vw,62px);line-height:1;letter-spacing:-.03em;margin:8px 0 14px;text-wrap:balance}
+.hero h1 em{font-style:normal;color:var(--accent)}
+.term{background:var(--term-bg);color:var(--term-fg);border-radius:10px;font:13px/1.6 var(--f-mono);padding:16px;min-height:300px;overflow-x:auto;white-space:pre;min-width:0}
+.term .p{color:var(--term-acc)} .term .ok{color:var(--term-ok)} .term .dim{color:var(--term-dim);opacity:1} .term .bad{color:var(--term-bad)}
+.cursor{display:inline-block;width:8px;height:15px;background:var(--term-acc);vertical-align:-2px;animation:pulse 1s steps(2) infinite}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.facts>div{padding:14px 16px 14px 0;display:flex;flex-direction:column;gap:2px}
+.facts b{font:800 30px/1.1 var(--f-display);letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.facts span{font-size:13px;color:var(--muted)}
+
+.wbar{display:flex;height:40px;border-radius:7px;overflow:hidden;margin:6px 0 16px}
+.wbar button{border:0;color:#fff;font:700 13px var(--f-mono);cursor:pointer;display:flex;align-items:center;justify-content:center;min-width:0;padding:0 4px}
+.domains{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}
+.dom{border:1px solid var(--line);border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:8px;background:var(--paper)}
+.dom-h{display:flex;align-items:center;gap:10px}
+.dom-h .sw{width:10px;height:10px;border-radius:2px;flex:none}
+.dom-h b{font-size:14.5px;line-height:1.3}
+.dom-h .pc{margin-left:auto;font:600 12px var(--f-mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.dom .bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden}
+.dom .bar i{display:block;height:100%;width:0;transition:width .3s}
+.dom label{font-size:13.5px;align-items:flex-start;line-height:1.4}
+.dom label input{margin-top:2px;flex:none}
+.dom a.go{font-size:13px;font-weight:600;text-decoration:none;margin-top:auto}
+.plan{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.plan li{display:grid;grid-template-columns:76px minmax(0,1fr);gap:14px;padding:12px 0;border-top:1px solid var(--line)}
+.plan li:first-child{border-top:0}
+.plan .wk{font:600 12px var(--f-mono);color:var(--accent);padding-top:2px}
+
+/* Detail panel */
+.detail h3{margin-bottom:4px}
+.detail .kv{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:12px}
+.detail .kv>div{border-top:1px solid var(--line);padding-top:10px}
+.detail .k{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.stepbox{display:grid;grid-template-columns:minmax(0,1fr);gap:16px}
+@media (min-width:860px){.stepbox{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}}
+.stepnum{font:600 12px var(--f-mono);color:var(--pkt);letter-spacing:.05em}
+.dots{display:flex;flex-wrap:wrap;gap:5px}
+.dots button{width:22px;height:22px;border-radius:5px;border:1px solid var(--line);background:var(--paper);font:600 10px var(--f-mono);color:var(--muted);cursor:pointer;padding:0}
+.dots button.done{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.dots button.cur{background:var(--pkt);color:var(--paper);border-color:var(--pkt)}
+
+/* chips explorer */
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chips button{font:600 12.5px var(--f-mono);border:1px solid var(--line);background:var(--paper);color:var(--ink);padding:6px 10px;border-radius:999px;cursor:pointer}
+.chips button[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.out{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.out>div{background:var(--paper);padding:10px 12px;min-width:0}
+.out .k{font:600 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.out .v{font:600 14px var(--f-mono);overflow-wrap:anywhere;margin-top:2px}
+
+/* Rolling update */
+.pods{display:flex;flex-wrap:wrap;gap:8px;min-height:72px;padding:14px;background:var(--paper-2);border-radius:8px;border:1px solid var(--line)}
+.pod{width:64px;height:54px;border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;font:600 11px var(--f-mono);border:2px solid;transition:opacity .4s,transform .4s}
+.pod small{font-size:9.5px;font-weight:400;opacity:.85}
+.pod.v1{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.pod.v2{background:var(--node-soft);border-color:var(--node);color:var(--node)}
+.pod.starting{border-style:dashed;animation:pulse 1s infinite}
+.pod.terminating{opacity:.35;transform:scale(.9);border-style:dotted}
+.stats{display:flex;flex-wrap:wrap;gap:16px;font:13px var(--f-mono);color:var(--muted)}
+.stats b{color:var(--ink);font-variant-numeric:tabular-nums}
+.log{font:12px/1.55 var(--f-mono);background:var(--term-bg);color:var(--term-fg);border-radius:8px;padding:10px 12px;height:120px;overflow-y:auto;white-space:pre-wrap}
+
+/* scheduler */
+.nodes{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px}
+.ncard{border:2px solid var(--line);border-radius:9px;padding:12px;background:var(--paper);display:flex;flex-direction:column;gap:6px;transition:border-color .3s,opacity .3s;min-width:0}
+.ncard .nm{font:700 14px var(--f-mono)}
+.ncard .res{font:12px var(--f-mono);color:var(--muted)}
+.ncard .why{font-size:12.5px;min-height:20px}
+.ncard.fail{border-color:var(--bad);opacity:.6}
+.ncard.pass{border-color:var(--node)}
+.ncard.win{border-color:var(--pkt);box-shadow:0 0 0 3px var(--pkt-soft)}
+.ncard.check{border-color:var(--accent)}
+.score{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.score i{display:block;height:100%;width:0;background:var(--node);transition:width .5s}
+
+/* RBAC */
+.rbac-q{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.verdict{font:700 15px var(--f-mono);padding:10px 14px;border-radius:8px}
+.verdict.yes{background:var(--node-soft);color:var(--node)}
+.verdict.no{background:var(--bad-soft);color:var(--bad)}
+
+/* tree */
+.crumbs{display:flex;flex-wrap:wrap;gap:6px;font-size:13px;margin-bottom:12px}
+.crumbs button{font:500 13px var(--f-body);border:0;background:none;color:var(--accent);cursor:pointer;padding:0}
+.crumbs span{color:var(--muted)}
+.opts{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));margin-top:12px}
+.opt{text-align:left;font:600 14px var(--f-body);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:12px 14px;cursor:pointer;color:var(--ink);display:flex;flex-direction:column;gap:3px}
+.opt:hover{border-color:var(--accent)}
+.opt small{font-weight:400;color:var(--muted);font-size:12.5px}
+.fix{border-left:3px solid var(--node);padding:4px 0 4px 14px;margin-top:12px}
+
+/* QoS */
+.qos{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.qcard{border:1px solid var(--line);border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:8px;transition:opacity .4s}
+.qcard.evicted{opacity:.35}
+.qcard .hdr{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.membar{position:relative;height:16px;border-radius:4px;background:var(--paper-2);border:1px solid var(--line);overflow:hidden}
+.membar i{position:absolute;inset:0 auto 0 0;background:var(--data);opacity:.75}
+.membar .rq{position:absolute;top:-2px;bottom:-2px;width:2px;background:var(--ink)}
+.nodemem{height:22px;border-radius:5px;background:var(--paper-2);border:1px solid var(--line);position:relative;overflow:hidden}
+.nodemem i{position:absolute;inset:0 auto 0 0;background:var(--pkt);opacity:.7;transition:width .3s}
+.nodemem .th{position:absolute;top:0;bottom:0;width:2px;background:var(--bad)}
+
+/* ---------- giao tiếp & mã hóa ---------- */
+.wire-split{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+@media (min-width:920px){.wire-split{grid-template-columns:minmax(0,.8fr) minmax(0,1.6fr)}.wire-list{position:sticky;top:120px}}
+.wire-list{gap:2px;padding:10px}
+#wireDetail .kv>div{overflow-wrap:anywhere;min-width:0}
+.wire-list button{display:grid;grid-template-columns:22px minmax(0,1fr) auto;gap:8px;align-items:center;text-align:left;border:0;background:none;color:var(--ink);font:500 13.5px/1.35 var(--f-body);padding:8px;border-radius:7px;cursor:pointer}
+.wire-list button:hover{background:var(--paper-2)}
+.wire-list button[aria-pressed="true"]{background:var(--accent-soft)}
+.wire-list .n{font:600 14px var(--f-mono);color:var(--accent)}
+.wire-list .t{min-width:0;overflow-wrap:anywhere}
+.wire-list small{display:block;font:11.5px var(--f-mono);color:var(--muted);margin-top:2px}
+.pk-pills{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.pk-pills .pill{white-space:normal}
+.pk-bar{display:flex;height:46px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+.pk-bar button{flex-basis:0;min-width:24px;border:0;border-right:2px solid var(--paper);font:600 10.5px var(--f-mono);cursor:pointer;padding:0 3px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.pk-bar button:last-child{border-right:0}
+.pk-bar span{display:block;overflow:hidden;text-overflow:ellipsis}
+.pk-l2{background:var(--paper-2);color:var(--muted)}
+.pk-l3{background:var(--accent-soft);color:var(--accent)}
+.pk-l4{background:var(--node-soft);color:var(--node)}
+.pk-tun{background:var(--pkt-soft);color:var(--pkt)}
+.pk-tls{background:var(--data-soft);color:var(--data)}
+.pk-app,.pk-rest{background:var(--bad-soft);color:var(--bad)}
+.pk-bar .enc{background:repeating-linear-gradient(135deg,var(--data-soft) 0 6px,var(--paper) 6px 10px);color:var(--data)}
+.pk-rows{display:flex;flex-direction:column;gap:8px}
+.pk-row{border:1px solid var(--line);border-left-width:6px;border-radius:8px;padding:10px 12px;background:var(--paper);display:flex;flex-direction:column;gap:6px;min-width:0}
+.pk-row.pk-l2{border-left-color:var(--muted)}.pk-row.pk-l3{border-left-color:var(--accent)}.pk-row.pk-l4{border-left-color:var(--node)}.pk-row.pk-tun{border-left-color:var(--pkt)}.pk-row.pk-tls{border-left-color:var(--data)}.pk-row.pk-app,.pk-row.pk-rest{border-left-color:var(--bad)}
+.pk-row.enc{border-left-color:var(--data)}
+.pk-row.hl{box-shadow:0 0 0 2px var(--pkt)}
+.pk-h{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.pk-f{margin:0;font:12.5px/1.55 var(--f-mono);white-space:pre-wrap;overflow-wrap:anywhere;color:var(--ink)}
+.pk-x{color:var(--data);letter-spacing:1px}
+.pk-row p{margin:0}
+.linkbtn{border:0;background:none;padding:0;font:inherit;color:var(--accent);cursor:pointer;text-align:left;text-decoration:underline}
+#wireCheat td{font-size:13.5px}
+#wireBody td code{white-space:normal}
+.pk-x{letter-spacing:0}
+/* animation của mục giao tiếp */
+.wm-e{transition:stroke .3s,stroke-width .3s}
+.wm-arrow{fill:var(--muted)}
+.wm-hit{fill:none;stroke:transparent;stroke-width:16;cursor:pointer;pointer-events:stroke}
+.wm-n{cursor:pointer}
+.wm-n circle{fill:var(--paper);stroke:var(--accent);stroke-width:1.6}
+.wm-nt{fill:var(--accent);font:700 11.5px var(--f-mono)}
+.wm-n.on circle{fill:var(--pkt);stroke:var(--pkt)}.wm-n.on .wm-nt{fill:var(--paper)}
+.wm-n:focus-visible circle{stroke:var(--pkt);stroke-width:3}
+.wpk rect{stroke:var(--paper);stroke-width:1.5}
+.wpk.enc rect{fill:var(--data)}.wpk.plain rect{fill:var(--bad)}.wpk.loc rect{fill:var(--pkt)}
+.wlk,.wln{fill:none;stroke:var(--paper);stroke-width:1.6;stroke-linecap:round}
+.wm-leg{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted)}
+.wm-leg i{width:16px;height:11px;border-radius:3px;display:inline-block}
+.wm-leg i.enc{background:var(--data)}.wm-leg i.plain{background:var(--bad)}.wm-leg i.loc{background:var(--pkt)}
+.seq svg{min-width:640px;max-width:860px;margin:0 auto}
+#pkStage svg,#sjStage svg{max-width:900px;margin:0 auto}
+.sq-l{stroke:var(--ink);stroke-width:1.5}.sq-l.enc{stroke:var(--data);stroke-width:2}
+.sq-ar{fill:var(--ink)}.sq-ar.enc{fill:var(--data)}
+.sq-t{fill:var(--ink);font:500 12.5px var(--f-body)}.sq-t.enc{fill:var(--data);font-weight:600}
+.sq-note{fill:var(--paper-2);stroke:var(--line)}.sq-note.key{fill:var(--data-soft);stroke:var(--data)}
+.sq-nt{fill:var(--ink);font:500 12px var(--f-body)}
+.pk-bar button{transition:flex-grow .45s ease,opacity .35s,background .35s,min-width .45s,padding .45s}
+.pk-bar button.pk-off{flex-grow:.0001 !important;min-width:0;padding:0;opacity:0;border-right-width:0}
+.pk-bar button.pk-flash{animation:pkf .7s ease}
+@keyframes pkf{0%{filter:brightness(1)}40%{filter:brightness(1.6)}100%{filter:brightness(1)}}
+.pk-row{transition:opacity .3s,box-shadow .3s}
+.pk-row.pk-dim{opacity:.28}
+.pk-mv{stroke:var(--paper);stroke-width:1}
+.pk-mv.pk-l2{fill:var(--muted)}.pk-mv.pk-l3{fill:var(--accent)}.pk-mv.pk-l4{fill:var(--node)}.pk-mv.pk-tun{fill:var(--pkt)}.pk-mv.pk-tls{fill:var(--data)}.pk-mv.pk-app,.pk-mv.pk-rest{fill:var(--bad)}.pk-mv.enc{fill:var(--data);opacity:.55}
+#pkMove{transform-box:fill-box}
+.pk-eye circle:first-child{fill:var(--paper);stroke:var(--muted);stroke-width:1.5}
+.pk-eye path{fill:none;stroke:var(--muted);stroke-width:1.5}.pk-eye circle:nth-child(3){fill:var(--muted)}
+.pk-eye.on circle:first-child{stroke:var(--pkt);fill:var(--pkt-soft)}.pk-eye.on path{stroke:var(--pkt)}
+.sj-n.on circle{stroke:var(--pkt);stroke-width:3;fill:var(--pkt-soft)}
+.sv-wire.sj-tls{stroke:var(--data);stroke-width:3}
+#sjTok rect{stroke:var(--paper);stroke-width:1.5}#sjTok text{font:700 12px var(--f-mono);fill:#fff}
+#sjTok.sj-plain rect{fill:var(--bad)}#sjTok.sj-enc rect{fill:var(--data)}
+tr.hlrow td{background:var(--pkt-soft)}
+ol.ladder{list-style:none;margin:0;padding:0;display:flex;flex-direction:column-reverse;gap:6px}
+ol.ladder li{display:grid;grid-template-columns:30px minmax(0,1fr);gap:10px;align-items:start;border:1px solid var(--line);border-radius:8px;padding:9px 12px;background:var(--paper);transition:border-color .3s,background .3s}
+ol.ladder .lv{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font:700 12px var(--f-mono);background:var(--paper-2);color:var(--muted);transition:background .3s,color .3s}
+ol.ladder li.cur{border-color:var(--pkt);background:var(--pkt-soft)}
+ol.ladder li.ok{border-color:var(--node)}ol.ladder li.ok .lv{background:var(--node);color:var(--paper)}
+details.err summary{align-items:flex-start}
+details.err summary .pill{flex:none;margin-top:2px}
+details.err code.em{white-space:normal;overflow-wrap:anywhere;font-size:12.5px;background:none;border:0;padding:0;color:var(--bad);font-weight:600}
+.obs4{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+.obs4 code{white-space:normal}
+/* gọn chữ: tóm tắt trước, chi tiết bấm mới mở */
+ul.tldr{list-style:none;margin:0;padding:0;display:grid;gap:8px;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr))}
+ul.tldr li{background:var(--accent-soft);border-radius:8px;padding:10px 12px 10px 34px;position:relative;font-size:14.5px;line-height:1.45}
+ul.tldr li::before{content:"✓";position:absolute;left:12px;top:9px;font-weight:800;color:var(--accent)}
+details.more{border-top:1px solid var(--line);padding:10px 0}
+details.more:first-of-type{border-top:0}
+details.more summary{font-size:14.5px}
+p.take{font-size:17px;line-height:1.45;font-weight:600;margin:0;border-left:4px solid var(--pkt);padding-left:12px}
+.facts4{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:8px}
+.facts4 .ft{background:var(--paper-2);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.facts4 .ft span{font:600 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.facts4 .ft b{font-size:14px;overflow-wrap:anywhere}
+.facts4 .ft.ok{background:var(--node-soft)}.facts4 .ft.ok b{color:var(--node)}
+.facts4 .ft.bad{background:var(--bad-soft)}.facts4 .ft.bad b{color:var(--bad)}
+.facts4 .ft.warn{background:var(--pkt-soft)}.facts4 .ft.warn b{color:var(--pkt)}
+.pk-row>p{display:none}
+.pk-row.hl>p{display:block}
+.pk-row{cursor:pointer}
+.pki-tree{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr))}
+.pki-col{border:1px solid var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;border-top-width:4px}
+.pki-col.c1{border-top-color:var(--accent)}.pki-col.c2{border-top-color:var(--data)}.pki-col.c3{border-top-color:var(--node)}.pki-col.c4{border-top-color:var(--muted)}
+.pki-ca{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;padding-bottom:4px}
+.pki-ca small{width:100%;font:11.5px var(--f-mono);color:var(--muted)}
+.pki-c{text-align:left;font:500 12.5px var(--f-mono);border:1px solid var(--line);background:var(--paper);color:var(--ink);border-radius:6px;padding:6px 8px;cursor:pointer;overflow-wrap:anywhere}
+.pki-c:hover{border-color:var(--accent)}.pki-c.on{background:var(--pkt-soft);border-color:var(--pkt)}
+.pki-info{min-height:22px;font-size:14px}
+.sig6{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(170px,100%),1fr))}
+.sig6 .sg{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.sig6 .sg b{font-family:var(--f-display);font-size:18px}
+.sig6 .sg span{font-size:13px;color:var(--muted)}
+.sig6 .sg code{white-space:normal;font-size:11.5px;margin-top:auto}
+.obs-card{display:grid;gap:8px}
+.obs-card>div{background:var(--paper-2);border-radius:8px;padding:10px 12px;font-size:14px;display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.obs-card span{width:100%;font:600 10.5px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.obs-card code{white-space:normal}
+ol.ladder li{grid-template-columns:30px auto minmax(0,1fr);align-items:center;padding:7px 12px}
+ol.ladder .sig{font-size:12.5px;color:var(--muted);text-align:right}
+details.err summary>span:last-child{font-weight:600}
+details.err code.em{display:block}
+@media (min-width:720px){.sig6{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:640px){#errChips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}#errChips button{flex:none}
+  ol.ladder li{grid-template-columns:30px minmax(0,1fr)}ol.ladder .sig{grid-column:2;text-align:left}}
+/* mô phỏng lỗi Pod */
+.tb-stage svg{min-width:760px}
+.tb-st circle{fill:var(--paper);stroke:var(--line);stroke-width:2;transition:fill .3s,stroke .3s}
+.tb-n{fill:var(--muted);font:700 12px var(--f-mono)}
+.tb-x{stroke:var(--paper);stroke-width:3;stroke-linecap:round;opacity:0}
+.tb-st.ok circle{fill:var(--node-soft);stroke:var(--node)}.tb-st.ok .tb-n{fill:var(--node)}
+.tb-st.bad circle{fill:var(--bad);stroke:var(--bad);animation:tbshake .4s 2}.tb-st.bad .tb-n{opacity:0}.tb-st.bad .tb-x{opacity:1}.tb-st.bad .tb-l{fill:var(--bad)}
+@keyframes tbshake{0%,100%{transform:translateX(0)}25%{transform:translateX(-3px)}75%{transform:translateX(3px)}}
+.tb-st{transform-box:fill-box}
+#tbTok rect{fill:var(--accent);stroke:var(--paper);stroke-width:2}#tbTok text{fill:#fff;font:700 11px var(--f-mono)}
+#tbTok.ok rect{fill:var(--node)}#tbTok.bad rect{fill:var(--bad)}
+#tbBack{fill:var(--pkt);font-weight:600}
+.tb-chips{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr))}
+.tb-chips button{text-align:left;border:1px solid var(--line);background:var(--paper);border-radius:8px;padding:9px 11px;cursor:pointer;display:flex;flex-direction:column;gap:2px;color:var(--ink)}
+.tb-chips button b{font:700 12.5px var(--f-mono);color:var(--bad)}
+.tb-chips button span{font-size:13px}
+.tb-chips button[aria-pressed="true"]{border-color:var(--bad);background:var(--bad-soft)}
+.seg .cnt{font:600 10.5px var(--f-mono);color:var(--muted)}
+.tb-term{min-height:190px;max-height:300px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px;line-height:1.55;padding:12px}
+.tb-term .bad{color:var(--term-bad)}.tb-term .ok{color:var(--term-ok)}.tb-term .p{color:var(--term-acc)}
+.tb-h{font:600 11px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.tb-h.ok{color:var(--node)}
+.tb-fix{display:flex;flex-direction:column;gap:12px}
+.tb-fix,.tb-chips button{overflow-wrap:anywhere;min-width:0}
+.tb-fix .take{font-size:16px;font-weight:600;border-left:4px solid var(--bad);padding-left:12px;line-height:1.45}
+/* scaling */
+.sc-formula{font:600 13.5px var(--f-mono);background:var(--paper-2);border-radius:8px;padding:10px 12px;overflow-wrap:anywhere}
+.sc-node{fill:var(--paper);stroke:var(--accent);stroke-width:1.6}.sc-node.boot{stroke-dasharray:6 4;fill:var(--accent-soft)}
+.sc-pod{stroke:var(--paper);stroke-width:1}.sc-pod.on{fill:var(--node)}.sc-pod.start{fill:var(--pkt);animation:scblink 1s infinite}.sc-pod.pend{fill:var(--bad)}
+@keyframes scblink{50%{opacity:.45}}
+.sc-pt{fill:#fff;font:700 10.5px var(--f-mono)}
+.sc-pend{fill:var(--bad-soft);stroke:var(--bad);stroke-dasharray:5 4}
+.sc-grid{stroke:var(--line);stroke-width:1}
+.sc-l{fill:none;stroke-width:2.4}.sc-l.need{stroke:var(--muted);stroke-dasharray:5 4}.sc-l.ready{stroke:var(--node)}.sc-l.spec{stroke:var(--pkt);stroke-width:1.6}.sc-l.nodes{stroke:var(--accent);stroke-width:1.6}
+.sc-now{stroke:var(--ink);stroke-width:1;opacity:.4}
+.sc-leg{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.sc-leg i{display:inline-block;width:14px;height:10px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.sc-leg i.free,.nd-mini i.free{background:repeating-linear-gradient(135deg,var(--paper-2) 0 4px,var(--line) 4px 6px)}
+.sc-log{min-height:150px;font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere;padding:12px}
+#scBody label.f input[type=number]{padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);font:inherit;width:100%;min-width:90px}
+#ndOut{display:flex;flex-direction:column;gap:12px}#ndOut h4{margin:8px 0 0}
+.nd-wl input{width:100%;min-width:64px;font:inherit;padding:5px 7px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink)}
+.nd-wl td{padding:4px 6px}
+.nd-lab{font:600 11px var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.nd-bar{display:flex;height:30px;border-radius:7px;overflow:hidden;border:1px solid var(--line)}
+.nd-bar i{flex-basis:0;min-width:2px;display:flex;align-items:center;padding:0 6px;font:600 11px var(--f-mono);overflow:hidden;white-space:nowrap}
+.nd-bar i span{overflow:hidden;text-overflow:ellipsis}
+.nd-bar .r1{background:var(--bad-soft);color:var(--bad)}.nd-bar .r2{background:var(--pkt-soft);color:var(--pkt)}.nd-bar .r3{background:var(--paper-2);color:var(--muted)}.nd-bar .r4{background:var(--node-soft);color:var(--node)}
+.nd-nodes{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(170px,100%),1fr))}
+.nd-node{border:1px solid var(--line);border-radius:9px;padding:10px;display:flex;flex-direction:column;gap:6px}
+.nd-node.spare{border-style:dashed;color:var(--muted)}
+.nd-node small{font-size:12px;color:var(--muted)}
+.nd-mini{display:flex;height:14px;border-radius:4px;overflow:hidden;background:var(--paper-2)}
+.nd-mini i{flex-basis:0;min-width:1px}
+.rg{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr))}
+.rg-g{display:flex;flex-direction:column;gap:5px}.rg-g>b{font-size:14px}
+.rg-b{display:grid;grid-template-columns:100px minmax(0,1fr) 64px;gap:8px;align-items:center;font-size:12.5px}
+.rg-b em{font:600 12px var(--f-mono);font-style:normal;text-align:right}
+.rg-t{height:12px;background:var(--paper-2);border-radius:4px;overflow:hidden}.rg-t i{display:block;height:100%;border-radius:4px}
+.rg-t i.use{background:var(--muted)}.rg-t i.peak{background:var(--ink)}.rg-t i.old{background:var(--bad)}.rg-t i.new{background:var(--node)}.rg-t i.lim{background:var(--pkt)}
+.rg-row{display:grid;grid-template-columns:44px minmax(0,1fr);align-items:center;gap:10px}
+.rg-track{position:relative;height:8px;background:var(--paper-2);border-radius:4px}
+.rg-mark{position:absolute;top:-6px;width:3px;height:20px;border-radius:2px;transform:translateX(-1px)}
+.rg-mark span{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);white-space:nowrap;font:600 11px var(--f-mono)}
+.rg-mark:nth-child(even) span{bottom:auto;top:22px}
+.rg-mark.use{background:var(--muted)}.rg-mark.use span{color:var(--muted)}
+.rg-mark.peak{background:var(--ink)}.rg-mark.old{background:var(--bad)}.rg-mark.old span{color:var(--bad)}
+.rg-mark.new{background:var(--node);width:5px}.rg-mark.new span{color:var(--node)}
+.rg-mark.lim{background:var(--pkt)}.rg-mark.lim span{color:var(--pkt)}
+.sc-kinds{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr))}
+.sc-k{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.sc-k>b{font-family:var(--f-display);font-size:17px}
+.sc-k .kv2{font-size:13px}.sc-k .kv2 span{display:block;font:600 10px var(--f-mono);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+.sc-k .kv2.warn{color:var(--pkt)}
+.sc-k code{white-space:normal;overflow-wrap:anywhere;font-size:11.5px;margin-top:auto}
+.qg rect{fill:var(--paper-2);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s}
+.qg.ok rect{fill:var(--node);stroke:var(--node)}.qg.bad rect{fill:var(--bad);stroke:var(--bad)}.qg.warn rect{fill:var(--pkt);stroke:var(--pkt)}
+.qg.bad text{fill:var(--bad)}
+#qTok rect{fill:var(--accent);stroke:var(--paper);stroke-width:2}#qTok text{fill:#fff;font:700 11px var(--f-mono)}
+#qTok.ok rect{fill:var(--node)}#qTok.bad rect{fill:var(--bad)}#qTok.warn rect{fill:var(--pkt)}
+#qEnd.lit{fill:var(--node-soft);stroke:var(--node)}
+ol.qchk{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+ol.qchk li{display:flex;gap:8px;align-items:baseline;font-size:14px;padding:7px 10px;border-radius:7px;background:var(--paper-2);animation:fadein .3s}
+ol.qchk li.bad{background:var(--bad-soft)}ol.qchk li.warn{background:var(--pkt-soft)}
+ol.qchk .qi{font:700 13px var(--f-mono);width:16px;flex:none}
+ol.qchk li.ok .qi{color:var(--node)}ol.qchk li.bad .qi{color:var(--bad)}ol.qchk li.warn .qi{color:var(--pkt)}
+ol.qchk b{flex:none}
+@keyframes fadein{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.tb-chips b.okc{color:var(--node)}.tb-chips b.warnc{color:var(--pkt)}
+.qterm{min-height:0}
+#qChips b{font-family:var(--f-body);font-size:12.5px}
+/* best practice list */
+details.bp{border-top:1px solid var(--line);padding:12px 0}
+details.bp:first-of-type{border-top:0}
+details.bp summary{cursor:pointer;font-weight:600;list-style:none;display:flex;gap:10px;align-items:baseline}
+details.bp summary::-webkit-details-marker{display:none}
+details.bp summary::before{content:"+";font:600 14px var(--f-mono);color:var(--accent);width:12px;flex:none}
+details.bp[open] summary::before{content:"−"}
+details.bp .body{padding:8px 0 0 22px;display:flex;flex-direction:column;gap:10px}
+
+/* terminal sim */
+.tsim{background:var(--term-bg);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.tsim .scr{font:12.8px/1.55 var(--f-mono);color:var(--term-fg);padding:14px;height:360px;overflow:auto;white-space:pre}
+.tsim .scr .p{color:var(--term-acc)} .tsim .scr .dim{color:var(--term-dim);opacity:1} .tsim .scr .ok{color:var(--term-ok)} .tsim .scr .bad{color:var(--term-bad)}
+.tsim form{display:flex;gap:8px;align-items:center;border-top:1px solid rgba(255,255,255,.1);padding:10px 14px}
+.tsim form span{color:var(--term-acc);font:13px var(--f-mono)}
+.tsim input{flex:1;min-width:0;background:transparent;border:0;color:var(--term-fg);font:13px var(--f-mono);outline:none;padding:4px 0}
+.sugg{display:flex;flex-wrap:wrap;gap:6px}
+.sugg button{font:12px var(--f-mono);background:var(--paper);border:1px solid var(--line);color:var(--ink);border-radius:5px;padding:4px 8px;cursor:pointer}
+.cheat{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(340px,1fr))}
+@media (max-width:420px){.cheat{grid-template-columns:minmax(0,1fr)}}
+.cheat .panel{display:flex;flex-direction:column;gap:10px}
+.cmdrow{display:grid;grid-template-columns:minmax(0,1fr);gap:2px;padding:7px 0;border-top:1px solid var(--line)}
+.cmdrow:first-of-type{border-top:0}
+.cmdrow code{background:none;border:0;padding:0;font-size:12.5px;color:var(--ink);cursor:pointer;overflow-wrap:anywhere}
+.cmdrow code:hover{color:var(--accent)}
+.cmdrow span{font-size:12.5px;color:var(--muted)}
+
+/* quiz */
+.q{display:flex;flex-direction:column;gap:10px}
+.q .choices{display:grid;gap:8px}
+.q .choices button{text-align:left;font:500 14px var(--f-body);color:var(--ink);background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:11px 14px;cursor:pointer}
+.q .choices button.right{border-color:var(--node);background:var(--node-soft)}
+.q .choices button.wrong{border-color:var(--bad);background:var(--bad-soft)}
+.q .choices button:disabled{cursor:default}
+.explain{border-left:3px solid var(--accent);padding-left:12px;font-size:14px}
+
+/* cases */
+.case{display:flex;flex-direction:column;gap:10px}
+.case .tags{display:flex;flex-wrap:wrap;gap:5px}
+.phase{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:14px}
+.phase:first-child{border-top:0}
+.phase .ix{font:600 11px var(--f-mono);color:var(--muted)}
+.phase .st{font:600 11px var(--f-mono)}
+.phase.run{background:linear-gradient(90deg,var(--pkt-soft),transparent)}
+.phase.ok .st{color:var(--node)}
+.runbook li{display:flex;flex-direction:column;gap:6px;padding:10px 0;border-top:1px solid var(--line)}
+.runbook{list-style:none;padding:0;margin:0}
+.runbook li:first-child{border-top:0}
+
+
+/* v2 additions */
+.sp-ok{fill:var(--node-soft);stroke:var(--node)} .sp-bad{fill:var(--bad-soft);stroke:var(--bad)} .sp-warn{fill:var(--pkt-soft);stroke:var(--pkt)} .sp-cp{fill:var(--accent-soft);stroke:var(--accent)} .sp-mut{fill:var(--paper-2);stroke:var(--line)}
+.sv-pt{fill:var(--ink);font:600 11px var(--f-mono)}
+.mech-tabs{margin-top:0;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
+.opt.on{border-color:var(--pkt);box-shadow:inset 0 0 0 1px var(--pkt)}
+.cx-h{margin:22px 0 10px;font-size:19px}
+.cx-h:first-child{margin-top:4px}
+.cxgrid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));align-items:start}
+@media (max-width:420px){.cxgrid{grid-template-columns:minmax(0,1fr)}}
+details.cx{background:var(--paper);border:1px solid var(--line);border-radius:9px;min-width:0}
+details.cx[open]{border-color:var(--accent)}
+details.cx summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;flex-wrap:wrap;gap:6px 8px;align-items:baseline}
+details.cx summary::-webkit-details-marker{display:none}
+details.cx summary b{font-size:14.5px}
+.cx-doms{display:inline-flex;gap:4px;flex-wrap:wrap}
+.cx-sum{flex-basis:100%;font-size:13.5px;color:var(--muted);line-height:1.5}
+details.cx[open] .cx-sum{color:var(--ink)}
+.cx-body{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.cx-links a{font-weight:600;text-decoration:none}
+.lab{display:flex;flex-direction:column;gap:8px}
+.lab h4{font-size:16px;margin:0}
+.lab p{margin:0;max-width:80ch}
+.lab-h{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.lab-n{font:600 12px var(--f-mono);color:var(--accent)}
+.lab .pill .sw,.dom .sw{display:inline-block;width:8px;height:8px;border-radius:2px;margin-right:5px;vertical-align:0}
+.linkbtn{font:600 12.5px var(--f-body);border:0;background:none;color:var(--accent);cursor:pointer;padding:0;text-decoration:underline}
+.ckrow{display:flex;gap:8px;align-items:flex-start;justify-content:space-between}
+.ckrow .linkbtn{flex:none;font-size:12px;margin-top:2px;text-decoration:none}
+.dom .links{display:flex;gap:14px;flex-wrap:wrap;margin-top:auto}
+.dom .links a,.dom .links button{font-size:13px;font-weight:600;text-decoration:none}
+
+
+/* v3 */
+.pkt.red{fill:var(--bad)}
+.lit.bad rect{stroke:var(--bad) !important}
+.arch-pane[hidden]{display:none !important}
+ol.cycle{list-style:none;margin:0;padding:0;counter-reset:c}
+ol.cycle li{counter-increment:c;display:grid;grid-template-columns:28px minmax(0,1fr);column-gap:8px;padding:9px 0;border-top:1px solid var(--line)}
+ol.cycle li:first-child{border-top:0}
+ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mono);color:var(--accent);padding-top:2px}
+.domap{display:flex;flex-direction:column;gap:0}
+.comp{border-top:1px solid var(--line);padding:12px 0;display:flex;flex-direction:column;gap:8px;min-width:0}
+.comp:first-of-type{margin-top:8px}
+.comp-h{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;justify-content:space-between}
+.comp-h b{font-size:14.5px}
+.comp-cx{display:flex;flex-wrap:wrap;gap:6px}
+.comp-cx button{font:500 12.5px var(--f-body);border:1px solid var(--line);background:var(--paper-2);color:var(--ink);padding:4px 10px;border-radius:999px;cursor:pointer}
+.comp-cx button:hover{border-color:var(--accent)}
+.comp-cx button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--paper)}
+.comp-open:empty{display:none}
+
+
+/* v4 control plane */
+.cp-rules{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(220px,1fr))}
+.cp-rules>div{border-left:3px solid var(--accent);padding:2px 0 2px 12px}
+.cp-rules p{margin:4px 0 0}
+.cps-flow{list-style:none;margin:10px 0 12px;padding:0;display:flex;flex-direction:column;gap:6px}
+.cps-flow li{font-size:13.5px;background:var(--paper-2);border:1px solid var(--line);border-radius:7px;padding:7px 10px;display:flex;flex-wrap:wrap;gap:2px 6px;align-items:baseline}
+.cps-flow li span{flex-basis:100%;font:12px var(--f-mono);color:var(--muted);overflow-wrap:anywhere}
+.cpc{display:flex;flex-direction:column;gap:12px;min-width:0}
+.cpc-lead{font-size:15.5px;max-width:82ch;margin:0}
+.cpc h4{margin:6px 0 0}
+#cpMap .comp:hover > rect{stroke-width:2.6}
+
+@media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+[hidden]{display:none!important}
+</style>
+<style>
+/* ---------- riêng trang CKAD ---------- */
+.ck-bars{display:flex;flex-direction:column;gap:10px}
+.ck-bar{display:grid;grid-template-columns:minmax(0,1fr) 54px 70px;gap:10px;align-items:center;cursor:pointer;border:0;background:none;text-align:left;color:var(--ink);font:inherit;padding:0}
+.ck-bar .lab{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ck-bar .lab b{font-size:14.5px}.ck-bar .lab small{font:11.5px var(--f-mono);color:var(--muted)}
+.ck-bar .track{height:12px;background:var(--paper-2);border-radius:6px;overflow:hidden}
+.ck-bar .track i{display:block;height:100%;width:0;border-radius:6px;transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.ck-bar .w{font:700 18px var(--f-display);text-align:right}
+.ck-bar .m{font:12px var(--f-mono);color:var(--muted)}
+.ck-bar:hover .lab b{color:var(--accent)}
+.ck-cmp{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(240px,100%),1fr))}
+.ck-cmp>div{border:1px solid var(--line);border-radius:10px;padding:12px;border-top-width:4px;display:flex;flex-direction:column;gap:6px}
+.ck-cmp .a{border-top-color:var(--node)}.ck-cmp .b{border-top-color:var(--accent)}.ck-cmp .c{border-top-color:var(--muted)}
+.ck-cmp ul{margin:0;padding-left:18px;font-size:14px;display:flex;flex-direction:column;gap:3px}
+.ck-topics{display:grid;gap:14px;grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))}
+.ck-topic{border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:9px;background:var(--paper);min-width:0}
+.ck-topic .en{font:11.5px var(--f-mono);color:var(--muted);letter-spacing:.02em}
+.ck-topic .vi{font-weight:600;font-size:15.5px;line-height:1.45}
+.ck-topic .trap{font-size:13.5px;background:var(--pkt-soft);border-radius:7px;padding:8px 10px}
+.ck-links{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.ck-links a{text-decoration:none}
+.ck-topic .pill{white-space:normal;text-align:left;max-width:100%;overflow-wrap:anywhere;cursor:pointer}
+.ck-src{font:600 11px var(--f-mono);border:1px solid var(--line);border-radius:999px;padding:3px 9px;color:var(--muted);background:var(--paper)}
+.ck-src:hover{color:var(--accent);border-color:var(--accent)}
+.ck-ex{border:1px solid var(--line);border-radius:10px;background:var(--paper)}
+.ck-ex>summary{list-style:none;display:flex;gap:10px;align-items:center;padding:12px 14px;cursor:pointer;flex-wrap:wrap}
+.ck-ex>summary::-webkit-details-marker{display:none}
+.ck-ex>summary .t{font-weight:600;flex:1;min-width:200px}
+.ck-ex>summary .mins{font:12px var(--f-mono);color:var(--muted)}
+.ck-ex.done>summary .t::before{content:"✓ ";color:var(--node)}
+.ck-ex .body{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.ck-ex .task{white-space:pre-line;font-size:14.5px;line-height:1.6;background:var(--paper-2);border-radius:8px;padding:10px 12px}
+.ck-ex .hint{font-size:13.5px;border-left:3px solid var(--pkt);padding-left:10px}
+.ck-badge{font:600 11px var(--f-mono);padding:3px 8px;border-radius:999px}
+.ck-badge.ok{background:var(--node-soft);color:var(--node)}.ck-badge.no{background:var(--paper-2);color:var(--muted)}
+.dom-build{background:var(--accent-soft);color:var(--accent)}.dom-deploy{background:var(--node-soft);color:var(--node)}.dom-obs{background:var(--pkt-soft);color:var(--pkt)}.dom-env{background:var(--data-soft);color:var(--data)}.dom-net{background:var(--bad-soft);color:var(--bad)}
+.ck-dom{font:700 10.5px var(--f-mono);padding:3px 8px;border-radius:5px;letter-spacing:.04em;text-transform:uppercase}
+.ck-prog{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--muted)}
+.ck-prog .meter{flex:1;max-width:320px}
+.ck-anim svg{min-width:640px}
+.ck-anim .cap{min-height:44px}
+.an-pod{fill:var(--paper);stroke:var(--accent);stroke-width:1.8;stroke-dasharray:6 4}
+.an-c{fill:var(--paper-2);stroke:var(--line);stroke-width:1.5;transition:fill .3s,stroke .3s,opacity .3s}
+.an-c.run{fill:var(--node-soft);stroke:var(--node)}.an-c.done{fill:var(--paper-2);stroke:var(--muted);opacity:.55}.an-c.start{fill:var(--pkt-soft);stroke:var(--pkt)}
+.an-c.v1{fill:var(--accent-soft);stroke:var(--accent)}.an-c.v2{fill:var(--node-soft);stroke:var(--node)}.an-c.term{fill:var(--bad-soft);stroke:var(--bad);opacity:.6}
+.an-vol{fill:var(--data-soft);stroke:var(--data);stroke-width:1.5}
+.an-ext{fill:var(--paper);stroke:var(--muted);stroke-width:1.5}
+.an-svc{fill:var(--paper);stroke:var(--ink);stroke-width:1.8}.an-svc.down{stroke:var(--bad);fill:var(--bad-soft)}
+.an-l{stroke:var(--line);stroke-width:1.6;fill:none}.an-l.on{stroke:var(--accent);stroke-width:2.2}.an-l.g{stroke:var(--node);stroke-width:2.2}
+.pkt.v1{fill:var(--accent)}.pkt.v2{fill:var(--node)}.pkt.raw{fill:var(--pkt)}.pkt.fmt{fill:var(--data)}
+.an-layer{stroke:var(--paper);stroke-width:2}
+.an-dl{font:600 12.5px var(--f-mono);fill:var(--muted)}.an-dl.on{fill:var(--accent)}
+.an-bar{fill:var(--node)}
+.ck-mock-top{position:sticky;top:64px;z-index:5;background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:10px 14px;display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between}
+.ck-clock{font:700 26px var(--f-mono)}
+.ck-clock.low{color:var(--bad)}
+.ck-mtask{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;background:var(--paper)}
+.ck-mtask.pass{border-color:var(--node);background:var(--node-soft)}.ck-mtask.fail{border-color:var(--bad);background:var(--bad-soft)}
+.ck-mtask .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.ck-mtask .hd b{flex:1}
+.ck-score{font:700 44px var(--f-display)}
+.ck-cheat td code{white-space:nowrap}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="ckad.html#overview" style="color:inherit;text-decoration:none">CKAD Labs <span class="tag">k8s v1.37</span></a>
+  <nav class="xnav" aria-label="Phần"><a href="learn.html#overview">Lý thuyết CKA</a><a href="index.html#home">Lab CKA</a><a href="ckad.html#overview" aria-current="page">CKAD</a></nav>
+  <div class="meta"><span id="progTxt">0/0 bài</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
+</header>
+<div class="layout">
+<nav class="rail" aria-label="Mục"><ol id="rail"></ol></nav>
+<main id="main"></main>
+</div>
+<script>
+const CKAD = {"sources": {"curriculum": {"name": "cncf/curriculum", "url": "https://github.com/cncf/curriculum", "license": "CC BY 4.0", "note": "Curriculum chính thức của CNCF: danh sách domain và tỉ trọng điểm (CKAD v1.37)."}, "k8sdocs": {"name": "kubernetes/website", "url": "https://github.com/kubernetes/website", "license": "CC BY 4.0", "note": "Mã nguồn kubernetes.io/docs, tài liệu duy nhất (cùng helm.sh/docs) được mở trong lúc thi."}, "dgk": {"name": "dgkanatsios/CKAD-exercises", "url": "https://github.com/dgkanatsios/CKAD-exercises", "license": "MIT", "note": "Bộ bài tập CKAD phổ biến nhất trên GitHub (khoảng 10 nghìn sao), cộng đồng cập nhật liên tục."}, "bmc": {"name": "bmuschko/ckad-crash-course", "url": "https://github.com/bmuschko/ckad-crash-course", "license": "chưa ghi license, chỉ dẫn link", "note": "32 bài tập theo curriculum của Benjamin Muschko, tác giả sách CKAD Study Guide (O'Reilly), có CKA, CKAD, CKS."}, "bmg": {"name": "bmuschko/ckad-study-guide", "url": "https://github.com/bmuschko/ckad-study-guide", "license": "Apache-2.0", "note": "Mã nguồn đi kèm sách CKAD Study Guide 2nd Edition, xếp theo đúng 5 domain."}, "helm": {"name": "helm/helm-www", "url": "https://github.com/helm/helm-www", "license": "MIT", "note": "Mã nguồn helm.sh/docs, được phép mở trong lúc thi CKAD."}, "lfdocs": {"name": "Linux Foundation: CKA & CKAD docs", "url": "https://docs.linuxfoundation.org/tc-docs/certification/tips-cka-and-ckad", "license": "trang chính thức", "note": "Quy định kỳ thi: 2 giờ, 15–20 task, điểm đậu 66%, Kubernetes v1.37, tài liệu được phép."}}, "domains": [{"id": "build", "w": 20, "t": "Application Design and Build", "vi": "Thiết kế và build ứng dụng", "topics": [{"t": "Define, build and modify container images", "vi": "Viết Dockerfile, build, tag, lưu image bằng docker hoặc podman.", "cmd": "podman build -t web:1.0 . && podman save -o /opt/web.tar web:1.0", "yaml": "FROM nginx:1.27-alpine\nCOPY index.html /usr/share/nginx/html/\nUSER 101\nEXPOSE 8080\n", "trap": "Đề hay bắt lưu image ra file tar hoặc đổi tag rồi push: đọc kỹ tên và tag được yêu cầu.", "anim": "layers", "docs": "https://kubernetes.io/docs/concepts/containers/images/", "src": [["dgk", "j.podman.md"], ["bmc", "exercises/01-container"]]}, {"t": "Choose and use the right workload resource (Deployment, DaemonSet, CronJob, etc.)", "vi": "Chạy mãi → Deployment; mỗi node một Pod → DaemonSet; chạy xong → Job; theo lịch → CronJob; cần tên và đĩa cố định → StatefulSet.", "cmd": "k create cronjob backup --image=busybox:1.36 --schedule='*/5 * * * *' -- sh -c 'date'", "yaml": "apiVersion: batch/v1\nkind: Job\nmetadata: {name: pi}\nspec:\n  completions: 5\n  parallelism: 2\n  backoffLimit: 2\n  activeDeadlineSeconds: 60\n  template:\n    spec:\n      restartPolicy: Never\n      containers: [{name: pi, image: busybox:1.36, command: [\"sh\", \"-c\", \"echo $((6*7))\"]}]\n", "trap": "Job và CronJob bắt buộc restartPolicy Never hoặc OnFailure; Deployment chỉ nhận Always.", "learn": "kinds", "docs": "https://kubernetes.io/docs/concepts/workloads/", "src": [["dgk", "c.pod_design.md"], ["bmc", "exercises/03-job"]]}, {"t": "Understand multi-container Pod design patterns (e.g. sidecar, init and others)", "vi": "init chạy trước rồi thoát; sidecar chạy cùng suốt đời Pod; adapter đổi định dạng đầu ra; ambassador làm proxy ra ngoài.", "cmd": "k get pod app -o jsonpath='{.spec.initContainers[*].name}'; k logs app -c log-tail", "yaml": "spec:\n  initContainers:\n    - name: log-tail            # sidecar kiểu mới (GA từ v1.33)\n      image: busybox:1.36\n      restartPolicy: Always     # chạy song song với container chính\n      command: [\"sh\", \"-c\", \"tail -F /var/log/app/app.log\"]\n      volumeMounts: [{name: logs, mountPath: /var/log/app}]\n  containers:\n    - name: app\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"while true; do date >> /var/log/app/app.log; sleep 2; done\"]\n      volumeMounts: [{name: logs, mountPath: /var/log/app}]\n  volumes: [{name: logs, emptyDir: {}}]\n", "trap": "Muốn xem log hay exec phải chỉ đúng container bằng -c; init container lỗi thì Pod đứng Init:CrashLoopBackOff.", "anim": "multi", "docs": "https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/", "src": [["dgk", "b.multi_container_pods.md"], ["bmg", "ch08"], ["bmc", "exercises/07-init-container"]]}, {"t": "Utilize persistent and ephemeral volumes", "vi": "emptyDir sống theo Pod; PVC xin đĩa, PV là đĩa thật; StorageClass tạo PV tự động.", "cmd": "k get pv,pvc; k describe pvc data", "yaml": "apiVersion: v1\nkind: PersistentVolumeClaim\nmetadata: {name: data}\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: manual\n  resources: {requests: {storage: 500Mi}}\n", "trap": "PVC Pending vì storageClassName, accessModes hoặc dung lượng không khớp PV nào.", "learn": "storage", "docs": "https://kubernetes.io/docs/concepts/storage/volumes/", "src": [["dgk", "g.state.md"], ["bmc", "exercises/06-persistentvolume-static-provisioning"]]}]}, {"id": "deploy", "w": 20, "t": "Application Deployment", "vi": "Triển khai ứng dụng", "topics": [{"t": "Use Kubernetes primitives to implement common deployment strategies (e.g. blue/green or canary)", "vi": "Blue/green đổi selector của Service sang bản mới; canary chạy song song hai Deployment chung label, tỉ lệ theo số replicas.", "cmd": "k patch svc shop -p '{\"spec\":{\"selector\":{\"app\":\"shop\",\"version\":\"green\"}}}'", "yaml": "# Service chọn theo cả version: đổi một dòng là chuyển toàn bộ traffic\nspec:\n  selector: {app: shop, version: blue}\n", "trap": "Canary bằng replicas chỉ chia gần đúng theo số Pod; muốn chia theo phần trăm chính xác phải dùng Gateway/Ingress có trọng số.", "anim": "strategy", "docs": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/", "src": [["bmc", "exercises/13-deployment-blue-green"], ["bmg", "ch11"], ["dgk", "c.pod_design.md"]]}, {"t": "Understand Deployments and how to perform rolling updates", "vi": "set image tạo ReplicaSet mới; maxSurge và maxUnavailable quyết định tốc độ; rollout undo quay lại revision cũ.", "cmd": "k set image deploy/web web=nginx:1.28 && k rollout status deploy/web && k rollout undo deploy/web --to-revision=1", "yaml": "spec:\n  strategy:\n    type: RollingUpdate\n    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}\n", "trap": "Tên container trong set image phải đúng (k get deploy web -o jsonpath='{..containers[*].name}'). Đang pause thì set image không chạy.", "learn": "workloads", "docs": "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment", "src": [["dgk", "c.pod_design.md"], ["bmc", "exercises/11-deployment-rolling-update"]]}, {"t": "Use the Helm package manager to deploy existing packages", "vi": "repo add → search → install với --set hoặc -f → upgrade → rollback → uninstall.", "cmd": "helm install web podinfo/podinfo -n web --create-namespace --set replicaCount=2", "yaml": "helm repo add podinfo https://stefanprodan.github.io/podinfo\nhelm search repo podinfo --versions | head\nhelm show values podinfo/podinfo > values.yaml\nhelm upgrade web podinfo/podinfo -n web -f values.yaml\nhelm history web -n web && helm rollback web 1 -n web\nhelm list -A --all            # cả release pending/failed\n", "trap": "Quên -n: Helm lưu release theo namespace nên list/upgrade không thấy. Dùng helm list -A.", "learn": "best", "docs": "https://helm.sh/docs/intro/using_helm/", "src": [["dgk", "h.helm.md"], ["bmc", "exercises/14-helm-consume-chart"], ["helm", ""]]}, {"t": "Kustomize", "vi": "base dùng chung, overlay chỉ ghi phần khác; generator sinh ConfigMap/Secret có hậu tố hash.", "cmd": "k kustomize overlays/prod && k apply -k overlays/prod", "yaml": "# overlays/prod/kustomization.yaml\nresources: [../../base]\nnamespace: prod\nnamePrefix: prod-\nreplicas: [{name: web, count: 3}]\nimages: [{name: nginx, newTag: \"1.28\"}]\nconfigMapGenerator: [{name: web-cfg, literals: [MODE=prod]}]\n", "trap": "k apply -k nhận thư mục, không nhận file; xem kết quả trước bằng k kustomize.", "learn": "best", "docs": "https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/", "src": [["bmc", "exercises/16-kustomize-secret-patch"]]}]}, {"id": "obs", "w": 15, "t": "Application Observability and Maintenance", "vi": "Quan sát và bảo trì", "topics": [{"t": "Understand API deprecations", "vi": "apiVersion cũ bị gỡ thì apply báo no matches for kind; tìm version còn phục vụ bằng api-resources và explain.", "cmd": "k api-resources | grep -i horizontal; k explain hpa --api-version=autoscaling/v2", "yaml": "# cũ (đã gỡ ở v1.26)          # mới\napiVersion: autoscaling/v2beta2   apiVersion: autoscaling/v2\n", "trap": "Đổi apiVersion xong vẫn phải đối chiếu trường đã đổi tên (k explain); kubectl convert là plugin, có thể không có sẵn.", "docs": "https://kubernetes.io/docs/reference/using-api/deprecation-guide/", "src": [["bmc", "exercises/17-api-deprecation"], ["bmg", "ch13"]]}, {"t": "Implement probes and health checks", "vi": "startup chờ app khởi động; liveness hỏng thì restart; readiness hỏng thì rút khỏi Service.", "cmd": "k describe pod web | grep -iE 'liveness|readiness|startup|unhealthy'", "yaml": "readinessProbe: {httpGet: {path: /, port: 80}, periodSeconds: 5}\nlivenessProbe: {exec: {command: [\"ls\", \"/\"]}, initialDelaySeconds: 5, periodSeconds: 10}\nstartupProbe: {tcpSocket: {port: 80}, failureThreshold: 30, periodSeconds: 2}\n", "trap": "Liveness sai path làm container bị giết liên tục dù app khỏe; readiness không bao giờ restart.", "learn": "probes", "docs": "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/", "src": [["dgk", "e.observability.md"], ["bmc", "exercises/18-pod-probes"]]}, {"t": "Use built-in CLI tools to monitor Kubernetes applications", "vi": "k top cho CPU/RAM hiện tại (cần metrics-server); k get -w và events cho thay đổi.", "cmd": "k top pod -A --sort-by=memory | head -5; k events -n app --types=Warning", "yaml": "", "trap": "k top báo Metrics API not available khi chưa có metrics-server.", "learn": "scale", "docs": "https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/", "src": [["dgk", "e.observability.md"], ["bmc", "exercises/19-pod-metrics"]]}, {"t": "Utilize container logs", "vi": "logs theo container, lần chạy trước, khoảng thời gian, theo label.", "cmd": "k logs web -c app --previous; k logs -l app=web --all-containers --prefix --since=10m", "yaml": "", "trap": "Pod nhiều container mà không có -c thì kubectl báo phải chọn container (hoặc lấy container mặc định).", "docs": "https://kubernetes.io/docs/concepts/cluster-administration/logging/", "src": [["dgk", "e.observability.md"]]}, {"t": "Debugging in Kubernetes", "vi": "describe xem Events; logs --previous; exec vào trong; debug gắn container tạm vào Pod không có shell.", "cmd": "k debug -it web --image=busybox:1.36 --target=web", "yaml": "", "trap": "Đọc cột STATUS trước: ImagePullBackOff, CrashLoopBackOff, Pending mỗi cái có chỗ xem khác nhau.", "learn": "trouble", "docs": "https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/", "src": [["dgk", "e.observability.md"], ["bmc", "exercises/20-troubleshooting-pod"]]}]}, {"id": "env", "w": 25, "t": "Application Environment, Configuration and Security", "vi": "Môi trường, cấu hình và bảo mật", "topics": [{"t": "Discover and use resources that extend Kubernetes (CRD, Operators)", "vi": "CRD thêm kind mới vào API; Operator là controller xử lý kind đó. Dùng như mọi object khác.", "cmd": "k get crd; k api-resources --api-group=stable.example.com; k explain backup.spec", "yaml": "apiVersion: stable.example.com/v1\nkind: Backup\nmetadata: {name: nightly}\nspec: {schedule: \"0 2 * * *\", target: db}\n", "trap": "Tên đầy đủ của CRD là <plural>.<group>; k get backups.stable.example.com khi có kind trùng tên.", "docs": "https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/", "src": [["dgk", "i.crd.md"], ["bmc", "exercises/21-crd"]]}, {"t": "Understand authentication, authorization and admission control", "vi": "request đi qua xác thực (ai), phân quyền RBAC (được làm gì), admission (có hợp lệ không).", "cmd": "k auth can-i list pods -n app --as=system:serviceaccount:app:reader", "yaml": "k create role pod-reader -n app --verb=get,list,watch --resource=pods\nk create rolebinding reader -n app --role=pod-reader --serviceaccount=app:reader\n", "trap": "--serviceaccount nhận <namespace>:<tên>, không phải chỉ tên.", "learn": "security", "docs": "https://kubernetes.io/docs/reference/access-authn-authz/rbac/", "src": [["bmc", "exercises/22-rbac-serviceaccount"], ["bmg", "ch17"]]}, {"t": "Understand requests, limits, quotas", "vi": "requests để xếp lịch và tính quota; limits bị kernel chặn; ResourceQuota và LimitRange giới hạn theo namespace.", "cmd": "k create quota q -n app --hard=requests.cpu=1,requests.memory=1Gi,pods=5", "yaml": "apiVersion: v1\nkind: LimitRange\nmetadata: {name: defaults}\nspec:\n  limits:\n    - type: Container\n      defaultRequest: {cpu: 100m, memory: 128Mi}\n      default: {cpu: 200m, memory: 256Mi}\n", "trap": "Có quota CPU/RAM mà Pod không khai requests thì bị từ chối, trừ khi có LimitRange điền mặc định.", "learn": "scale", "docs": "https://kubernetes.io/docs/concepts/policy/resource-quotas/", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/24-resourcequota"], ["bmc", "exercises/25-limitrange"]]}, {"t": "Define resource requirements", "vi": "Khai requests và limits cho từng container; requests = limits ở mọi container thì QoS là Guaranteed.", "cmd": "k set resources deploy/web --requests=cpu=100m,memory=128Mi --limits=cpu=200m,memory=256Mi", "yaml": "resources:\n  requests: {cpu: 100m, memory: 128Mi}\n  limits: {cpu: 200m, memory: 256Mi}\n", "trap": "Đơn vị: 0.5 = 500m CPU; 1Gi khác 1G.", "learn": "perf", "docs": "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/23-resource-requests-limits"]]}, {"t": "Understand ConfigMaps", "vi": "Cấu hình không bí mật; đưa vào Pod bằng env, envFrom hoặc volume (volume tự cập nhật, env thì không).", "cmd": "k create cm app-cfg --from-literal=MODE=dev --from-file=app.properties", "yaml": "env:\n  - name: MODE\n    valueFrom: {configMapKeyRef: {name: app-cfg, key: MODE}}\nenvFrom: [{configMapRef: {name: app-cfg}}]\n", "trap": "Sửa ConfigMap không làm env của Pod đang chạy đổi: phải restart (k rollout restart).", "docs": "https://kubernetes.io/docs/concepts/configuration/configmap/", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/26-configmap"]]}, {"t": "Create & consume Secrets", "vi": "Như ConfigMap nhưng cho dữ liệu nhạy cảm; base64 chỉ là cách viết, không phải mã hóa.", "cmd": "k create secret generic db --from-literal=password=s3cr3t; k get secret db -o jsonpath='{.data.password}' | base64 -d", "yaml": "volumes: [{name: db, secret: {secretName: db}}]\n# container\nvolumeMounts: [{name: db, mountPath: /etc/db, readOnly: true}]\n", "trap": "Viết YAML bằng data: thì giá trị phải base64; dùng stringData: để viết chữ thường.", "learn": "wire", "docs": "https://kubernetes.io/docs/concepts/configuration/secret/", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/27-secret"]]}, {"t": "Understand ServiceAccounts", "vi": "Danh tính của Pod khi gọi API; mỗi namespace có SA default; tắt automount nếu app không gọi API.", "cmd": "k create sa app; k create token app --duration=1h", "yaml": "spec:\n  serviceAccountName: app\n  automountServiceAccountToken: false\n", "trap": "serviceAccountName của Pod đang chạy không sửa được: sửa Deployment để tạo Pod mới.", "learn": "security", "docs": "https://kubernetes.io/docs/concepts/security/service-accounts/", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/22-rbac-serviceaccount"]]}, {"t": "Understand Application Security (SecurityContexts, Capabilities, etc.)", "vi": "Chạy bằng user không phải root, không leo quyền, bỏ capability thừa, root filesystem chỉ đọc.", "cmd": "k exec secure -- id", "yaml": "securityContext:                 # cấp Pod\n  runAsUser: 1000\n  runAsNonRoot: true\n  fsGroup: 2000\ncontainers:\n  - name: app\n    securityContext:             # cấp container (ghi đè cấp Pod)\n      allowPrivilegeEscalation: false\n      readOnlyRootFilesystem: true\n      capabilities: {drop: [ALL], add: [NET_BIND_SERVICE]}\n", "trap": "capabilities và readOnlyRootFilesystem chỉ có ở cấp container; fsGroup chỉ có ở cấp Pod.", "learn": "security", "docs": "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/28-securitycontext"]]}]}, {"id": "net", "w": 20, "t": "Services and Networking", "vi": "Service và mạng", "topics": [{"t": "Demonstrate basic understanding of NetworkPolicies", "vi": "Có policy chọn Pod thì Pod đó chỉ nhận/gửi những gì được liệt kê; nhớ mở DNS khi chặn egress.", "cmd": "k get netpol -n app; k describe netpol db-allow -n app", "yaml": "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: db-allow}\nspec:\n  podSelector: {matchLabels: {app: db}}\n  policyTypes: [Ingress]\n  ingress:\n    - from: [{podSelector: {matchLabels: {access: granted}}}]\n      ports: [{port: 5432}]\n", "trap": "from có hai phần tử (- namespaceSelector, - podSelector) là HOẶC; gộp vào một phần tử là VÀ.", "learn": "network", "docs": "https://kubernetes.io/docs/concepts/services-networking/network-policies/", "src": [["dgk", "f.services.md"], ["bmc", "exercises/32-networkpolicy"]]}, {"t": "Provide and troubleshoot access to applications via services", "vi": "Service chọn Pod bằng label; không có endpoint thì kiểm selector, targetPort, readiness.", "cmd": "k expose deploy web --port=80 --target-port=8080; k get endpointslices -l kubernetes.io/service-name=web", "yaml": "spec:\n  type: NodePort\n  selector: {app: web}\n  ports: [{port: 80, targetPort: 8080, nodePort: 30080}]\n", "trap": "Service không có endpoint gần như luôn là selector sai hoặc targetPort sai.", "learn": "network", "docs": "https://kubernetes.io/docs/concepts/services-networking/service/", "src": [["dgk", "f.services.md"], ["bmc", "exercises/29-service"], ["bmc", "exercises/30-troubleshooting-service"]]}, {"t": "Use Ingress rules to expose applications", "vi": "Ingress định tuyến HTTP theo host và path tới Service; cần ingress controller và ingressClassName.", "cmd": "k create ingress shop --class=nginx --rule='shop.lab/app*=app:80' --rule='shop.lab/api*=api:8080'", "yaml": "spec:\n  ingressClassName: nginx\n  rules:\n    - host: shop.lab\n      http:\n        paths:\n          - {path: /api, pathType: Prefix, backend: {service: {name: api, port: {number: 8080}}}}\n", "trap": "pathType bắt buộc (Prefix hoặc Exact); backend trỏ tới Service cùng namespace với Ingress.", "learn": "network", "docs": "https://kubernetes.io/docs/concepts/services-networking/ingress/", "src": [["dgk", "f.services.md"], ["bmc", "exercises/31-ingress"]]}]}], "exercises": [{"id": "b-image", "d": "build", "tp": 0, "title": "Build image, đổi tag và lưu ra file", "ns": "", "mins": 6, "test": false, "task": "Trong thư mục /opt/web có file index.html.\n1. Viết Dockerfile dùng nginx:1.27-alpine, chép index.html vào /usr/share/nginx/html/.\n2. Build image tên web:1.0 bằng podman (hoặc docker).\n3. Gắn thêm tag registry.lab:5000/web:1.0 và lưu image web:1.0 ra file /opt/web-1.0.tar.\n", "hint": "podman build -t, podman tag, podman save -o", "sol": "cd /opt/web\ncat > Dockerfile <<'EOF'\nFROM nginx:1.27-alpine\nCOPY index.html /usr/share/nginx/html/\nEOF\npodman build -t web:1.0 .\npodman tag web:1.0 registry.lab:5000/web:1.0\npodman save -o /opt/web-1.0.tar web:1.0\npodman images | grep web            # kiểm tra\npodman image history web:1.0        # mỗi dòng Dockerfile một layer\n", "check": "ls -lh /opt/web-1.0.tar && tar -tf /opt/web-1.0.tar | head", "src": [["dgk", "j.podman.md"], ["bmc", "exercises/01-container"]]}, {"id": "b-job", "d": "build", "tp": 1, "title": "Job chạy 5 lần, 2 Pod song song, có hạn giờ", "ns": "ck-jobs", "mins": 4, "task": "Namespace ck-jobs. Tạo Job calc với image busybox:1.36 chạy lệnh sh -c 'echo $((6*7))'.\nJob phải hoàn thành 5 lần, tối đa 2 Pod chạy cùng lúc, thử lại tối đa 2 lần và bị dừng nếu chạy quá 60 giây.\nĐợi Job xong và in kết quả của một Pod.\n", "hint": "k create job --dry-run=client -o yaml rồi thêm completions, parallelism, backoffLimit, activeDeadlineSeconds", "sol": "k config set-context --current --namespace=ck-jobs\nk create job calc --image=busybox:1.36 --dry-run=client -o yaml -- sh -c 'echo $((6*7))' > calc.yaml\n# sửa calc.yaml bằng vim, phần spec thành như dưới:\ncat > calc.yaml <<'EOF'\napiVersion: batch/v1\nkind: Job\nmetadata: {name: calc}\nspec:\n  completions: 5\n  parallelism: 2\n  backoffLimit: 2\n  activeDeadlineSeconds: 60\n  template:\n    spec:\n      restartPolicy: Never\n      containers:\n        - name: calc\n          image: busybox:1.36\n          command: [\"sh\", \"-c\", \"echo $((6*7))\"]\nEOF\nk apply -f calc.yaml\nk wait --for=condition=complete job/calc --timeout=120s\nk logs job/calc            # một Pod bất kỳ của Job\n", "check": "test \"$(k get job calc -n ck-jobs -o jsonpath='{.spec.completions}/{.spec.parallelism}/{.spec.backoffLimit}/{.spec.activeDeadlineSeconds}')\" = \"5/2/2/60\"\nk wait -n ck-jobs --for=condition=complete job/calc --timeout=120s >/dev/null\ntest \"$(k logs -n ck-jobs job/calc)\" = \"42\"\n", "src": [["dgk", "c.pod_design.md"], ["bmc", "exercises/03-job"]]}, {"id": "b-cron", "d": "build", "tp": 1, "title": "CronJob giữ lịch sử ngắn, không chạy chồng", "ns": "ck-cron", "mins": 4, "task": "Namespace ck-cron. Tạo CronJob report chạy mỗi 5 phút với image busybox:1.36, lệnh sh -c 'date; echo report'.\nChỉ giữ 2 Job thành công và 1 Job lỗi gần nhất, không cho hai lần chạy chồng lên nhau.\nSau đó chạy ngay một lần bằng tay thành Job tên report-manual.\n", "hint": "successfulJobsHistoryLimit, failedJobsHistoryLimit, concurrencyPolicy: Forbid; k create job --from=cronjob/…", "sol": "k config set-context --current --namespace=ck-cron\nk create cronjob report --image=busybox:1.36 --schedule='*/5 * * * *' -- sh -c 'date; echo report'\nk patch cj report --type=merge -p '{\"spec\":{\"successfulJobsHistoryLimit\":2,\"failedJobsHistoryLimit\":1,\"concurrencyPolicy\":\"Forbid\"}}'\nk create job report-manual --from=cronjob/report\nk wait --for=condition=complete job/report-manual --timeout=90s && k logs job/report-manual\n", "check": "test \"$(k get cj report -n ck-cron -o jsonpath='{.spec.schedule}|{.spec.successfulJobsHistoryLimit}|{.spec.failedJobsHistoryLimit}|{.spec.concurrencyPolicy}')\" = \"*/5 * * * *|2|1|Forbid\"\nk wait -n ck-cron --for=condition=complete job/report-manual --timeout=90s >/dev/null\nk logs -n ck-cron job/report-manual | grep -q report\n", "src": [["dgk", "c.pod_design.md"], ["bmc", "exercises/04-cronjob"]]}, {"id": "b-ds", "d": "build", "tp": 1, "title": "DaemonSet chạy trên mọi node, kể cả control plane", "ns": "ck-ds", "mins": 4, "task": "Namespace ck-ds. Tạo DaemonSet node-agent (image busybox:1.36, lệnh sleep 3600) chạy một Pod trên mọi node,\nkể cả node control plane đang có taint node-role.kubernetes.io/control-plane:NoSchedule.\n", "hint": "Không có lệnh create daemonset: tạo Deployment dry-run rồi đổi kind, bỏ replicas và strategy, thêm toleration", "sol": "k config set-context --current --namespace=ck-ds\nk create deploy node-agent --image=busybox:1.36 --dry-run=client -o yaml -- sleep 3600 > ds.yaml\n# vim ds.yaml: kind: DaemonSet, xóa replicas, strategy, status; thêm tolerations. Kết quả:\ncat > ds.yaml <<'EOF'\napiVersion: apps/v1\nkind: DaemonSet\nmetadata: {name: node-agent, labels: {app: node-agent}}\nspec:\n  selector: {matchLabels: {app: node-agent}}\n  template:\n    metadata: {labels: {app: node-agent}}\n    spec:\n      tolerations:\n        - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}\n      containers:\n        - name: busybox\n          image: busybox:1.36\n          command: [\"sleep\", \"3600\"]\nEOF\nk apply -f ds.yaml\nk rollout status ds/node-agent\nk get pod -o wide\n", "check": "k rollout status ds/node-agent -n ck-ds --timeout=120s >/dev/null\ntest \"$(k get ds node-agent -n ck-ds -o jsonpath='{.status.numberReady}')\" = \"$(k get nodes --no-headers | wc -l | tr -d ' ')\"\n", "src": [["dgk", "c.pod_design.md"], ["bmg", "ch10"]]}, {"id": "b-sidecar", "d": "build", "tp": 2, "title": "Sidecar đọc log qua emptyDir (sidecar kiểu mới)", "ns": "ck-multi", "mins": 6, "task": "Namespace ck-multi. Tạo Pod app gồm:\n- container app (busybox:1.36) ghi một dòng date vào /var/log/app/app.log mỗi 2 giây;\n- sidecar log-tail (busybox:1.36) chạy tail -F /var/log/app/app.log, khai báo là init container có restartPolicy: Always;\n- cả hai dùng chung volume emptyDir tên logs.\nKiểm tra log của log-tail có dữ liệu.\n", "hint": "Sidecar kiểu mới nằm trong initContainers với restartPolicy: Always, khởi động trước và chạy suốt đời Pod", "sol": "k config set-context --current --namespace=ck-multi\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: app}\nspec:\n  initContainers:\n    - name: log-tail\n      image: busybox:1.36\n      restartPolicy: Always\n      command: [\"sh\", \"-c\", \"tail -F /var/log/app/app.log\"]\n      volumeMounts: [{name: logs, mountPath: /var/log/app}]\n  containers:\n    - name: app\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"while true; do date >> /var/log/app/app.log; sleep 2; done\"]\n      volumeMounts: [{name: logs, mountPath: /var/log/app}]\n  volumes: [{name: logs, emptyDir: {}}]\nEOF\nk wait --for=condition=Ready pod/app --timeout=90s\nsleep 5; k logs app -c log-tail --tail=3\n", "check": "k wait -n ck-multi --for=condition=Ready pod/app --timeout=90s >/dev/null\ntest \"$(k get pod app -n ck-multi -o jsonpath='{.spec.initContainers[0].restartPolicy}')\" = \"Always\"\nfor i in 1 2 3 4 5 6; do k logs -n ck-multi app -c log-tail --tail=1 | grep -q UTC && exit 0; sleep 2; done; exit 1\n", "src": [["bmg", "ch08"], ["k8sdocs", "content/en/docs/concepts/workloads/pods/sidecar-containers.md"]]}, {"id": "b-init", "d": "build", "tp": 2, "title": "Init container chuẩn bị nội dung cho nginx", "ns": "ck-multi", "mins": 5, "task": "Namespace ck-multi. Tạo Pod web với container nginx (nginx:1.27) phục vụ /usr/share/nginx/html.\nThêm init container prepare (busybox:1.36) ghi chữ \"Hello CKAD\" vào index.html của một emptyDir dùng chung,\nđể nginx trả về nội dung đó.\n", "hint": "Init container ghi vào emptyDir mount ở /work, nginx mount cùng volume ở /usr/share/nginx/html", "sol": "k config set-context --current --namespace=ck-multi\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: web}\nspec:\n  initContainers:\n    - name: prepare\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"echo 'Hello CKAD' > /work/index.html\"]\n      volumeMounts: [{name: html, mountPath: /work}]\n  containers:\n    - name: nginx\n      image: nginx:1.27\n      ports: [{containerPort: 80}]\n      volumeMounts: [{name: html, mountPath: /usr/share/nginx/html}]\n  volumes: [{name: html, emptyDir: {}}]\nEOF\nk wait --for=condition=Ready pod/web --timeout=90s\nIP=$(k get pod web -o jsonpath='{.status.podIP}')\nk run tmp --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://$IP\n", "check": "k wait -n ck-multi --for=condition=Ready pod/web --timeout=90s >/dev/null\nIP=$(k get pod web -n ck-multi -o jsonpath='{.status.podIP}')\nk run tmp-chk -n ck-multi --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://$IP | grep -q \"Hello CKAD\"\n", "src": [["dgk", "b.multi_container_pods.md"], ["bmc", "exercises/07-init-container"]]}, {"id": "b-adapter", "d": "build", "tp": 2, "title": "Adapter đổi định dạng đầu ra", "ns": "ck-multi", "mins": 6, "task": "Namespace ck-multi. Pod metrics có container app (busybox:1.36) cứ 3 giây ghi một dòng dạng \"cpu=37,mem=512\" vào /var/log/raw.log.\nThêm container adapter (busybox:1.36) đọc file đó và in ra stdout dạng \"CPU 37% MEM 512Mi\".\n", "hint": "Hai container chung emptyDir; adapter dùng tail -F | awk (nhớ fflush để log ra ngay)", "sol": "k config set-context --current --namespace=ck-multi\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: metrics}\nspec:\n  containers:\n    - name: app\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"while true; do echo cpu=$((RANDOM%100)),mem=512 >> /var/log/raw.log; sleep 3; done\"]\n      volumeMounts: [{name: logs, mountPath: /var/log}]\n    - name: adapter\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"tail -F /var/log/raw.log | awk -F'[=,]' '{print \\\"CPU \\\" $2 \\\"% MEM \\\" $4 \\\"Mi\\\"; fflush()}'\"]\n      volumeMounts: [{name: logs, mountPath: /var/log}]\n  volumes: [{name: logs, emptyDir: {}}]\nEOF\nsleep 8; k logs metrics -c adapter --tail=2\n", "check": "k wait -n ck-multi --for=condition=Ready pod/metrics --timeout=90s >/dev/null\nfor i in 1 2 3 4 5 6 7 8; do k logs -n ck-multi metrics -c adapter --tail=1 | grep -qE '^CPU [0-9]+% MEM 512Mi$' && exit 0; sleep 2; done; exit 1\n", "src": [["bmc", "exercises/08-adapter-pattern"], ["bmg", "ch08"]]}, {"id": "b-pvc", "d": "build", "tp": 3, "title": "PV tĩnh, PVC và Pod ghi dữ liệu", "ns": "ck-store", "mins": 7, "task": "Tạo PersistentVolume pv-ck (1Gi, ReadWriteOnce, storageClassName manual, hostPath /tmp/pv-ck).\nTrong namespace ck-store tạo PVC data xin 500Mi cùng storageClassName, rồi Pod writer (busybox:1.36)\nmount PVC ở /data và ghi \"saved\" vào /data/out.txt rồi ngủ.\n", "hint": "PVC chỉ gắn với PV khi storageClassName, accessModes khớp và dung lượng PV ≥ yêu cầu", "sol": "k config set-context --current --namespace=ck-store\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: PersistentVolume\nmetadata: {name: pv-ck}\nspec:\n  capacity: {storage: 1Gi}\n  accessModes: [ReadWriteOnce]\n  storageClassName: manual\n  hostPath: {path: /tmp/pv-ck}\n---\napiVersion: v1\nkind: PersistentVolumeClaim\nmetadata: {name: data}\nspec:\n  accessModes: [ReadWriteOnce]\n  storageClassName: manual\n  resources: {requests: {storage: 500Mi}}\n---\napiVersion: v1\nkind: Pod\nmetadata: {name: writer}\nspec:\n  containers:\n    - name: writer\n      image: busybox:1.36\n      command: [\"sh\", \"-c\", \"echo saved > /data/out.txt && sleep 3600\"]\n      volumeMounts: [{name: data, mountPath: /data}]\n  volumes: [{name: data, persistentVolumeClaim: {claimName: data}}]\nEOF\nk get pv pv-ck; k get pvc data\nk wait --for=condition=Ready pod/writer --timeout=90s && k exec writer -- cat /data/out.txt\n", "check": "test \"$(k get pvc data -n ck-store -o jsonpath='{.status.phase}/{.spec.volumeName}')\" = \"Bound/pv-ck\"\nk wait -n ck-store --for=condition=Ready pod/writer --timeout=90s >/dev/null\ntest \"$(k exec -n ck-store writer -- cat /data/out.txt)\" = \"saved\"\n", "cleanup": "k delete pod writer -n ck-store --wait=false; k delete pvc data -n ck-store --wait=false; k delete pv pv-ck --wait=false", "src": [["dgk", "g.state.md"], ["bmc", "exercises/06-persistentvolume-static-provisioning"]]}, {"id": "b-labels", "d": "build", "tp": 1, "title": "Label, selector và annotation", "ns": "ck-labels", "mins": 4, "task": "Namespace ck-labels. Tạo 3 Pod nginx1, nginx2, nginx3 (nginx:1.27) có label app=v1.\nĐổi label của nginx2 thành app=v2, thêm tier=web cho mọi Pod có app là v1 hoặc v2,\ngắn annotation owner=marketing cho Pod app=v2, rồi liệt kê Pod có cột APP.\n", "hint": "k label --overwrite; selector dạng tập hợp: -l 'app in (v1,v2)'; k get -L app", "sol": "k config set-context --current --namespace=ck-labels\nfor n in 1 2 3; do k run nginx$n --image=nginx:1.27 -l app=v1; done\nk label pod nginx2 app=v2 --overwrite\nk label pod -l 'app in (v1,v2)' tier=web\nk annotate pod -l app=v2 owner=marketing\nk get pod -L app,tier\n", "check": "test \"$(k get pod -n ck-labels -l 'app=v1,tier=web' --no-headers | wc -l | tr -d ' ')\" = \"2\"\ntest \"$(k get pod nginx2 -n ck-labels -o jsonpath='{.metadata.labels.app}/{.metadata.labels.tier}/{.metadata.annotations.owner}')\" = \"v2/web/marketing\"\n", "src": [["dgk", "c.pod_design.md"], ["bmc", "exercises/10-labels-annotations-cli"]]}, {"id": "d-rolling", "d": "deploy", "tp": 1, "title": "Rolling update có ghi nguyên nhân, rồi quay lại bản cũ", "ns": "ck-roll", "mins": 6, "task": "Namespace ck-roll. Tạo Deployment web (nginx:1.27, 3 replicas) với maxSurge 1, maxUnavailable 0.\nCập nhật lên nginx:1.28 và ghi change-cause \"upgrade to 1.28\".\nXem lịch sử rollout, rồi quay lại revision 1 và xác nhận image là nginx:1.27.\n", "hint": "k annotate deploy web kubernetes.io/change-cause=…; k rollout history; k rollout undo --to-revision=1", "sol": "k config set-context --current --namespace=ck-roll\nk create deploy web --image=nginx:1.27 --replicas=3\nk patch deploy web -p '{\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":1,\"maxUnavailable\":0}}}}'\nk rollout status deploy/web\nk set image deploy/web nginx=nginx:1.28\nk annotate deploy/web kubernetes.io/change-cause=\"upgrade to 1.28\"\nk rollout status deploy/web\nk rollout history deploy/web\nk rollout undo deploy/web --to-revision=1 && k rollout status deploy/web\nk get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}'\n", "check": "k rollout status deploy/web -n ck-roll --timeout=120s >/dev/null\ntest \"$(k get deploy web -n ck-roll -o jsonpath='{.spec.template.spec.containers[0].image}|{.spec.strategy.rollingUpdate.maxSurge}|{.spec.strategy.rollingUpdate.maxUnavailable}')\" = \"nginx:1.27|1|0\"\nk rollout history deploy/web -n ck-roll | grep -q \"upgrade to 1.28\"\n", "src": [["dgk", "c.pod_design.md"], ["bmc", "exercises/11-deployment-rolling-update"]]}, {"id": "d-pause", "d": "deploy", "tp": 1, "title": "Gom nhiều thay đổi vào một lần rollout (pause/resume)", "ns": "ck-roll", "mins": 4, "task": "Namespace ck-roll. Tạo Deployment api (nginx:1.27, 2 replicas). Tạm dừng rollout, đổi image sang nginx:1.28\nvà đặt requests cpu=50m,memory=64Mi, rồi tiếp tục để mọi thay đổi ra trong một ReplicaSet mới.\n", "hint": "k rollout pause; k set image; k set resources; k rollout resume", "sol": "k config set-context --current --namespace=ck-roll\nk create deploy api --image=nginx:1.27 --replicas=2\nk rollout status deploy/api\nk rollout pause deploy/api\nk set image deploy/api nginx=nginx:1.28\nk set resources deploy/api --requests=cpu=50m,memory=64Mi\nk get rs -l app=api                 # chưa có ReplicaSet mới khi đang pause\nk rollout resume deploy/api && k rollout status deploy/api\n", "check": "k rollout status deploy/api -n ck-roll --timeout=120s >/dev/null\ntest \"$(k get deploy api -n ck-roll -o jsonpath='{.spec.paused}')\" != \"true\"\ntest \"$(k get rs -n ck-roll -l app=api --no-headers | wc -l | tr -d ' ')\" = \"2\"\ntest \"$(k get deploy api -n ck-roll -o jsonpath='{.spec.template.spec.containers[0].image}|{.spec.template.spec.containers[0].resources.requests.cpu}')\" = \"nginx:1.28|50m\"\n", "src": [["dgk", "c.pod_design.md"]]}, {"id": "d-bluegreen", "d": "deploy", "tp": 0, "title": "Blue/green bằng cách đổi selector của Service", "ns": "ck-bg", "mins": 7, "task": "Namespace ck-bg. Deployment shop-blue (nginx:1.27, 2 replicas, label app=shop, version=blue)\nvà Service shop (ClusterIP, port 80) chọn app=shop, version=blue.\nTạo shop-green (nginx:1.28, 2 replicas, version=green), đợi Ready, chuyển Service sang green rồi xóa shop-blue.\n", "hint": "Deployment cần label riêng trong template; k patch svc để đổi selector", "sol": "k config set-context --current --namespace=ck-bg\ndeploy() {   # $1 = blue|green, $2 = tag\ncat <<EOF | k apply -f -\napiVersion: apps/v1\nkind: Deployment\nmetadata: {name: shop-$1}\nspec:\n  replicas: 2\n  selector: {matchLabels: {app: shop, version: $1}}\n  template:\n    metadata: {labels: {app: shop, version: $1}}\n    spec: {containers: [{name: nginx, image: \"nginx:$2\"}]}\nEOF\n}\ndeploy blue 1.27\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Service\nmetadata: {name: shop}\nspec:\n  selector: {app: shop, version: blue}\n  ports: [{port: 80, targetPort: 80}]\nEOF\ndeploy green 1.28\nk rollout status deploy/shop-green\nk patch svc shop -p '{\"spec\":{\"selector\":{\"app\":\"shop\",\"version\":\"green\"}}}'\nk delete deploy shop-blue\nk get endpointslices -l kubernetes.io/service-name=shop\n", "check": "test \"$(k get svc shop -n ck-bg -o jsonpath='{.spec.selector.version}')\" = \"green\"\n! k get deploy shop-blue -n ck-bg >/dev/null 2>&1\nk rollout status deploy/shop-green -n ck-bg --timeout=120s >/dev/null\nfor i in $(seq 1 15); do n=$(k get endpointslices -n ck-bg -l kubernetes.io/service-name=shop -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]} {end}' | wc -w); [ \"$n\" = \"2\" ] && exit 0; sleep 2; done; exit 1\n", "src": [["bmc", "exercises/13-deployment-blue-green"], ["bmg", "ch11"]]}, {"id": "d-canary", "d": "deploy", "tp": 0, "title": "Canary 20% bằng số replicas", "ns": "ck-canary", "mins": 6, "task": "Namespace ck-canary. Service api chọn app=api. Deployment api-stable (nginx:1.27, 4 replicas, track=stable)\nvà api-canary (nginx:1.28, 1 replica, track=canary), cả hai có label app=api, để khoảng 20% request vào bản mới.\n", "hint": "Service chỉ chọn app=api nên phủ cả hai Deployment; tỉ lệ = số Pod", "sol": "k config set-context --current --namespace=ck-canary\ndeploy() {   # $1 = track, $2 = tag, $3 = replicas\ncat <<EOF | k apply -f -\napiVersion: apps/v1\nkind: Deployment\nmetadata: {name: api-$1}\nspec:\n  replicas: $3\n  selector: {matchLabels: {app: api, track: $1}}\n  template:\n    metadata: {labels: {app: api, track: $1}}\n    spec: {containers: [{name: nginx, image: \"nginx:$2\"}]}\nEOF\n}\ndeploy stable 1.27 4\ndeploy canary 1.28 1\nk create svc clusterip api --tcp=80:80     # selector mặc định app=api\nk get endpointslices -l kubernetes.io/service-name=api -o wide\n", "check": "test \"$(k get svc api -n ck-canary -o jsonpath='{.spec.selector}')\" = '{\"app\":\"api\"}'\nk rollout status deploy/api-stable -n ck-canary --timeout=120s >/dev/null && k rollout status deploy/api-canary -n ck-canary --timeout=120s >/dev/null\nfor i in $(seq 1 15); do n=$(k get endpointslices -n ck-canary -l kubernetes.io/service-name=api -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]} {end}' | wc -w); [ \"$n\" = \"5\" ] && exit 0; sleep 2; done; exit 1\n", "src": [["dgk", "c.pod_design.md"], ["bmg", "ch11"]]}, {"id": "d-helm", "d": "deploy", "tp": 2, "title": "Cài, nâng cấp và quay lại release Helm", "ns": "", "mins": 7, "test": false, "task": "Thêm repo podinfo (https://stefanprodan.github.io/podinfo). Cài chart podinfo/podinfo thành release web\ntrong namespace web (tạo mới) với replicaCount=2. Nâng cấp release đặt replicaCount=3,\nxem lịch sử, quay lại revision 1, cuối cùng liệt kê mọi release kể cả đang lỗi trên toàn cluster.\n", "hint": "helm repo add/update, helm install -n --create-namespace --set, helm upgrade, helm history, helm rollback, helm list -A --all", "sol": "helm repo add podinfo https://stefanprodan.github.io/podinfo && helm repo update\nhelm install web podinfo/podinfo -n web --create-namespace --set replicaCount=2\nhelm upgrade web podinfo/podinfo -n web --set replicaCount=3\nhelm history web -n web\nhelm rollback web 1 -n web\nhelm get values web -n web            # giá trị đang dùng\nhelm list -A --all\n", "check": "test \"$(kubectl get deploy -n web -l app.kubernetes.io/instance=web -o jsonpath='{.items[0].spec.replicas}')\" = 2", "src": [["dgk", "h.helm.md"], ["bmc", "exercises/14-helm-consume-chart"], ["helm", "docs/intro/using_helm.mdx"]]}, {"id": "d-helm-find", "d": "deploy", "tp": 2, "title": "Tìm và gỡ release Helm đang lỗi", "ns": "", "mins": 4, "test": false, "task": "Trên cluster có release bị kẹt ở trạng thái pending-install hoặc failed. Tìm chúng ở mọi namespace,\nghi tên release và namespace vào /opt/broken-releases.txt rồi gỡ chúng.\n", "hint": "helm list -A --pending --failed; helm uninstall -n", "sol": "helm list -A --pending --failed\nhelm list -A --pending --failed -o json | jq -r '.[] | \"\\(.name) \\(.namespace)\"' > /opt/broken-releases.txt\nwhile read name ns; do helm uninstall \"$name\" -n \"$ns\"; done < /opt/broken-releases.txt\n", "check": "test -z \"$(helm list -A --pending --failed -q)\"", "src": [["dgk", "h.helm.md"]]}, {"id": "d-kustomize", "d": "deploy", "tp": 3, "title": "Kustomize base và overlay prod", "ns": "ck-kz", "mins": 8, "task": "Trong thư mục /opt/kz có base gồm Deployment web (nginx:1.27, 1 replica).\nTạo overlay /opt/kz/overlays/prod: namespace ck-kz, tiền tố tên prod-, 3 replicas, image nginx:1.28,\nthêm ConfigMap web-cfg sinh ra từ MODE=prod. Áp overlay lên cluster.\n", "hint": "kustomization.yaml: resources, namespace, namePrefix, replicas, images, configMapGenerator; k apply -k", "sol": "mkdir -p /opt/kz/base /opt/kz/overlays/prod\nk create deploy web --image=nginx:1.27 --dry-run=client -o yaml > /opt/kz/base/deployment.yaml\ncat > /opt/kz/base/kustomization.yaml <<'EOF'\nresources: [deployment.yaml]\nEOF\ncat > /opt/kz/overlays/prod/kustomization.yaml <<'EOF'\nresources: [../../base]\nnamespace: ck-kz\nnamePrefix: prod-\nreplicas: [{name: web, count: 3}]\nimages: [{name: nginx, newTag: \"1.28\"}]\nconfigMapGenerator: [{name: web-cfg, literals: [MODE=prod]}]\nEOF\nk kustomize /opt/kz/overlays/prod      # xem trước\nk apply -k /opt/kz/overlays/prod\n", "check": "test \"$(k get deploy prod-web -n ck-kz -o jsonpath='{.spec.replicas}|{.spec.template.spec.containers[0].image}')\" = \"3|nginx:1.28\"\nk get cm -n ck-kz -o name | grep -q 'configmap/prod-web-cfg-'\n", "workdir": "/opt/kz", "src": [["bmc", "exercises/16-kustomize-secret-patch"], ["k8sdocs", "content/en/docs/tasks/manage-kubernetes-objects/kustomization.md"]]}, {"id": "d-kz-secret", "d": "deploy", "tp": 3, "title": "Kustomize sinh Secret và patch env vào Deployment", "ns": "ck-kz2", "mins": 7, "task": "Thư mục /opt/kz2 chứa deployment.yaml (Deployment api, nginx:1.27, container nginx).\nViết kustomization.yaml sinh Secret api-secret từ DB_PASS=s3cr3t và patch Deployment\nđể container nginx nhận biến DB_PASS từ Secret đó. Áp vào namespace ck-kz2.\n", "hint": "secretGenerator; patches với target kind Deployment; tên Secret được tự thêm hậu tố hash và tự sửa ở chỗ tham chiếu", "sol": "mkdir -p /opt/kz2 && cd /opt/kz2\nk create deploy api --image=nginx:1.27 --dry-run=client -o yaml > deployment.yaml\ncat > kustomization.yaml <<'EOF'\nnamespace: ck-kz2\nresources: [deployment.yaml]\nsecretGenerator:\n  - name: api-secret\n    literals: [DB_PASS=s3cr3t]\npatches:\n  - target: {kind: Deployment, name: api}\n    patch: |-\n      - op: add\n        path: /spec/template/spec/containers/0/env\n        value:\n          - name: DB_PASS\n            valueFrom: {secretKeyRef: {name: api-secret, key: DB_PASS}}\nEOF\nk kustomize . | grep -A3 secretKeyRef      # tên đã có hậu tố hash\nk apply -k .\n", "check": "s=$(k get deploy api -n ck-kz2 -o jsonpath='{.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name}')\ncase \"$s\" in api-secret-*) ;; *) exit 1;; esac\ntest \"$(k get secret \"$s\" -n ck-kz2 -o jsonpath='{.data.DB_PASS}' | base64 -d)\" = \"s3cr3t\"\n", "workdir": "/opt/kz2", "src": [["bmc", "exercises/16-kustomize-secret-patch"]]}, {"id": "d-hpa", "d": "deploy", "tp": 1, "title": "Scale và HorizontalPodAutoscaler", "ns": "ck-hpa", "mins": 4, "task": "Namespace ck-hpa. Tạo Deployment load (nginx:1.27) với requests cpu=50m, scale lên 3 replicas,\nrồi tạo HPA giữ từ 2 tới 6 Pod, mục tiêu CPU 70%.\n", "hint": "HPA tính % trên requests: không có requests thì TARGETS là <unknown>", "sol": "k config set-context --current --namespace=ck-hpa\nk create deploy load --image=nginx:1.27\nk set resources deploy/load --requests=cpu=50m\nk scale deploy/load --replicas=3\nk autoscale deploy/load --min=2 --max=6 --cpu=70%\nk get hpa load\n", "check": "test \"$(k get hpa load -n ck-hpa -o jsonpath='{.spec.minReplicas}/{.spec.maxReplicas}/{.spec.metrics[0].resource.target.averageUtilization}')\" = \"2/6/70\"\ntest \"$(k get deploy load -n ck-hpa -o jsonpath='{.spec.template.spec.containers[0].resources.requests.cpu}')\" = \"50m\"\n", "src": [["dgk", "c.pod_design.md"], ["bmc", "exercises/12-deployment-horizontal-pod-autoscaler"]]}, {"id": "o-deprec", "d": "obs", "tp": 0, "title": "Sửa manifest dùng API đã bị gỡ", "ns": "ck-api", "mins": 5, "task": "File /opt/hpa-old.yaml dùng apiVersion autoscaling/v2beta2 cho HorizontalPodAutoscaler web (min 1, max 4, CPU 60%)\nnên apply báo lỗi. Tìm apiVersion còn phục vụ, sửa file và áp vào namespace ck-api (Deployment web có sẵn).\n", "hint": "k api-resources | grep -i horizontal; k explain hpa.spec.metrics --api-version=autoscaling/v2", "sol": "k config set-context --current --namespace=ck-api\nk create deploy web --image=nginx:1.27 2>/dev/null || true\nk api-resources | grep -i horizontalpodautoscalers     # APIVERSION: autoscaling/v2\ncat > /opt/hpa-new.yaml <<'EOF'\napiVersion: autoscaling/v2\nkind: HorizontalPodAutoscaler\nmetadata: {name: web}\nspec:\n  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web}\n  minReplicas: 1\n  maxReplicas: 4\n  metrics:\n    - type: Resource\n      resource: {name: cpu, target: {type: Utilization, averageUtilization: 60}}\nEOF\nk apply -f /opt/hpa-new.yaml\n", "check": "test \"$(k get hpa.v2.autoscaling web -n ck-api -o jsonpath='{.spec.maxReplicas}/{.spec.metrics[0].resource.target.averageUtilization}')\" = \"4/60\"\n", "src": [["bmc", "exercises/17-api-deprecation"], ["bmg", "ch13"], ["k8sdocs", "content/en/docs/reference/using-api/deprecation-guide.md"]]}, {"id": "o-probes", "d": "obs", "tp": 1, "title": "Đủ ba loại probe", "ns": "ck-probe", "mins": 6, "task": "Namespace ck-probe. Tạo Pod web (nginx:1.27, port 80) có:\nstartupProbe tcpSocket cổng 80 (tối đa 30 lần, mỗi 2 giây),\nreadinessProbe httpGet / cổng 80 mỗi 5 giây,\nlivenessProbe exec \"ls /usr/share/nginx/html\" bắt đầu sau 5 giây, mỗi 10 giây.\n", "hint": "Lấy YAML bằng k run --dry-run=client -o yaml rồi thêm ba khối probe", "sol": "k config set-context --current --namespace=ck-probe\nk run web --image=nginx:1.27 --port=80 --dry-run=client -o yaml > web.yaml\n# vim web.yaml, thêm ba khối probe vào container:\ncat > web.yaml <<'EOF'\napiVersion: v1\nkind: Pod\nmetadata: {name: web, labels: {run: web}}\nspec:\n  containers:\n    - name: web\n      image: nginx:1.27\n      ports: [{containerPort: 80}]\n      startupProbe: {tcpSocket: {port: 80}, failureThreshold: 30, periodSeconds: 2}\n      readinessProbe: {httpGet: {path: /, port: 80}, periodSeconds: 5}\n      livenessProbe:\n        exec: {command: [\"ls\", \"/usr/share/nginx/html\"]}\n        initialDelaySeconds: 5\n        periodSeconds: 10\nEOF\nk apply -f web.yaml\nk wait --for=condition=Ready pod/web --timeout=90s\nk describe pod web | grep -E 'Liveness|Readiness|Startup'\n", "check": "k wait -n ck-probe --for=condition=Ready pod/web --timeout=90s >/dev/null\ntest \"$(k get pod web -n ck-probe -o jsonpath='{.spec.containers[0].startupProbe.failureThreshold}|{.spec.containers[0].readinessProbe.httpGet.path}|{.spec.containers[0].livenessProbe.initialDelaySeconds}')\" = \"30|/|5\"\n", "src": [["dgk", "e.observability.md"], ["bmc", "exercises/18-pod-probes"]]}, {"id": "o-findprobe", "d": "obs", "tp": 1, "title": "Tìm Pod có liveness probe đang hỏng", "ns": "ck-probe2", "mins": 5, "task": "Namespace ck-probe2 có nhiều Pod. Một Pod có liveness probe gọi sai path nên bị restart liên tục.\nTìm Pod đó qua Events và ghi tên Pod vào /opt/bad-probe.txt, rồi sửa probe (path đúng là /).\n", "hint": "k get events --field-selector reason=Unhealthy; Pod đang chạy không sửa được probe: xuất YAML, sửa, tạo lại", "setup": "k run ok1 --image=nginx:1.27 -n ck-probe2\nprintf 'apiVersion: v1\\nkind: Pod\\nmetadata: {name: sick}\\nspec:\\n  containers:\\n    - name: sick\\n      image: nginx:1.27\\n      livenessProbe: {httpGet: {path: /healthz, port: 80}, periodSeconds: 3, failureThreshold: 1}\\n' | k apply -n ck-probe2 -f -\nsleep 15\n", "sol": "k config set-context --current --namespace=ck-probe2\nk get events --field-selector reason=Unhealthy -o custom-columns=POD:.involvedObject.name,MSG:.message\nk get events --field-selector reason=Unhealthy -o jsonpath='{.items[0].involvedObject.name}' > /opt/bad-probe.txt\nk get pod sick -o yaml > sick.yaml\nsed -i 's#path: /healthz#path: /#' sick.yaml\nk replace --force -f sick.yaml\n", "check": "test \"$(cat /opt/bad-probe.txt)\" = \"sick\"\ntest \"$(k get pod sick -n ck-probe2 -o jsonpath='{.spec.containers[0].livenessProbe.httpGet.path}')\" = \"/\"\n", "src": [["dgk", "e.observability.md"]]}, {"id": "o-logs", "d": "obs", "tp": 3, "title": "Lấy log đúng container, đúng khoảng", "ns": "ck-logs", "mins": 4, "task": "Namespace ck-logs. Tạo Pod counter (busybox:1.36) in \"i: <date>\" mỗi giây với i tăng dần.\nGhi 5 dòng log mới nhất vào /opt/counter.log. Cho biết lệnh lấy log của lần chạy trước nếu container đã restart.\n", "hint": "k logs --tail=5 > file; k logs --previous", "sol": "k config set-context --current --namespace=ck-logs\nk run counter --image=busybox:1.36 -- sh -c 'i=0; while true; do echo \"$i: $(date)\"; i=$((i+1)); sleep 1; done'\nk wait --for=condition=Ready pod/counter --timeout=60s; sleep 6\nk logs counter --tail=5 > /opt/counter.log\n# lần chạy trước (khi RESTARTS > 0):\n# k logs counter --previous\n", "check": "test \"$(wc -l < /opt/counter.log | tr -d ' ')\" = \"5\"\ngrep -qE '^[0-9]+: ' /opt/counter.log\n", "src": [["dgk", "e.observability.md"]]}, {"id": "o-debug", "d": "obs", "tp": 4, "title": "Sửa Deployment bị CrashLoopBackOff", "ns": "ck-debug", "mins": 6, "task": "Namespace ck-debug. Deployment worker không lên: Pod CrashLoopBackOff.\nTìm nguyên nhân bằng describe và logs --previous, sửa để Pod chạy (lệnh đúng là sh -c 'sleep 3600').\n", "hint": "Đọc Last State và Exit Code; k logs --previous; k edit hoặc k patch deploy", "setup": "k create deploy worker -n ck-debug --image=busybox:1.36 -- sh -c 'ls /notexist'\nsleep 10\n", "sol": "k config set-context --current --namespace=ck-debug\nk get pod -l app=worker\nk describe pod -l app=worker | grep -A4 'Last State'\nk logs deploy/worker --previous || k logs deploy/worker   # ls: /notexist: No such file or directory\nk patch deploy worker --type=json -p '[{\"op\":\"replace\",\"path\":\"/spec/template/spec/containers/0/command\",\"value\":[\"sh\",\"-c\",\"sleep 3600\"]}]'\nk rollout status deploy/worker\n", "check": "k rollout status deploy/worker -n ck-debug --timeout=120s >/dev/null\ntest \"$(k get pod -n ck-debug -l app=worker --field-selector=status.phase=Running --no-headers | wc -l | tr -d ' ')\" -ge 1\n", "src": [["dgk", "e.observability.md"], ["bmc", "exercises/20-troubleshooting-pod"], ["bmg", "ch15"]]}, {"id": "o-top", "d": "obs", "tp": 2, "title": "Pod tốn RAM nhất", "ns": "", "mins": 3, "task": "Tìm Pod dùng nhiều memory nhất trong toàn cluster và ghi \"<namespace>/<tên>\" vào /opt/top-mem.txt.\n", "hint": "k top pod -A --sort-by=memory --no-headers", "sol": "k top pod -A --sort-by=memory --no-headers | head -1 | awk '{print $1\"/\"$2}' > /opt/top-mem.txt\ncat /opt/top-mem.txt\n", "check": "grep -qE '^[a-z0-9-]+/[a-z0-9.-]+$' /opt/top-mem.txt", "src": [["dgk", "e.observability.md"], ["bmc", "exercises/19-pod-metrics"]]}, {"id": "o-ephemeral", "d": "obs", "tp": 4, "title": "Gỡ lỗi Pod không có shell bằng container tạm", "ns": "ck-debug", "mins": 4, "test": false, "task": "Pod app trong ck-debug dùng image không có shell. Gắn một container gỡ lỗi busybox:1.36 dùng chung\nnamespace tiến trình với container app để xem các tiến trình đang chạy.\n", "hint": "k debug -it <pod> --image=… --target=<container>", "sol": "k debug -it app -n ck-debug --image=busybox:1.36 --target=app -- sh\n# trong shell: ps aux   (thấy tiến trình của container app)\nk get pod app -n ck-debug -o jsonpath='{.spec.ephemeralContainers[*].name}'\n", "check": "k get pod app -n ck-debug -o jsonpath='{.spec.ephemeralContainers[*].name}' | grep -q debugger", "src": [["k8sdocs", "content/en/docs/tasks/debug/debug-application/debug-running-pod.md"]]}, {"id": "e-cm", "d": "env", "tp": 4, "title": "ConfigMap qua env, envFrom và volume", "ns": "ck-cfg", "mins": 6, "task": "Namespace ck-cfg. Tạo ConfigMap app-cfg có MODE=dev và LEVEL=info.\nTạo Pod cfg (busybox:1.36, sleep 3600): biến APP_MODE lấy từ khóa MODE, nạp toàn bộ app-cfg làm biến môi trường,\nvà mount app-cfg ở /etc/app.\n", "hint": "valueFrom.configMapKeyRef, envFrom.configMapRef, volumes.configMap", "sol": "k config set-context --current --namespace=ck-cfg\nk create cm app-cfg --from-literal=MODE=dev --from-literal=LEVEL=info\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: cfg}\nspec:\n  containers:\n    - name: cfg\n      image: busybox:1.36\n      command: [\"sleep\", \"3600\"]\n      env:\n        - name: APP_MODE\n          valueFrom: {configMapKeyRef: {name: app-cfg, key: MODE}}\n      envFrom: [{configMapRef: {name: app-cfg}}]\n      volumeMounts: [{name: cfg, mountPath: /etc/app}]\n  volumes: [{name: cfg, configMap: {name: app-cfg}}]\nEOF\nk wait --for=condition=Ready pod/cfg --timeout=60s\nk exec cfg -- sh -c 'echo $APP_MODE $LEVEL; cat /etc/app/MODE'\n", "check": "k wait -n ck-cfg --for=condition=Ready pod/cfg --timeout=60s >/dev/null\ntest \"$(k exec -n ck-cfg cfg -- sh -c 'echo $APP_MODE $LEVEL $(cat /etc/app/MODE)')\" = \"dev info dev\"\n", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/26-configmap"]]}, {"id": "e-secret", "d": "env", "tp": 5, "title": "Secret qua volume chỉ đọc và một biến môi trường", "ns": "ck-sec", "mins": 5, "task": "Namespace ck-sec. Tạo Secret db có username=admin, password=s3cr3t.\nPod db-client (busybox:1.36, sleep 3600) mount Secret ở /etc/db chỉ đọc và có biến DB_USER lấy từ khóa username.\nIn ra giá trị password đã giải mã bằng kubectl.\n", "hint": "k create secret generic --from-literal; jsonpath .data.password | base64 -d", "sol": "k config set-context --current --namespace=ck-sec\nk create secret generic db --from-literal=username=admin --from-literal=password=s3cr3t\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: db-client}\nspec:\n  containers:\n    - name: c\n      image: busybox:1.36\n      command: [\"sleep\", \"3600\"]\n      env:\n        - name: DB_USER\n          valueFrom: {secretKeyRef: {name: db, key: username}}\n      volumeMounts: [{name: db, mountPath: /etc/db, readOnly: true}]\n  volumes: [{name: db, secret: {secretName: db}}]\nEOF\nk get secret db -o jsonpath='{.data.password}' | base64 -d; echo\n", "check": "k wait -n ck-sec --for=condition=Ready pod/db-client --timeout=60s >/dev/null\ntest \"$(k exec -n ck-sec db-client -- sh -c 'echo $DB_USER $(cat /etc/db/password)')\" = \"admin s3cr3t\"\ntest \"$(k get pod db-client -n ck-sec -o jsonpath='{.spec.containers[0].volumeMounts[0].readOnly}')\" = \"true\"\n", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/27-secret"]]}, {"id": "e-tls", "d": "env", "tp": 5, "title": "Secret kiểu TLS từ cặp file", "ns": "ck-sec", "mins": 4, "task": "Tạo khóa và chứng chỉ tự ký cho shop.lab bằng openssl (hạn 30 ngày), rồi tạo Secret shop-tls kiểu kubernetes.io/tls trong ck-sec.\n", "hint": "openssl req -x509 -newkey rsa:2048 -nodes; k create secret tls --cert --key", "sol": "openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj \"/CN=shop.lab\" -keyout /tmp/tls.key -out /tmp/tls.crt\nk create secret tls shop-tls -n ck-sec --cert=/tmp/tls.crt --key=/tmp/tls.key\nk get secret shop-tls -n ck-sec -o jsonpath='{.type}'\n", "check": "test \"$(k get secret shop-tls -n ck-sec -o jsonpath='{.type}')\" = \"kubernetes.io/tls\"\nk get secret shop-tls -n ck-sec -o jsonpath='{.data.tls\\.crt}' | base64 -d | openssl x509 -noout -subject | grep -q shop.lab\n", "src": [["dgk", "d.configuration.md"], ["k8sdocs", "content/en/docs/concepts/configuration/secret.md"]]}, {"id": "e-secctx", "d": "env", "tp": 7, "title": "SecurityContext không root, không leo quyền", "ns": "ck-secctx", "mins": 6, "task": "Namespace ck-secctx. Pod secure (busybox:1.36, sleep 3600) chạy với user 1000, group 3000, fsGroup 2000, runAsNonRoot.\nContainer không được leo quyền, root filesystem chỉ đọc, bỏ mọi capability.\nMount emptyDir ở /tmp để vẫn ghi được file tạm.\n", "hint": "runAsUser, runAsGroup, fsGroup, runAsNonRoot ở cấp Pod; allowPrivilegeEscalation, readOnlyRootFilesystem, capabilities ở cấp container", "sol": "k config set-context --current --namespace=ck-secctx\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: secure}\nspec:\n  securityContext: {runAsUser: 1000, runAsGroup: 3000, fsGroup: 2000, runAsNonRoot: true}\n  containers:\n    - name: app\n      image: busybox:1.36\n      command: [\"sleep\", \"3600\"]\n      securityContext:\n        allowPrivilegeEscalation: false\n        readOnlyRootFilesystem: true\n        capabilities: {drop: [ALL]}\n      volumeMounts: [{name: tmp, mountPath: /tmp}]\n  volumes: [{name: tmp, emptyDir: {}}]\nEOF\nk wait --for=condition=Ready pod/secure --timeout=60s\nk exec secure -- id                         # uid=1000 gid=3000 groups=2000,3000\nk exec secure -- touch /x || echo \"root fs chỉ đọc: đúng\"\nk exec secure -- touch /tmp/ok && echo \"/tmp ghi được\"\n", "check": "k wait -n ck-secctx --for=condition=Ready pod/secure --timeout=60s >/dev/null\nk exec -n ck-secctx secure -- id | grep -q 'uid=1000 gid=3000'\n! k exec -n ck-secctx secure -- touch /x 2>/dev/null\nk exec -n ck-secctx secure -- touch /tmp/ok\n", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/28-securitycontext"], ["bmg", "ch20"]]}, {"id": "e-sa", "d": "env", "tp": 6, "title": "ServiceAccount riêng, chỉ được đọc Pod", "ns": "ck-rbac", "mins": 6, "task": "Namespace ck-rbac. Tạo ServiceAccount reader, Role pod-reader (get, list, watch pods) và RoleBinding gắn hai thứ đó.\nTạo Pod viewer (busybox:1.36, sleep 3600) dùng SA reader. Xác nhận SA đọc được Pod nhưng không xóa được.\n", "hint": "k create sa/role/rolebinding --serviceaccount=ck-rbac:reader; k auth can-i --as=system:serviceaccount:…", "sol": "k config set-context --current --namespace=ck-rbac\nk create sa reader\nk create role pod-reader --verb=get,list,watch --resource=pods\nk create rolebinding reader --role=pod-reader --serviceaccount=ck-rbac:reader\nk run viewer --image=busybox:1.36 --overrides='{\"spec\":{\"serviceAccountName\":\"reader\"}}' -- sleep 3600\nk auth can-i list pods --as=system:serviceaccount:ck-rbac:reader      # yes\nk auth can-i delete pods --as=system:serviceaccount:ck-rbac:reader || true   # no (mã thoát 1)\n", "check": "test \"$(k auth can-i list pods -n ck-rbac --as=system:serviceaccount:ck-rbac:reader)\" = \"yes\"\ntest \"$(k auth can-i delete pods -n ck-rbac --as=system:serviceaccount:ck-rbac:reader)\" = \"no\"\ntest \"$(k get pod viewer -n ck-rbac -o jsonpath='{.spec.serviceAccountName}')\" = \"reader\"\n", "src": [["bmc", "exercises/22-rbac-serviceaccount"], ["bmg", "ch17"], ["dgk", "d.configuration.md"]]}, {"id": "e-token", "d": "env", "tp": 6, "title": "Tắt token tự gắn và xin token có hạn", "ns": "ck-rbac", "mins": 3, "task": "Namespace ck-rbac. Tạo ServiceAccount batch với automountServiceAccountToken: false.\nXin một token cho batch có hạn 10 phút và lưu vào /opt/batch.token.\n", "hint": "k patch sa; k create token --duration", "sol": "k create sa batch -n ck-rbac\nk patch sa batch -n ck-rbac -p '{\"automountServiceAccountToken\":false}'\nk create token batch -n ck-rbac --duration=10m > /opt/batch.token\ncut -d. -f2 /opt/batch.token | tr '_-' '/+' | base64 -d 2>/dev/null | head -c 200; echo\n", "check": "test \"$(k get sa batch -n ck-rbac -o jsonpath='{.automountServiceAccountToken}')\" = \"false\"\ntest \"$(cut -d. -f1 /opt/batch.token | cut -c1-3)\" = \"eyJ\"\n", "src": [["dgk", "d.configuration.md"]]}, {"id": "e-resources", "d": "env", "tp": 3, "title": "Requests, limits và lớp QoS", "ns": "ck-res", "mins": 4, "task": "Namespace ck-res. Tạo Pod g (nginx:1.27) có QoS Guaranteed với 100m CPU, 128Mi RAM\nvà Pod b (nginx:1.27) có QoS Burstable: requests 50m/64Mi, limits memory 256Mi.\n", "hint": "Guaranteed: mọi container requests = limits cho cả CPU và RAM", "sol": "k config set-context --current --namespace=ck-res\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: g}\nspec:\n  containers:\n    - name: g\n      image: nginx:1.27\n      resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 100m, memory: 128Mi}}\n---\napiVersion: v1\nkind: Pod\nmetadata: {name: b}\nspec:\n  containers:\n    - name: b\n      image: nginx:1.27\n      resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}\nEOF\nk get pod -o custom-columns=NAME:.metadata.name,QOS:.status.qosClass\n", "check": "test \"$(k get pod g -n ck-res -o jsonpath='{.status.qosClass}')\" = \"Guaranteed\"\ntest \"$(k get pod b -n ck-res -o jsonpath='{.status.qosClass}')\" = \"Burstable\"\n", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/23-resource-requests-limits"]]}, {"id": "e-quota", "d": "env", "tp": 2, "title": "ResourceQuota chặn Pod quá tay", "ns": "ck-quota", "mins": 5, "task": "Namespace ck-quota. Tạo ResourceQuota team với requests.cpu=1, requests.memory=1Gi, limits.cpu=2, limits.memory=2Gi, pods=3.\nThử tạo Pod big xin requests cpu=2 (sẽ bị từ chối), rồi tạo Pod small (nginx:1.27) requests 500m/512Mi, limits 1/1Gi.\n", "hint": "k create quota --hard=…; k describe quota xem Used/Hard", "sol": "k config set-context --current --namespace=ck-quota\nk create quota team --hard=requests.cpu=1,requests.memory=1Gi,limits.cpu=2,limits.memory=2Gi,pods=3\npod() {   # $1 tên, $2 req cpu, $3 req mem, $4 lim cpu, $5 lim mem\ncat <<EOF | k apply -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: $1}\nspec:\n  containers:\n    - name: $1\n      image: nginx:1.27\n      resources: {requests: {cpu: \"$2\", memory: $3}, limits: {cpu: \"$4\", memory: $5}}\nEOF\n}\npod big 2 1Gi 3 2Gi || echo \"bị từ chối: exceeded quota\"\npod small 500m 512Mi 1 1Gi\nk describe quota team\n", "check": "! k get pod big -n ck-quota >/dev/null 2>&1\nk get pod small -n ck-quota >/dev/null\ntest \"$(k get quota team -n ck-quota -o jsonpath='{.status.used.requests\\.cpu}')\" = \"500m\"\n", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/24-resourcequota"]]}, {"id": "e-limitrange", "d": "env", "tp": 2, "title": "LimitRange tự điền requests", "ns": "ck-lr", "mins": 4, "task": "Namespace ck-lr. Tạo LimitRange defaults cho Container: defaultRequest cpu 100m / memory 128Mi,\ndefault (limit) cpu 200m / memory 256Mi, max memory 512Mi. Tạo Pod plain (nginx:1.27) không khai resources\nvà xác nhận nó nhận giá trị mặc định.\n", "hint": "LimitRange không có lệnh create: viết YAML; xem kết quả trong spec của Pod", "sol": "k config set-context --current --namespace=ck-lr\ncat <<'EOF' | k apply -f -\napiVersion: v1\nkind: LimitRange\nmetadata: {name: defaults}\nspec:\n  limits:\n    - type: Container\n      defaultRequest: {cpu: 100m, memory: 128Mi}\n      default: {cpu: 200m, memory: 256Mi}\n      max: {memory: 512Mi}\nEOF\nk run plain --image=nginx:1.27\nk get pod plain -o jsonpath='{.spec.containers[0].resources}'\n", "check": "test \"$(k get pod plain -n ck-lr -o jsonpath='{.spec.containers[0].resources.requests.cpu}|{.spec.containers[0].resources.limits.memory}')\" = \"100m|256Mi\"\n", "src": [["dgk", "d.configuration.md"], ["bmc", "exercises/25-limitrange"]]}, {"id": "e-crd", "d": "env", "tp": 0, "title": "Dùng CustomResourceDefinition", "ns": "ck-crd", "mins": 6, "task": "Tạo CRD backups.stable.example.com (kind Backup, scope Namespaced, version v1, spec có schedule: string, target: string, cả hai bắt buộc).\nTạo object nightly trong ck-crd với schedule \"0 2 * * *\", target db, rồi liệt kê bằng kubectl.\n", "hint": "openAPIV3Schema bắt buộc; k api-resources --api-group=stable.example.com; k explain backup.spec", "sol": "cat <<'EOF' | k apply -f -\napiVersion: apiextensions.k8s.io/v1\nkind: CustomResourceDefinition\nmetadata: {name: backups.stable.example.com}\nspec:\n  group: stable.example.com\n  scope: Namespaced\n  names: {plural: backups, singular: backup, kind: Backup, shortNames: [bk]}\n  versions:\n    - name: v1\n      served: true\n      storage: true\n      schema:\n        openAPIV3Schema:\n          type: object\n          properties:\n            spec:\n              type: object\n              required: [schedule, target]\n              properties:\n                schedule: {type: string}\n                target: {type: string}\nEOF\nk wait --for=condition=Established crd/backups.stable.example.com\ncat <<'EOF' | k apply -n ck-crd -f -\napiVersion: stable.example.com/v1\nkind: Backup\nmetadata: {name: nightly}\nspec: {schedule: \"0 2 * * *\", target: db}\nEOF\nk get bk -n ck-crd; k explain backup.spec\n", "check": "test \"$(k get backup nightly -n ck-crd -o jsonpath='{.spec.target}')\" = \"db\"\n! printf 'apiVersion: stable.example.com/v1\\nkind: Backup\\nmetadata: {name: bad}\\nspec: {target: x}\\n' | k apply -n ck-crd --dry-run=server -f - >/dev/null 2>&1\n", "cleanup": "k delete crd backups.stable.example.com --wait=false", "src": [["dgk", "i.crd.md"], ["bmc", "exercises/21-crd"], ["bmg", "ch16"]]}, {"id": "e-psa", "d": "env", "tp": 1, "title": "Admission Pod Security: làm Pod hợp lệ với restricted", "ns": "ck-psa", "mins": 6, "task": "Gắn label pod-security.kubernetes.io/enforce=restricted cho namespace ck-psa.\nTạo Pod hardened (busybox:1.36, sleep 3600) được admission chấp nhận.\n", "hint": "Thiếu trường nào thì thông báo lỗi liệt kê đúng trường đó: thử --dry-run=server", "sol": "k label ns ck-psa pod-security.kubernetes.io/enforce=restricted --overwrite\nk run test --image=busybox:1.36 -n ck-psa --dry-run=server -- sleep 3600 || true   # đọc danh sách trường thiếu\ncat <<'EOF' | k apply -n ck-psa -f -\napiVersion: v1\nkind: Pod\nmetadata: {name: hardened}\nspec:\n  securityContext:\n    runAsNonRoot: true\n    runAsUser: 1000\n    seccompProfile: {type: RuntimeDefault}\n  containers:\n    - name: app\n      image: busybox:1.36\n      command: [\"sleep\", \"3600\"]\n      securityContext:\n        allowPrivilegeEscalation: false\n        capabilities: {drop: [ALL]}\nEOF\n", "check": "test \"$(k get ns ck-psa -o jsonpath='{.metadata.labels.pod-security\\.kubernetes\\.io/enforce}')\" = \"restricted\"\nk get pod hardened -n ck-psa >/dev/null\n", "src": [["bmg", "ch17"], ["k8sdocs", "content/en/docs/concepts/security/pod-security-admission.md"]]}, {"id": "n-expose", "d": "net", "tp": 1, "title": "Expose Deployment và gọi thử từ Pod tạm", "ns": "ck-svc", "mins": 4, "task": "Namespace ck-svc. Deployment echo (nginx:1.27, 3 replicas). Tạo Service ClusterIP echo cổng 8080 trỏ về cổng 80 của Pod,\nrồi dùng một Pod busybox tạm (tự xóa) gọi http://echo:8080.\n", "hint": "k expose --port --target-port; k run tmp --rm -it --restart=Never --image=busybox:1.36 -- wget -qO- …", "sol": "k config set-context --current --namespace=ck-svc\nk create deploy echo --image=nginx:1.27 --replicas=3\nk expose deploy echo --port=8080 --target-port=80\nk rollout status deploy/echo\nk run tmp --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://echo:8080 | head -4\n", "check": "k rollout status deploy/echo -n ck-svc --timeout=120s >/dev/null\ntest \"$(k get svc echo -n ck-svc -o jsonpath='{.spec.ports[0].port}/{.spec.ports[0].targetPort}')\" = \"8080/80\"\nk run tmp-check -n ck-svc --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://echo:8080 | grep -q nginx\n", "src": [["dgk", "f.services.md"], ["bmc", "exercises/29-service"]]}, {"id": "n-nodeport", "d": "net", "tp": 1, "title": "NodePort cố định", "ns": "ck-svc", "mins": 3, "task": "Namespace ck-svc. Tạo Service web-np kiểu NodePort cho Deployment echo, port 80, nodePort 30080.\n", "hint": "k expose --type=NodePort rồi patch nodePort, hoặc k create svc nodeport --node-port", "sol": "k expose deploy echo -n ck-svc --name=web-np --type=NodePort --port=80\nk patch svc web-np -n ck-svc --type=json -p '[{\"op\":\"replace\",\"path\":\"/spec/ports/0/nodePort\",\"value\":30080}]'\nk get svc web-np -n ck-svc\n", "check": "test \"$(k get svc web-np -n ck-svc -o jsonpath='{.spec.type}/{.spec.ports[0].nodePort}/{.spec.selector.app}')\" = \"NodePort/30080/echo\"\n", "src": [["dgk", "f.services.md"], ["bmc", "exercises/29-service"]]}, {"id": "n-fixsvc", "d": "net", "tp": 1, "title": "Service không có endpoint: sửa selector và targetPort", "ns": "ck-fix", "mins": 6, "task": "Namespace ck-fix. Service api không trả lời. Pod của Deployment api có label app=api và nghe cổng 80.\nTìm hai chỗ sai trong Service rồi sửa để gọi http://api từ Pod khác được.\n", "hint": "So sánh selector với label Pod (k get pod --show-labels) và targetPort với containerPort; xem EndpointSlice", "setup": "k create deploy api -n ck-fix --image=nginx:1.27 --replicas=2\nprintf 'apiVersion: v1\\nkind: Service\\nmetadata: {name: api}\\nspec:\\n  selector: {app: api-v2}\\n  ports: [{port: 80, targetPort: 8080}]\\n' | k apply -n ck-fix -f -\n", "sol": "k config set-context --current --namespace=ck-fix\nk get endpointslices -l kubernetes.io/service-name=api     # không có endpoint\nk get svc api -o jsonpath='{.spec.selector} {.spec.ports[0].targetPort}'; echo\nk get pod --show-labels\nk patch svc api --type=json -p '[{\"op\":\"replace\",\"path\":\"/spec/selector\",\"value\":{\"app\":\"api\"}},{\"op\":\"replace\",\"path\":\"/spec/ports/0/targetPort\",\"value\":80}]'\nk run tmp --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://api | head -3\n", "check": "k rollout status deploy/api -n ck-fix --timeout=120s >/dev/null\nk run tmp-check -n ck-fix --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://api | grep -q nginx\n", "src": [["bmc", "exercises/30-troubleshooting-service"], ["dgk", "f.services.md"]]}, {"id": "n-ingress", "d": "net", "tp": 2, "title": "Ingress định tuyến theo host và path", "ns": "ck-ing", "mins": 6, "task": "Namespace ck-ing có Service app (cổng 80) và api (cổng 8080). Tạo Ingress shop với ingressClassName traefik\n(trong đề sẽ cho tên class), host shop.lab: /app* tới app:80, /api* tới api:8080.\n", "hint": "k create ingress --class --rule='host/path*=svc:port' (dấu * nghĩa là pathType Prefix)", "setup": "k create svc clusterip app -n ck-ing --tcp=80:80\nk create svc clusterip api -n ck-ing --tcp=8080:8080\n", "sol": "k create ingress shop -n ck-ing --class=traefik \\\n  --rule='shop.lab/app*=app:80' --rule='shop.lab/api*=api:8080'\nk describe ingress shop -n ck-ing\n", "check": "test \"$(k get ingress shop -n ck-ing -o jsonpath='{.spec.ingressClassName}|{.spec.rules[0].host}|{.spec.rules[0].http.paths[1].path}|{.spec.rules[0].http.paths[1].pathType}|{.spec.rules[0].http.paths[1].backend.service.port.number}')\" = \"traefik|shop.lab|/api|Prefix|8080\"\n", "src": [["dgk", "f.services.md"], ["bmc", "exercises/31-ingress"], ["bmg", "ch22"]]}, {"id": "n-netpol", "d": "net", "tp": 0, "title": "NetworkPolicy chỉ cho Pod có nhãn truy cập database", "ns": "ck-np", "mins": 7, "task": "Namespace ck-np. Pod db (nginx:1.27, label app=db). Tạo NetworkPolicy db-allow: Pod db chỉ nhận kết nối cổng 80\ntừ Pod có label access=granted trong cùng namespace. Kiểm tra bằng hai Pod busybox tạm, một có nhãn, một không.\n", "hint": "podSelector chọn Pod được bảo vệ; ingress.from.podSelector chọn Pod được phép; policyTypes [Ingress]", "sol": "k config set-context --current --namespace=ck-np\nk run db --image=nginx:1.27 -l app=db --port=80\ncat <<'EOF' | k apply -f -\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: db-allow}\nspec:\n  podSelector: {matchLabels: {app: db}}\n  policyTypes: [Ingress]\n  ingress:\n    - from: [{podSelector: {matchLabels: {access: granted}}}]\n      ports: [{protocol: TCP, port: 80}]\nEOF\nk wait --for=condition=Ready pod/db --timeout=60s\nIP=$(k get pod db -o jsonpath='{.status.podIP}')\nk run ok --rm -i --restart=Never --image=busybox:1.36 -l access=granted -- wget -qO- -T 3 http://$IP | head -2\nk run no --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 3 http://$IP || echo \"bị chặn: đúng\"\n", "check": "k wait -n ck-np --for=condition=Ready pod/db --timeout=60s >/dev/null\nIP=$(k get pod db -n ck-np -o jsonpath='{.status.podIP}')\nk run ok-chk -n ck-np --rm -i --restart=Never --image=busybox:1.36 -l access=granted -- wget -qO- -T 5 http://$IP | grep -q nginx\n! k run no-chk -n ck-np --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 3 http://$IP >/dev/null 2>&1\n", "src": [["dgk", "f.services.md"], ["bmc", "exercises/32-networkpolicy"], ["bmg", "ch23"]]}, {"id": "n-egress", "d": "net", "tp": 0, "title": "Chặn egress nhưng vẫn cho DNS", "ns": "ck-np2", "mins": 6, "task": "Namespace ck-np2. Tạo NetworkPolicy lockdown áp cho mọi Pod: chặn mọi egress, chỉ cho DNS (UDP và TCP 53)\ntới Pod kube-dns trong kube-system và HTTP cổng 80 tới Pod có label app=api trong cùng namespace.\n", "hint": "namespaceSelector kubernetes.io/metadata.name: kube-system VÀ podSelector k8s-app: kube-dns trong cùng một phần tử to", "sol": "cat <<'EOF' | k apply -n ck-np2 -f -\napiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: lockdown}\nspec:\n  podSelector: {}\n  policyTypes: [Egress]\n  egress:\n    - to:\n        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}\n          podSelector: {matchLabels: {k8s-app: kube-dns}}\n      ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]\n    - to: [{podSelector: {matchLabels: {app: api}}}]\n      ports: [{protocol: TCP, port: 80}]\nEOF\nk describe netpol lockdown -n ck-np2\n", "check": "test \"$(k get netpol lockdown -n ck-np2 -o jsonpath='{.spec.policyTypes[0]}|{.spec.egress[0].ports[1].port}|{.spec.egress[1].to[0].podSelector.matchLabels.app}')\" = \"Egress|53|api\"\ntest \"$(k get netpol lockdown -n ck-np2 -o jsonpath='{.spec.egress[0].to[0].podSelector.matchLabels.k8s-app}')\" = \"kube-dns\"\n", "src": [["bmc", "exercises/32-networkpolicy"], ["k8sdocs", "content/en/docs/concepts/services-networking/network-policies.md"]]}]};
+</script>
+<script>
+"use strict";
+/* ---------- trang CKAD: dữ liệu từ src/ckad/*.yaml (build.py nhúng vào biến CKAD) ---------- */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const SVGNS = "http://www.w3.org/2000/svg";
+const RM = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+const esc = s => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const sleep = ms => new Promise(r => setTimeout(r, RM ? Math.min(ms, 60) : ms));
+const ease = p => (p < .5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2);
+function el(tag, attrs, parent) { const e = document.createElementNS(SVGNS, tag); if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]); if (parent) parent.appendChild(e); return e; }
+function txt(parent, x, y, s, cls, anchor) { const t = el("text", { x, y, class: cls || "sv-t" }, parent); if (anchor) t.setAttribute("text-anchor", anchor); t.textContent = s; return t; }
+function rbox(parent, x, y, w, h, cls, t, sub) {
+  const g = el("g", null, parent);
+  el("rect", { x, y, width: w, height: h, rx: 8, class: cls }, g);
+  if (sub) { txt(g, x + w / 2, y + h / 2 - 3, t, "sv-t", "middle"); txt(g, x + w / 2, y + h / 2 + 14, sub, "sv-s", "middle"); }
+  else txt(g, x + w / 2, y + h / 2 + 5, t, "sv-t", "middle");
+  return g;
+}
+function packetAlong(svg, pts, opt = {}) {
+  return new Promise(res => {
+    if (RM || pts.length < 2 || !svg.isConnected) { res(); return; }
+    const segs = []; let total = 0;
+    for (let i = 1; i < pts.length; i++) { const d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); segs.push(d); total += d; }
+    const dur = opt.dur || Math.max(500, Math.min(1400, total * 2.2));
+    const c = el("circle", { r: opt.r || 7, class: "pkt" + (opt.cls ? " " + opt.cls : ""), cx: pts[0][0], cy: pts[0][1] }, svg);
+    const t0 = performance.now();
+    const f = t => {
+      const p = ease(Math.min(1, (t - t0) / dur)); let d = p * total, i = 0;
+      while (i < segs.length - 1 && d > segs[i]) { d -= segs[i]; i++; }
+      const k = segs[i] ? d / segs[i] : 1;
+      c.setAttribute("cx", pts[i][0] + (pts[i + 1][0] - pts[i][0]) * k); c.setAttribute("cy", pts[i][1] + (pts[i + 1][1] - pts[i][1]) * k);
+      if (p < 1 && c.isConnected) requestAnimationFrame(f); else { c.remove(); res(); }
+    };
+    requestAnimationFrame(f);
+  });
+}
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("ckad:" + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem("ckad:" + k, JSON.stringify(v)); } catch (e) {} }
+};
+function hl(text) {
+  return text.split("\n").map(line => {
+    let m = line.match(/^(\s*)(#.*)$/);
+    if (m) return esc(m[1]) + '<span class="c">' + esc(m[2]) + "</span>";
+    let comment = "";
+    const ci = line.search(/\s#\s/);
+    if (ci > 0 && !/['"][^'"]*\s#\s/.test(line.slice(0, ci + 3))) { comment = line.slice(ci); line = line.slice(0, ci); }
+    m = line.match(/^(\s*(?:- )?)([A-Za-z_][\w.\/-]*)(:)(\s.*|)$/);
+    const out = m && !/^\s*(https?)$/.test(m[2]) ? esc(m[1]) + '<span class="k">' + esc(m[2]) + "</span>" + esc(m[3] + m[4]) : esc(line);
+    return out + (comment ? '<span class="c">' + esc(comment) + "</span>" : "");
+  }).join("\n");
+}
+const code = t => '<div class="codewrap"><pre class="code">' + hl(t.replace(/\n$/, "")) + "</pre></div>";
+function addCopies(root) {
+  $$("pre.code", root).forEach(pre => {
+    if (pre.parentElement.querySelector(".copy")) return;
+    const b = document.createElement("button"); b.className = "copy"; b.type = "button"; b.textContent = "Chép";
+    b.onclick = async () => { try { await navigator.clipboard.writeText(pre.textContent); b.textContent = "Đã chép"; } catch (e) { b.textContent = "Chọn tay"; } setTimeout(() => b.textContent = "Chép", 1200); };
+    pre.parentElement.appendChild(b);
+  });
+}
+const tl = items => '<ul class="tldr">' + items.map(x => "<li>" + x + "</li>").join("") + "</ul>";
+const det = (t, b, open) => '<details class="bp more"' + (open ? " open" : "") + "><summary>" + t + '</summary><div class="body">' + b + "</div></details>";
+
+const D = CKAD.domains, SRC = CKAD.sources, EX = CKAD.exercises, DM = Object.fromEntries(D.map(d => [d.id, d]));
+const DCOL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)", env: "var(--data)", net: "var(--bad)" };
+const LEARN = { kinds: "Workload resources", storage: "Storage", workloads: "Rolling update", best: "Helm & Kustomize", probes: "Probes", scale: "Scaling & quota", trouble: "Troubleshooting", security: "RBAC & bảo mật", perf: "Hiệu năng & QoS", wire: "Giao tiếp & mã hóa", network: "Mạng & Service" };
+function srcUrl(s) {
+  const base = SRC[s[0]].url, br = { dgk: "main", bmc: "master", bmg: "master", k8sdocs: "main", helm: "main", curriculum: "main" }[s[0]];
+  if (!s[1]) return base;
+  if (s[0] === "lfdocs") return base;
+  return base + (/\.(md|mdx|pdf)$/.test(s[1]) ? "/blob/" : "/tree/") + br + "/" + s[1];
+}
+const srcChip = s => '<a class="ck-src" href="' + esc(srcUrl(s)) + '" target="_blank" rel="noopener" title="' + esc(SRC[s[0]].name + (s[1] ? " · " + s[1] : "")) + '">' + esc(SRC[s[0]].name.split("/").pop() + (s[1] ? " · " + s[1].split("/").pop().replace(/\.md$/, "") : "")) + " ↗</a>";
+const domPill = id => '<span class="ck-dom dom-' + id + '">' + esc(DM[id].vi) + "</span>";
+
+/* ---------- điều hướng ---------- */
+const MODS = [{ g: "CKAD" }, { id: "overview", n: "00", t: "Tổng quan" }];
+D.forEach((d, i) => MODS.push({ id: d.id, n: "0" + (i + 1), t: d.vi + " · " + d.w + "%" }));
+MODS.push({ g: "Luyện" }, { id: "ex", n: "06", t: "Bài tập (" + EX.length + ")" }, { id: "mock", n: "07", t: "Thi thử 2 giờ" }, { g: "Tra cứu" }, { id: "tips", n: "08", t: "Mẹo làm bài" }, { id: "src", n: "09", t: "Nguồn tham khảo" });
+let current = "overview";
+const built = {};
+function buildRail() {
+  $("#rail").innerHTML = MODS.map(m => m.g ? '<li class="grp">' + esc(m.g) + "</li>" : '<li><a href="#' + m.id + '" data-go="' + m.id + '"><span class="n">' + m.n + "</span><span>" + esc(m.t) + "</span></a></li>").join("");
+  $("#main").innerHTML = MODS.filter(m => m.id).map(m => '<section class="view" data-view="' + m.id + '" hidden></section>').join("");
+}
+function show(name) {
+  if (!MODS.some(m => m.id === name)) name = "overview";
+  current = name;
+  $$(".view").forEach(v => v.hidden = v.dataset.view !== name);
+  $$(".rail a").forEach(a => a.setAttribute("aria-current", a.dataset.go === name ? "page" : "false"));
+  const sec = $('.view[data-view="' + name + '"]');
+  if (!built[name]) { built[name] = 1; sec.innerHTML = RENDER[name] ? RENDER[name]() : domainHTML(name); addCopies(sec); if (AFTER[name]) AFTER[name](sec); else if (DM[name]) domainAfter(sec, name); }
+  else if (ON[name]) ON[name](sec);
+  try { history.replaceState(null, "", "#" + name); } catch (e) {}
+  window.scrollTo(0, 0);
+  const act = $('.rail a[data-go="' + name + '"]'); if (act && innerWidth < 1024) act.scrollIntoView({ block: "nearest", inline: "center" });
+  store.set("view", name);
+}
+document.addEventListener("click", e => { const a = e.target.closest("[data-go]"); if (a) { e.preventDefault(); show(a.dataset.go); } });
+window.addEventListener("hashchange", () => { const h = location.hash.slice(1); if (h && h !== current) show(h); });
+const RENDER = {}, AFTER = {}, ON = {};
+
+/* ---------- 00 tổng quan ---------- */
+RENDER.overview = () => {
+  const tile = (k, v) => '<div class="ft"><span>' + k + "</span><b>" + v + "</b></div>";
+  return '<header class="vh"><p class="eyebrow">CKAD · Kubernetes v1.37 · curriculum CNCF</p><h2>Certified Kubernetes Application Developer</h2><p class="lead">Chứng chỉ cho người viết, đóng gói và chạy ứng dụng trên Kubernetes. Thi bằng tay trên cluster thật.</p></header>' +
+    '<div class="panel col">' + tl(["<b>15–20 task</b> trong <b>2 giờ</b>, đậu từ <b>66%</b>, làm trực tiếp bằng kubectl.", "Thiên về <b>ứng dụng</b>: Pod, Deployment, cấu hình, probe, Service. Không cài hay sửa cluster.", "Thắng nhờ <b>tốc độ</b>: sinh YAML bằng <code>--dry-run=client -o yaml</code>, tra kubernetes.io và helm.sh ngay trong lúc thi."]) + "</div>" +
+    '<div class="panel col"><h4>Thông tin kỳ thi</h4><div class="facts4">' + tile("Thời gian", "2 giờ") + tile("Số task", "15–20") + tile("Điểm đậu", "66%") + tile("Phiên bản", "Kubernetes v1.37") + tile("Thi lại", "1 lần, miễn phí") + tile("Thi thử", "killer.sh × 2") + tile("Hiệu lực", "2 năm") + tile("Giá (chỉ thi)", "$445") + '</div><p class="small muted" style="margin:0">Theo trang của Linux Foundation, kiểm tra ngày 12/11/2026. Giá và quy định có thể đổi: xem lại trước khi đăng ký.</p></div>' +
+    '<div class="panel col"><h4>5 domain và tỉ trọng điểm</h4><p class="hint" style="margin:0">Phút gợi ý = tỉ trọng × 120 phút. Bấm một domain để học.</p><div class="ck-bars" id="ckBars">' +
+    D.map(d => '<button type="button" class="ck-bar" data-go="' + d.id + '"><span class="lab"><b>' + esc(d.vi) + "</b><small>" + esc(d.t) + '</small><span class="track"><i style="background:' + DCOL[d.id] + '" data-w="' + d.w + '"></i></span></span><span class="w">' + d.w + '%</span><span class="m">≈ ' + Math.round(d.w * 1.2) + " phút</span></button>").join("") + "</div></div>" +
+    '<div class="panel col"><h4>CKAD khác CKA ở đâu</h4><div class="ck-cmp">' +
+    '<div class="a"><b>Trọng tâm CKAD</b><ul><li>Build và lưu container image</li><li>Mẫu nhiều container: init, sidecar, adapter, ambassador</li><li>Blue/green, canary bằng primitive có sẵn</li><li>API bị gỡ và cách sửa manifest</li><li>SecurityContext, capabilities</li><li>Job, CronJob chi tiết</li></ul></div>' +
+    '<div class="b"><b>Chung với CKA</b> <span class="small muted">(đã có lý thuyết bên CKA)</span><ul>' + [["workloads", "Deployment, rolling update"], ["probes", "Probe"], ["network", "Service, Ingress, NetworkPolicy"], ["security", "RBAC, ServiceAccount"], ["scale", "requests, limits, quota"], ["best", "Helm, Kustomize"], ["trouble", "Đọc log, gỡ lỗi Pod"], ["kinds", "Chọn đúng workload"]].map(x => '<li><a href="learn.html#' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
+    '<div class="c"><b>Chỉ có ở CKA</b><ul><li>Cài và nâng cấp cluster bằng kubeadm</li><li>Sao lưu, khôi phục etcd</li><li>Gỡ lỗi node, control plane</li><li>CNI, CSI, CRI</li><li>Gateway API</li></ul></div></div></div>' +
+    '<div class="panel col"><h4>Học theo thứ tự</h4><ol class="tight"><li>Đọc từng domain: mỗi mục một câu, một lệnh, một bẫy.</li><li>Làm <a href="#ex" data-go="ex">' + EX.length + " bài tập</a>, mỗi bài có lời giải và lệnh tự kiểm tra.</li><li>Làm <a href=\"#mock\" data-go=\"mock\">đề thi thử 2 giờ</a> chọn ngẫu nhiên theo tỉ trọng.</li><li>Xem lại <a href=\"#tips\" data-go=\"tips\">mẹo làm bài</a> trước ngày thi.</li></ol></div>";
+};
+AFTER.overview = ON.overview = sec => { $$("#ckBars i", sec).forEach(i => { i.style.width = "0"; requestAnimationFrame(() => requestAnimationFrame(() => { i.style.width = (+i.dataset.w * 4) + "%"; })); }); };
+
+/* ---------- domain ---------- */
+function domainHTML(id) {
+  const d = DM[id], exs = EX.filter(e => e.d === id);
+  const anims = d.topics.map(t => t.anim).filter(Boolean);
+  return '<header class="vh"><p class="eyebrow">Domain · ' + d.w + "% điểm · ≈ " + Math.round(d.w * 1.2) + " phút</p><h2>" + esc(d.vi) + '</h2><p class="lead">' + esc(d.t) + "</p></header>" +
+    anims.map(a => '<div class="panel col ck-anim" data-anim="' + a + '"></div>').join("") +
+    '<div class="ck-topics">' + d.topics.map((t, i) => {
+      const tex = exs.filter(e => e.tp === i);
+      return '<article class="ck-topic"><span class="en">' + esc(t.t) + '</span><span class="vi">' + esc(t.vi) + "</span>" + code(t.cmd) +
+        (t.yaml ? det("Mẫu", code(t.yaml)) : "") + '<div class="trap"><b>Bẫy:</b> ' + esc(t.trap) + "</div>" +
+        '<div class="ck-links"><a class="ck-src" href="' + esc(t.docs) + '" target="_blank" rel="noopener">' + (t.docs.includes("helm.sh") ? "helm.sh/docs" : "kubernetes.io") + " ↗</a>" +
+        (t.learn ? '<a class="ck-src" href="learn.html#' + t.learn + '">Lý thuyết: ' + esc(LEARN[t.learn] || t.learn) + "</a>" : "") + (t.src || []).map(srcChip).join("") + "</div>" +
+        (tex.length ? '<div class="ck-links">' + tex.map(e => '<button type="button" class="pill cp" data-exgo="' + e.id + '">Bài: ' + esc(e.title) + "</button>").join("") + "</div>" : "") + "</article>";
+    }).join("") + "</div>";
+}
+function domainAfter(sec, id) {
+  $$("[data-anim]", sec).forEach(p => ANIM[p.dataset.anim] && ANIM[p.dataset.anim](p));
+  sec.addEventListener("click", e => { const b = e.target.closest("[data-exgo]"); if (b) { exOpen = b.dataset.exgo; exDom = "all"; exQ = ""; show("ex"); } });
+}
+
+/* ---------- animation ---------- */
+const ANIM = {};
+ANIM.layers = p => {
+  const lines = [["FROM nginx:1.27-alpine", "nhiều layer của image gốc", 8, "var(--muted)"], ["COPY index.html /usr/share/nginx/html/", "+1 layer · vài KB", 1, "var(--accent)"], ["USER 101", "0 B · chỉ đổi metadata", .3, "var(--data)"], ["EXPOSE 8080", "0 B · chỉ đổi metadata", .3, "var(--data)"]];
+  p.innerHTML = "<h4>Build image: mỗi dòng Dockerfile là một bước</h4>" + '<div class="stage sm"><svg viewBox="0 0 760 270"></svg></div><div class="controls"><button class="btn primary" type="button">▶ podman build</button><span class="hint cap" aria-live="polite">Lệnh đổi file (COPY, RUN) tạo layer có dữ liệu; USER, EXPOSE, ENV chỉ ghi metadata.</span></div>';
+  const svg = $("svg", p), cap = $(".cap", p), btn = $("button", p);
+  const draw = () => {
+    svg.innerHTML = "";
+    txt(svg, 20, 24, "Dockerfile", "sv-tb");
+    lines.forEach((l, i) => txt(svg, 20, 56 + i * 30, l[0], "an-dl").id = "dl" + i);
+    el("rect", { x: 400, y: 30, width: 200, height: 200, rx: 10, class: "an-pod" }, svg);
+    txt(svg, 500, 252, "image web:1.0", "sv-tb", "middle");
+  };
+  draw();
+  btn.onclick = async () => {
+    draw(); btn.disabled = true; let y = 222;
+    for (let i = 0; i < lines.length; i++) {
+      $$(".an-dl", svg).forEach((t, k) => t.setAttribute("class", "an-dl" + (k === i ? " on" : "")));
+      cap.textContent = "Bước " + (i + 1) + ": " + lines[i][0] + " → " + lines[i][1];
+      const h = Math.max(6, lines[i][2] * 14);
+      await packetAlong(svg, [[300, 52 + i * 30], [500, y - h / 2]], { dur: 700 });
+      el("rect", { x: 410, y: y - h, width: 180, height: h, rx: 4, class: "an-layer", fill: lines[i][3] }, svg);
+      const lb = ["layer image gốc", "+1 layer", "", "0 B: USER, EXPOSE"][i]; if (lb) txt(svg, 615, i === 3 ? y - h - 6 : y - h / 2 + 4, lb, "sv-s");
+      y -= h + 3; await sleep(500);
+    }
+    cap.textContent = "Xong: podman tag web:1.0 registry.lab:5000/web:1.0 → podman push; hoặc podman save -o web.tar web:1.0.";
+    btn.disabled = false;
+  };
+};
+ANIM.multi = p => {
+  const MODES = { init: "Init", sidecar: "Sidecar", adapter: "Adapter", ambassador: "Ambassador" };
+  p.innerHTML = "<h4>Mẫu nhiều container trong một Pod</h4>" + '<div class="seg" role="group">' + Object.entries(MODES).map(([k, v], i) => '<button type="button" data-m="' + k + '" aria-pressed="' + !i + '">' + v + "</button>").join("") + '</div><div class="stage sm"><svg viewBox="0 0 760 270"></svg></div><p class="hint cap" aria-live="polite"></p>';
+  const svg = $("svg", p), cap = $(".cap", p); let run = 0;
+  const go = async m => {
+    const tok = ++run, alive = () => tok === run && svg.isConnected;
+    svg.innerHTML = "";
+    el("rect", { x: 20, y: 20, width: 540, height: 230, rx: 14, class: "an-pod" }, svg); txt(svg, 36, 42, "Pod", "sv-lbl");
+    const vol = rbox(svg, 220, 190, 130, 44, "an-vol", "emptyDir", "volume chung");
+    const C = (x, y, t, sub, id) => { const g = rbox(svg, x, y, 150, 56, "an-c", t, sub); g.querySelector("rect").id = id; return g.querySelector("rect"); };
+    const set = (r, c) => r.setAttribute("class", "an-c " + c);
+    if (m === "init") {
+      const a = C(50, 70, "init: prepare", "chạy trước, thoát 0", "ci"), b = C(360, 70, "nginx", "chờ init xong", "cm");
+      cap.textContent = "Init container chạy lần lượt và phải thoát 0 thì container chính mới khởi động. Lỗi thì Pod đứng Init:CrashLoopBackOff.";
+      while (alive()) {
+        set(a, "start"); set(b, ""); await sleep(700); set(a, "run");
+        await packetAlong(svg, [[125, 126], [125, 212], [220, 212]], { cls: "raw", dur: 800 });
+        set(a, "done"); await sleep(400); set(b, "start"); await sleep(500); set(b, "run");
+        await packetAlong(svg, [[350, 212], [435, 212], [435, 126]], { cls: "fmt", dur: 800 });
+        await sleep(1600);
+      }
+    } else if (m === "sidecar") {
+      const s = C(50, 70, "log-tail (sidecar)", "restartPolicy: Always", "cs"), a = C(360, 70, "app", "ghi log", "ca");
+      rbox(svg, 590, 90, 150, 56, "an-ext", "Log backend", "ngoài Pod");
+      cap.textContent = "Sidecar kiểu mới khởi động trước app và chạy suốt đời Pod; nó đọc file log app ghi vào volume chung rồi gửi đi.";
+      set(s, "start"); await sleep(600); set(s, "run"); set(a, "start"); await sleep(500); set(a, "run");
+      while (alive()) { await packetAlong(svg, [[435, 126], [435, 212], [350, 212]], { cls: "raw", dur: 650 }); await packetAlong(svg, [[220, 212], [125, 212], [125, 126]], { cls: "raw", dur: 650 }); await packetAlong(svg, [[125, 70], [125, 55], [665, 55], [665, 90]], { cls: "fmt", dur: 900 }); }
+    } else if (m === "adapter") {
+      const a = C(50, 70, "app", "in cpu=37,mem=512", "ca"), ad = C(360, 70, "adapter", "đổi định dạng", "cd");
+      rbox(svg, 590, 90, 150, 56, "an-ext", "Monitoring", "CPU 37% MEM 512Mi");
+      set(a, "run"); set(ad, "run");
+      cap.textContent = "Adapter chuẩn hóa đầu ra của app (log, metric) sang định dạng hệ thống bên ngoài cần, không phải sửa app.";
+      while (alive()) { await packetAlong(svg, [[125, 126], [125, 212], [220, 212]], { cls: "raw", dur: 650 }); await packetAlong(svg, [[350, 212], [435, 212], [435, 126]], { cls: "raw", dur: 650 }); await packetAlong(svg, [[510, 98], [590, 118]], { cls: "fmt", dur: 600 }); await sleep(300); }
+    } else {
+      const a = C(50, 70, "app", "gọi localhost:6379", "ca"), am = C(360, 70, "ambassador", "proxy ra ngoài", "cb");
+      rbox(svg, 590, 40, 150, 50, "an-ext", "Redis shard 1", ""); rbox(svg, 590, 150, 150, 50, "an-ext", "Redis shard 2", "");
+      set(a, "run"); set(am, "run");
+      cap.textContent = "Ambassador nằm cùng Pod, app chỉ gọi localhost; ambassador lo kết nối, chia shard, TLS hay retry ra dịch vụ ngoài.";
+      let k = 0;
+      while (alive()) { await packetAlong(svg, [[200, 98], [360, 98]], { cls: "raw", dur: 600 }); await packetAlong(svg, [[510, 98], [590, k % 2 ? 175 : 65]], { cls: "fmt", dur: 600 }); k++; await sleep(250); }
+    }
+  };
+  p.addEventListener("click", e => { const b = e.target.closest("[data-m]"); if (b) { $$("[data-m]", p).forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); go(b.dataset.m); } });
+  go("init");
+};
+ANIM.strategy = p => {
+  const MODES = { rolling: "Rolling update", recreate: "Recreate", bluegreen: "Blue/green", canary: "Canary" };
+  p.innerHTML = "<h4>Bốn cách đưa phiên bản mới lên</h4>" + '<div class="seg" role="group">' + Object.entries(MODES).map(([k, v], i) => '<button type="button" data-m="' + k + '" aria-pressed="' + !i + '">' + v + "</button>").join("") + '</div><div class="stage sm"><svg viewBox="0 0 760 260"></svg></div><div class="controls"><button class="btn primary" type="button" data-play>▶ Chạy</button><span class="hint cap" aria-live="polite"></span></div>';
+  const svg = $("svg", p), cap = $(".cap", p); let mode = "rolling", run = 0, pods = [], sel = "v1", hits = { v1: 0, v2: 0 };
+  const SX = 380, slot = i => 20 + i * 90;
+  const draw = () => {
+    let base = $("g.base", svg); if (!base) { base = el("g", { class: "base" }); svg.insertBefore(base, svg.firstChild); }
+    base.innerHTML = ""; const svgB = base;
+    const down = !pods.some(q => q.ready && (sel === "all" || q.v === sel));
+    rbox(svgB, SX - 90, 20, 180, 56, "an-svc" + (down ? " down" : ""), "Service shop", sel === "all" ? "selector: app=shop" : "selector: version=" + (sel === "v1" ? "blue" : "green"));
+    pods.forEach((q, i) => {
+      const x = slot(q.slot), on = q.ready && (sel === "all" || q.v === sel);
+      el("path", { d: "M" + SX + " 76 V110 H" + (x + 40) + " V160", class: "an-l" + (on ? (q.v === "v1" ? " on" : " g") : "") }, svgB);
+      const g = rbox(svgB, x, 160, 80, 56, "an-c " + (q.term ? "term" : q.ready ? q.v : "start"), q.v === "v1" ? "v1" : "v2", q.term ? "đang xóa" : q.ready ? "Ready" : "khởi động");
+      g.dataset.i = i;
+    });
+    txt(svgB, 20, 248, "Request vào v1: " + hits.v1 + " · v2: " + hits.v2 + (hits.v1 + hits.v2 ? " (" + Math.round(hits.v2 / (hits.v1 + hits.v2) * 100) + "% v2)" : ""), "sv-s");
+    if (down) txt(svgB, SX, 100, "không có endpoint: người dùng gặp lỗi", "sv-s", "middle").setAttribute("fill", "var(--bad)");
+  };
+  const traffic = async tok => {
+    while (tok === run && svg.isConnected) {
+      const ok = pods.filter(q => q.ready && !q.term && (sel === "all" || q.v === sel));
+      if (ok.length) { const q = ok[Math.floor(Math.random() * ok.length)]; hits[q.v]++; const x = slot(q.slot) + 40; packetAlong(svg, [[SX, 76], [SX, 110], [x, 110], [x, 160]], { cls: q.v, dur: 500 }); }
+      await sleep(260); if (tok === run) draw();
+    }
+  };
+  const reset = () => { hits = { v1: 0, v2: 0 }; sel = mode === "bluegreen" ? "v1" : "all"; pods = [0, 1, 2, 3].map(i => ({ slot: i, v: "v1", ready: 1 })); draw(); };
+  const play = async () => {
+    const tok = ++run; reset(); traffic(tok); const alive = () => tok === run && svg.isConnected; await sleep(1200);
+    if (mode === "rolling") {
+      cap.textContent = "maxSurge 1, maxUnavailable 0: thêm 1 Pod mới, chờ Ready, rồi mới xóa 1 Pod cũ. Không lúc nào thiếu Pod.";
+      for (let i = 0; i < 4 && alive(); i++) { const n = { slot: 4 + i, v: "v2", ready: 0 }; pods.push(n); await sleep(1100); n.ready = 1; await sleep(500); const old = pods.find(q => q.v === "v1" && !q.term); old.term = 1; await sleep(700); pods.splice(pods.indexOf(old), 1); await sleep(300); }
+    } else if (mode === "recreate") {
+      cap.textContent = "Recreate: xóa hết Pod cũ rồi mới tạo Pod mới. Có khoảng trống không phục vụ: chỉ dùng khi hai bản không được chạy cùng lúc.";
+      pods.forEach(q => q.term = 1); await sleep(900); pods = []; await sleep(1500);
+      pods = [4, 5, 6, 7].map(i => ({ slot: i, v: "v2", ready: 0 })); await sleep(1300); pods.forEach(q => q.ready = 1);
+    } else if (mode === "bluegreen") {
+      cap.textContent = "Blue/green: dựng đủ bản green song song (chưa nhận traffic), kiểm tra xong thì đổi selector của Service một lần.";
+      for (let i = 0; i < 4; i++) pods.push({ slot: 4 + i, v: "v2", ready: 0 });
+      await sleep(1400); pods.filter(q => q.v === "v2").forEach(q => q.ready = 1); await sleep(1600);
+      cap.textContent = "k patch svc shop -p '{\"spec\":{\"selector\":{\"version\":\"green\"}}}': toàn bộ traffic chuyển ngay; quay lại cũng chỉ một lệnh.";
+      sel = "v2"; await sleep(2200); pods.filter(q => q.v === "v1").forEach(q => q.term = 1); await sleep(900); pods = pods.filter(q => q.v === "v2");
+    } else {
+      cap.textContent = "Canary: thêm 1 Pod bản mới cạnh 4 Pod bản cũ, Service chọn chung label app=shop nên khoảng 20% request vào bản mới.";
+      pods.push({ slot: 4, v: "v2", ready: 0 }); await sleep(1100); pods[4].ready = 1; await sleep(9000);
+    }
+    if (alive()) { await sleep(2500); run++; draw(); }
+  };
+  p.addEventListener("click", e => {
+    const b = e.target.closest("[data-m]"); if (b) { $$("[data-m]", p).forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); mode = b.dataset.m; run++; reset(); cap.textContent = "Bấm Chạy."; }
+    if (e.target.closest("[data-play]")) play();
+  });
+  reset(); cap.textContent = "Bấm Chạy để xem từng Pod được thay.";
+};
+
+/* ---------- bài tập ---------- */
+let exDom = "all", exState = "all", exQ = "", exOpen = null;
+const done = () => store.get("done", {});
+function progress() { const d = done(), n = EX.filter(e => d[e.id]).length; $("#progTxt").textContent = n + "/" + EX.length + " bài"; $("#progBar").style.width = (n / EX.length * 100) + "%"; }
+RENDER.ex = () => '<header class="vh"><p class="eyebrow">Luyện · ' + EX.length + ' bài</p><h2>Bài tập CKAD</h2><p class="lead">Tự làm trên cluster của bạn, rồi chạy lệnh kiểm tra. Mỗi bài ghi nguồn chủ đề.</p></header>' +
+  '<div class="panel col"><div class="chips" id="exDoms"><button type="button" data-ed="all">Tất cả · ' + EX.length + "</button>" + D.map(d => '<button type="button" data-ed="' + d.id + '">' + esc(d.vi) + " · " + EX.filter(e => e.d === d.id).length + "</button>").join("") + '</div>' +
+  '<div class="formrow"><div class="seg" role="group" id="exStates"><button type="button" data-es="all">Tất cả</button><button type="button" data-es="todo">Chưa làm</button><button type="button" data-es="done">Đã làm</button></div><input type="search" id="exQ" placeholder="Tìm: job, secret, ingress…" style="flex:1;min-width:200px" aria-label="Tìm bài"></div>' +
+  '<div class="ck-prog"><span id="exCount"></span><span class="meter"><i id="exBar"></i></span></div></div><div class="col" id="exList" style="gap:10px"></div>';
+function exItem(e, open) {
+  const d = done()[e.id], tested = e.test !== false;
+  return '<details class="ck-ex' + (d ? " done" : "") + '" id="ex-' + e.id + '"' + (open ? " open" : "") + '><summary>' + domPill(e.d) + '<span class="t">' + esc(e.title) + '</span><span class="mins">' + e.mins + " phút</span></summary><div class=\"body\">" +
+    '<div class="task">' + esc(e.task.trim()) + "</div>" +
+    '<div class="controls" style="margin:0"><button type="button" class="btn" data-hint="' + e.id + '">Gợi ý</button><label class="check"><input type="checkbox" data-done="' + e.id + '"' + (d ? " checked" : "") + '> Đã làm xong</label>' +
+    (tested ? '<span class="ck-badge ok" title="tools/check_ckad.py">lời giải đã chạy thử trên cluster</span>' : '<span class="ck-badge no">cần podman/Helm: chưa chạy tự động</span>') + "</div>" +
+    '<div class="hint" hidden id="hint-' + e.id + '">' + esc(e.hint) + "</div>" +
+    det("Lời giải", code(e.sol)) + det("Lệnh kiểm tra", code(e.check)) +
+    '<div class="ck-links"><span class="small muted">Nguồn chủ đề:</span>' + e.src.map(srcChip).join("") + "</div></div></details>";
+}
+function exRender() {
+  const q = exQ.trim().toLowerCase(), d = done();
+  const list = EX.filter(e => (exDom === "all" || e.d === exDom) && (exState === "all" || (exState === "done") === !!d[e.id]) && (!q || (e.title + " " + e.task + " " + e.sol).toLowerCase().includes(q)));
+  $("#exList").innerHTML = list.length ? list.map(e => exItem(e, e.id === exOpen)).join("") : '<p class="muted">Không có bài khớp.</p>';
+  $$("#exDoms button").forEach(b => b.setAttribute("aria-pressed", b.dataset.ed === exDom ? "true" : "false"));
+  $$("#exStates button").forEach(b => b.setAttribute("aria-pressed", b.dataset.es === exState ? "true" : "false"));
+  const n = EX.filter(e => d[e.id]).length; $("#exCount").textContent = n + "/" + EX.length + " bài đã làm"; $("#exBar").style.width = (n / EX.length * 100) + "%";
+  addCopies($("#exList"));
+  if (exOpen) { const t = $("#ex-" + exOpen); if (t) setTimeout(() => t.scrollIntoView({ block: "start" }), 50); exOpen = null; }
+}
+AFTER.ex = sec => {
+  $("#exQ").value = exQ;
+  sec.addEventListener("click", e => {
+    const a = e.target.closest("[data-ed]"); if (a) { exDom = a.dataset.ed; exRender(); return; }
+    const s = e.target.closest("[data-es]"); if (s) { exState = s.dataset.es; exRender(); return; }
+    const h = e.target.closest("[data-hint]"); if (h) { const x = $("#hint-" + h.dataset.hint); x.hidden = !x.hidden; return; }
+  });
+  sec.addEventListener("change", e => { const c = e.target.closest("[data-done]"); if (c) { const d = done(); if (c.checked) d[c.dataset.done] = 1; else delete d[c.dataset.done]; store.set("done", d); c.closest(".ck-ex").classList.toggle("done", c.checked); progress(); const n = EX.filter(x => d[x.id]).length; $("#exCount").textContent = n + "/" + EX.length + " bài đã làm"; $("#exBar").style.width = (n / EX.length * 100) + "%"; } });
+  sec.addEventListener("input", e => { if (e.target.id === "exQ") { exQ = e.target.value; exRender(); } });
+  exRender();
+};
+ON.ex = () => { $("#exQ").value = exQ; exRender(); };
+
+/* ---------- thi thử ---------- */
+let mockTimer = null;
+const MOCK_N = { build: 3, deploy: 3, obs: 2, env: 4, net: 3 };
+RENDER.mock = () => '<header class="vh"><p class="eyebrow">Luyện · đề ngẫu nhiên</p><h2>Thi thử 2 giờ</h2><p class="lead">15 task chọn ngẫu nhiên theo tỉ trọng domain. Tự làm trên cluster, tự chấm bằng lệnh kiểm tra.</p></header><div id="mockBox" class="col" style="gap:12px"></div>';
+function mockState() { return store.get("mock", null); }
+function mockNew() {
+  const pick = [];
+  Object.entries(MOCK_N).forEach(([d, n]) => { const pool = EX.filter(e => e.d === d).sort(() => Math.random() - .5); pick.push(...pool.slice(0, n).map(e => e.id)); });
+  store.set("mock", { ids: pick, start: Date.now(), res: {}, end: 0 }); mockRender();
+}
+function mockScore(m) {
+  const tot = m.ids.reduce((a, id) => a + EX.find(e => e.id === id).mins, 0);
+  const got = m.ids.filter(id => m.res[id] === "pass").reduce((a, id) => a + EX.find(e => e.id === id).mins, 0);
+  return Math.round(got / tot * 100);
+}
+function mockRender() {
+  const box = $("#mockBox"), m = mockState();
+  clearInterval(mockTimer);
+  if (!m) { box.innerHTML = '<div class="panel col">' + tl(["Phân bổ: Build 3 · Deploy 3 · Observability 2 · Environment 4 · Networking 3.", "Điểm mỗi task tính theo số phút ước tính; đậu từ <b>66%</b> như đề thật.", "Lời giải ẩn tới khi bấm, nên tự kiểm tra trước bằng lệnh check."]) + '<div class="controls"><button class="btn primary" type="button" id="mockGo">▶ Bắt đầu đề mới</button></div></div>'; $("#mockGo").onclick = mockNew; return; }
+  const finished = !!m.end;
+  const score = mockScore(m);
+  let h = '<div class="ck-mock-top"><div><span class="small muted">Còn lại</span><div class="ck-clock" id="mockClock">--:--</div></div><div><span class="small muted">Điểm tự chấm</span><div class="ck-clock">' + score + "%</div></div>" +
+    '<div class="controls" style="margin:0">' + (finished ? "" : '<button class="btn primary" type="button" id="mockEnd">Nộp bài</button>') + '<button class="btn" type="button" id="mockNew">Đề mới</button></div></div>';
+  if (finished) {
+    const per = D.map(d => { const ids = m.ids.filter(id => EX.find(e => e.id === id).d === d.id); return [d, ids.filter(id => m.res[id] === "pass").length, ids.length]; });
+    h += '<div class="panel col"><div class="ck-score" style="color:' + (score >= 66 ? "var(--node)" : "var(--bad)") + '">' + score + "% · " + (score >= 66 ? "Đậu" : "Chưa đậu") + "</div>" +
+      per.map(([d, a, b]) => '<div class="ck-bar" style="cursor:default"><span class="lab"><b>' + esc(d.vi) + '</b><span class="track"><i style="width:' + (b ? a / b * 100 : 0) + "%;background:" + DCOL[d.id] + '"></i></span></span><span class="w">' + a + "/" + b + '</span><span class="m"></span></div>').join("") + "</div>";
+  }
+  h += m.ids.map((id, i) => {
+    const e = EX.find(x => x.id === id), r = m.res[id];
+    return '<div class="ck-mtask' + (r ? " " + r : "") + '"><div class="hd"><span class="ck-dom dom-' + e.d + '">' + (i + 1) + "</span><b>" + esc(e.title) + '</b><span class="mins small muted">' + e.mins + " điểm</span></div>" +
+      '<div class="task" style="white-space:pre-line;font-size:14px">' + esc(e.task.trim()) + "</div>" + det("Lệnh kiểm tra", code(e.check)) + det("Lời giải", code(e.sol)) +
+      '<div class="controls" style="margin:0"><button class="btn" type="button" data-mr="pass" data-id="' + id + '"' + (r === "pass" ? ' aria-pressed="true"' : "") + ">✓ Đạt</button><button class=\"btn\" type=\"button\" data-mr=\"fail\" data-id=\"" + id + '"' + (r === "fail" ? ' aria-pressed="true"' : "") + ">✕ Chưa đạt</button></div></div>";
+  }).join("");
+  box.innerHTML = h; addCopies(box);
+  const tick = () => { const left = Math.max(0, 7200 - Math.floor(((m.end || Date.now()) - m.start) / 1000)); const c = $("#mockClock"); if (!c) return; c.textContent = String(Math.floor(left / 3600)) + ":" + String(Math.floor(left % 3600 / 60)).padStart(2, "0") + ":" + String(left % 60).padStart(2, "0"); c.classList.toggle("low", left < 900); if (!left && !m.end) { m.end = Date.now(); store.set("mock", m); mockRender(); } };
+  tick(); if (!finished) mockTimer = setInterval(tick, 1000);
+  box.onclick = e => {
+    const b = e.target.closest("[data-mr]"); if (b) { const s = mockState(); s.res[b.dataset.id] = b.dataset.mr; store.set("mock", s); mockRender(); return; }
+    if (e.target.closest("#mockEnd")) { const s = mockState(); s.end = Date.now(); store.set("mock", s); mockRender(); }
+    if (e.target.closest("#mockNew")) { if (!m.end && !confirm("Bỏ đề đang làm và tạo đề mới?")) return; mockNew(); }
+  };
+}
+AFTER.mock = ON.mock = () => mockRender();
+
+/* ---------- mẹo ---------- */
+RENDER.tips = () => '<header class="vh"><p class="eyebrow">Tra cứu</p><h2>Mẹo làm bài CKAD</h2><p class="lead">Ít gõ YAML tay, đúng namespace, kiểm tra lại trước khi sang task khác.</p></header>' +
+  '<div class="panel col">' + tl(["Mỗi task: đọc ô thông tin, <b>ssh</b> đúng máy, làm xong thì <b>exit</b> (không ssh lồng nhau).", "Sinh YAML bằng lệnh, chỉ sửa phần còn thiếu: nhanh và ít lỗi thụt dòng.", "Sai tên, sai namespace, sai đường dẫn file là mất trọn điểm task."]) + "</div>" +
+  '<div class="panel col"><h4>30 giây đầu giờ</h4>' + code(`# máy thi đã có alias k và tự hoàn thành lệnh
+export do="--dry-run=client -o yaml"     # k run web --image=nginx:1.27 $do > web.yaml
+export now="--force --grace-period=0"    # k delete pod web $now
+echo 'set expandtab tabstop=2 shiftwidth=2' >> ~/.vimrc`) + "</div>" +
+  '<div class="panel col"><h4>Lệnh sinh YAML nhanh</h4><div class="tbl ck-cheat"><table><thead><tr><th>Cần</th><th>Lệnh</th></tr></thead><tbody>' + [
+    ["Pod", "k run web --image=nginx:1.27 --port=80 -l app=web $do"], ["Pod chạy lệnh", "k run t --image=busybox:1.36 $do -- sh -c 'sleep 3600'"], ["Deployment", "k create deploy web --image=nginx:1.27 --replicas=3 $do"],
+    ["Job", "k create job calc --image=busybox:1.36 $do -- sh -c 'echo hi'"], ["CronJob", "k create cronjob r --image=busybox:1.36 --schedule='*/5 * * * *' $do -- date"], ["Job từ CronJob", "k create job r-now --from=cronjob/r"],
+    ["Service", "k expose deploy web --port=80 --target-port=8080 [--type=NodePort]"], ["Ingress", "k create ingress web --class=nginx --rule='web.lab/*=web:80'"], ["ConfigMap", "k create cm cfg --from-literal=A=1 --from-file=app.conf"],
+    ["Secret", "k create secret generic db --from-literal=pass=x"], ["ServiceAccount, token", "k create sa app; k create token app"], ["Role, RoleBinding", "k create role r --verb=get,list --resource=pods; k create rolebinding rb --role=r --serviceaccount=ns:app"],
+    ["ResourceQuota", "k create quota q --hard=pods=5,requests.cpu=1"], ["HPA", "k autoscale deploy web --min=2 --max=6 --cpu=70%"], ["Đổi image, resources, env", "k set image | k set resources | k set env deploy/web"]
+  ].map(r => "<tr><td><b>" + esc(r[0]) + "</b></td><td><code>" + esc(r[1]) + "</code></td></tr>").join("") + "</tbody></table></div></div>" +
+  '<div class="panel col"><h4>Tra trường YAML không cần mở web</h4>' + code(`k explain pod.spec.containers.securityContext
+k explain deploy.spec.strategy --recursive
+k api-resources | grep -i cronjob        # tên ngắn, apiVersion, namespaced?`) + "</div>" +
+  '<div class="panel col"><h4>Tài liệu được mở trong lúc thi</h4><ul class="tight"><li><a href="https://kubernetes.io/docs" target="_blank" rel="noopener">kubernetes.io/docs</a> và <a href="https://kubernetes.io/blog/" target="_blank" rel="noopener">kubernetes.io/blog</a></li><li><a href="https://helm.sh/docs" target="_blank" rel="noopener">helm.sh/docs</a></li><li>Tài liệu riêng được dẫn trong ô Quick Reference của từng task</li></ul><p class="small muted" style="margin:0">Theo <a href="https://docs.linuxfoundation.org/tc-docs/certification/certification-resources-allowed" target="_blank" rel="noopener">Linux Foundation: Resources Allowed</a>. Gateway API docs chỉ dành cho CKA.</p></div>' +
+  '<div class="panel col"><h4>Chia thời gian</h4><ul class="tight"><li>Khoảng 6–8 phút mỗi task. Task dễ, điểm cao làm trước; task kẹt quá 10 phút thì đánh dấu và quay lại.</li><li>Pod đang chạy hầu như không sửa được spec: <code>k get pod x -o yaml > x.yaml</code>, sửa, <code>k replace --force -f x.yaml</code>.</li><li>Trước khi sang task: <code>k get</code> lại object, đúng tên, đúng namespace, file lưu đúng chỗ đề hỏi.</li></ul></div>';
+
+/* ---------- nguồn ---------- */
+RENDER.src = () => {
+  const cnt = k => EX.filter(e => e.src.some(s => s[0] === k)).length + D.reduce((a, d) => a + d.topics.filter(t => (t.src || []).some(s => s[0] === k)).length, 0);
+  return '<header class="vh"><p class="eyebrow">Tra cứu</p><h2>Nguồn tham khảo</h2><p class="lead">Chỉ dùng repo chính thức hoặc được cộng đồng dùng rộng rãi. Bài tập được viết lại bằng tiếng Việt, không chép nguyên văn.</p></header>' +
+    '<div class="panel col">' + tl(["<b>Danh sách domain và tỉ trọng</b> lấy từ curriculum chính thức của CNCF.", "<b>Lời giải</b> được chạy thử tự động trên cluster k3s v1.34 bằng <code>tools/check_ckad.py</code>, trừ bài cần podman hoặc Helm.", "Mỗi mục và mỗi bài ghi rõ repo đã gợi ý chủ đề đó."]) + "</div>" +
+    '<div class="ck-topics">' + Object.entries(SRC).map(([k, s]) => '<article class="ck-topic"><a href="' + esc(s.url) + '" target="_blank" rel="noopener" class="vi">' + esc(s.name) + " ↗</a><span>" + esc(s.note) + '</span><div class="ck-links"><span class="ck-badge no">' + esc(s.license) + "</span>" + (cnt(k) ? '<span class="ck-badge ok">dẫn ở ' + cnt(k) + " chỗ</span>" : "") + "</div></article>").join("") + "</div>";
+};
+
+/* ---------- khởi động ---------- */
+buildRail(); progress();
+show((location.hash || "").slice(1) || store.get("view", "overview"));
+
+</script>
+</body>
+</html>

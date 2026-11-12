@@ -1,0 +1,344 @@
+# CKAD curriculum v1.37 (https://github.com/cncf/curriculum/blob/main/CKAD_Curriculum_v1.37.pdf)
+# Mỗi topic: t = dòng gốc trong curriculum, vi = một câu tóm tắt, cmd = lệnh nhanh, yaml = mẫu tối thiểu,
+# trap = bẫy hay gặp, learn = module trong learn.html, anim = animation trên trang CKAD, docs = trang kubernetes.io
+sources:
+  curriculum: {name: "cncf/curriculum", url: "https://github.com/cncf/curriculum", license: "CC BY 4.0", note: "Curriculum chính thức của CNCF: danh sách domain và tỉ trọng điểm (CKAD v1.37)."}
+  k8sdocs: {name: "kubernetes/website", url: "https://github.com/kubernetes/website", license: "CC BY 4.0", note: "Mã nguồn kubernetes.io/docs, tài liệu duy nhất (cùng helm.sh/docs) được mở trong lúc thi."}
+  dgk: {name: "dgkanatsios/CKAD-exercises", url: "https://github.com/dgkanatsios/CKAD-exercises", license: "MIT", note: "Bộ bài tập CKAD phổ biến nhất trên GitHub (khoảng 10 nghìn sao), cộng đồng cập nhật liên tục."}
+  bmc: {name: "bmuschko/ckad-crash-course", url: "https://github.com/bmuschko/ckad-crash-course", license: "chưa ghi license, chỉ dẫn link", note: "32 bài tập theo curriculum của Benjamin Muschko, tác giả sách CKAD Study Guide (O'Reilly), có CKA, CKAD, CKS."}
+  bmg: {name: "bmuschko/ckad-study-guide", url: "https://github.com/bmuschko/ckad-study-guide", license: "Apache-2.0", note: "Mã nguồn đi kèm sách CKAD Study Guide 2nd Edition, xếp theo đúng 5 domain."}
+  helm: {name: "helm/helm-www", url: "https://github.com/helm/helm-www", license: "MIT", note: "Mã nguồn helm.sh/docs, được phép mở trong lúc thi CKAD."}
+  lfdocs: {name: "Linux Foundation: CKA & CKAD docs", url: "https://docs.linuxfoundation.org/tc-docs/certification/tips-cka-and-ckad", license: "trang chính thức", note: "Quy định kỳ thi: 2 giờ, 15–20 task, điểm đậu 66%, Kubernetes v1.37, tài liệu được phép."}
+
+domains:
+  - id: build
+    w: 20
+    t: Application Design and Build
+    vi: Thiết kế và build ứng dụng
+    topics:
+      - t: Define, build and modify container images
+        vi: Viết Dockerfile, build, tag, lưu image bằng docker hoặc podman.
+        cmd: "podman build -t web:1.0 . && podman save -o /opt/web.tar web:1.0"
+        yaml: |
+          FROM nginx:1.27-alpine
+          COPY index.html /usr/share/nginx/html/
+          USER 101
+          EXPOSE 8080
+        trap: "Đề hay bắt lưu image ra file tar hoặc đổi tag rồi push: đọc kỹ tên và tag được yêu cầu."
+        anim: layers
+        docs: "https://kubernetes.io/docs/concepts/containers/images/"
+        src: [[dgk, j.podman.md], [bmc, exercises/01-container]]
+      - t: Choose and use the right workload resource (Deployment, DaemonSet, CronJob, etc.)
+        vi: Chạy mãi → Deployment; mỗi node một Pod → DaemonSet; chạy xong → Job; theo lịch → CronJob; cần tên và đĩa cố định → StatefulSet.
+        cmd: "k create cronjob backup --image=busybox:1.36 --schedule='*/5 * * * *' -- sh -c 'date'"
+        yaml: |
+          apiVersion: batch/v1
+          kind: Job
+          metadata: {name: pi}
+          spec:
+            completions: 5
+            parallelism: 2
+            backoffLimit: 2
+            activeDeadlineSeconds: 60
+            template:
+              spec:
+                restartPolicy: Never
+                containers: [{name: pi, image: busybox:1.36, command: ["sh", "-c", "echo $((6*7))"]}]
+        trap: "Job và CronJob bắt buộc restartPolicy Never hoặc OnFailure; Deployment chỉ nhận Always."
+        learn: kinds
+        docs: "https://kubernetes.io/docs/concepts/workloads/"
+        src: [[dgk, c.pod_design.md], [bmc, exercises/03-job]]
+      - t: Understand multi-container Pod design patterns (e.g. sidecar, init and others)
+        vi: init chạy trước rồi thoát; sidecar chạy cùng suốt đời Pod; adapter đổi định dạng đầu ra; ambassador làm proxy ra ngoài.
+        cmd: "k get pod app -o jsonpath='{.spec.initContainers[*].name}'; k logs app -c log-tail"
+        yaml: |
+          spec:
+            initContainers:
+              - name: log-tail            # sidecar kiểu mới (GA từ v1.33)
+                image: busybox:1.36
+                restartPolicy: Always     # chạy song song với container chính
+                command: ["sh", "-c", "tail -F /var/log/app/app.log"]
+                volumeMounts: [{name: logs, mountPath: /var/log/app}]
+            containers:
+              - name: app
+                image: busybox:1.36
+                command: ["sh", "-c", "while true; do date >> /var/log/app/app.log; sleep 2; done"]
+                volumeMounts: [{name: logs, mountPath: /var/log/app}]
+            volumes: [{name: logs, emptyDir: {}}]
+        trap: "Muốn xem log hay exec phải chỉ đúng container bằng -c; init container lỗi thì Pod đứng Init:CrashLoopBackOff."
+        anim: multi
+        docs: "https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/"
+        src: [[dgk, b.multi_container_pods.md], [bmg, ch08], [bmc, exercises/07-init-container]]
+      - t: Utilize persistent and ephemeral volumes
+        vi: emptyDir sống theo Pod; PVC xin đĩa, PV là đĩa thật; StorageClass tạo PV tự động.
+        cmd: "k get pv,pvc; k describe pvc data"
+        yaml: |
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata: {name: data}
+          spec:
+            accessModes: [ReadWriteOnce]
+            storageClassName: manual
+            resources: {requests: {storage: 500Mi}}
+        trap: "PVC Pending vì storageClassName, accessModes hoặc dung lượng không khớp PV nào."
+        learn: storage
+        docs: "https://kubernetes.io/docs/concepts/storage/volumes/"
+        src: [[dgk, g.state.md], [bmc, exercises/06-persistentvolume-static-provisioning]]
+  - id: deploy
+    w: 20
+    t: Application Deployment
+    vi: Triển khai ứng dụng
+    topics:
+      - t: Use Kubernetes primitives to implement common deployment strategies (e.g. blue/green or canary)
+        vi: Blue/green đổi selector của Service sang bản mới; canary chạy song song hai Deployment chung label, tỉ lệ theo số replicas.
+        cmd: "k patch svc shop -p '{\"spec\":{\"selector\":{\"app\":\"shop\",\"version\":\"green\"}}}'"
+        yaml: |
+          # Service chọn theo cả version: đổi một dòng là chuyển toàn bộ traffic
+          spec:
+            selector: {app: shop, version: blue}
+        trap: "Canary bằng replicas chỉ chia gần đúng theo số Pod; muốn chia theo phần trăm chính xác phải dùng Gateway/Ingress có trọng số."
+        anim: strategy
+        docs: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/"
+        src: [[bmc, exercises/13-deployment-blue-green], [bmg, ch11], [dgk, c.pod_design.md]]
+      - t: Understand Deployments and how to perform rolling updates
+        vi: set image tạo ReplicaSet mới; maxSurge và maxUnavailable quyết định tốc độ; rollout undo quay lại revision cũ.
+        cmd: "k set image deploy/web web=nginx:1.28 && k rollout status deploy/web && k rollout undo deploy/web --to-revision=1"
+        yaml: |
+          spec:
+            strategy:
+              type: RollingUpdate
+              rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+        trap: "Tên container trong set image phải đúng (k get deploy web -o jsonpath='{..containers[*].name}'). Đang pause thì set image không chạy."
+        learn: workloads
+        docs: "https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-back-a-deployment"
+        src: [[dgk, c.pod_design.md], [bmc, exercises/11-deployment-rolling-update]]
+      - t: Use the Helm package manager to deploy existing packages
+        vi: repo add → search → install với --set hoặc -f → upgrade → rollback → uninstall.
+        cmd: "helm install web podinfo/podinfo -n web --create-namespace --set replicaCount=2"
+        yaml: |
+          helm repo add podinfo https://stefanprodan.github.io/podinfo
+          helm search repo podinfo --versions | head
+          helm show values podinfo/podinfo > values.yaml
+          helm upgrade web podinfo/podinfo -n web -f values.yaml
+          helm history web -n web && helm rollback web 1 -n web
+          helm list -A --all            # cả release pending/failed
+        trap: "Quên -n: Helm lưu release theo namespace nên list/upgrade không thấy. Dùng helm list -A."
+        learn: best
+        docs: "https://helm.sh/docs/intro/using_helm/"
+        src: [[dgk, h.helm.md], [bmc, exercises/14-helm-consume-chart], [helm, ""]]
+      - t: Kustomize
+        vi: base dùng chung, overlay chỉ ghi phần khác; generator sinh ConfigMap/Secret có hậu tố hash.
+        cmd: "k kustomize overlays/prod && k apply -k overlays/prod"
+        yaml: |
+          # overlays/prod/kustomization.yaml
+          resources: [../../base]
+          namespace: prod
+          namePrefix: prod-
+          replicas: [{name: web, count: 3}]
+          images: [{name: nginx, newTag: "1.28"}]
+          configMapGenerator: [{name: web-cfg, literals: [MODE=prod]}]
+        trap: "k apply -k nhận thư mục, không nhận file; xem kết quả trước bằng k kustomize."
+        learn: best
+        docs: "https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/"
+        src: [[bmc, exercises/16-kustomize-secret-patch]]
+  - id: obs
+    w: 15
+    t: Application Observability and Maintenance
+    vi: Quan sát và bảo trì
+    topics:
+      - t: Understand API deprecations
+        vi: apiVersion cũ bị gỡ thì apply báo no matches for kind; tìm version còn phục vụ bằng api-resources và explain.
+        cmd: "k api-resources | grep -i horizontal; k explain hpa --api-version=autoscaling/v2"
+        yaml: |
+          # cũ (đã gỡ ở v1.26)          # mới
+          apiVersion: autoscaling/v2beta2   apiVersion: autoscaling/v2
+        trap: "Đổi apiVersion xong vẫn phải đối chiếu trường đã đổi tên (k explain); kubectl convert là plugin, có thể không có sẵn."
+        docs: "https://kubernetes.io/docs/reference/using-api/deprecation-guide/"
+        src: [[bmc, exercises/17-api-deprecation], [bmg, ch13]]
+      - t: Implement probes and health checks
+        vi: startup chờ app khởi động; liveness hỏng thì restart; readiness hỏng thì rút khỏi Service.
+        cmd: "k describe pod web | grep -iE 'liveness|readiness|startup|unhealthy'"
+        yaml: |
+          readinessProbe: {httpGet: {path: /, port: 80}, periodSeconds: 5}
+          livenessProbe: {exec: {command: ["ls", "/"]}, initialDelaySeconds: 5, periodSeconds: 10}
+          startupProbe: {tcpSocket: {port: 80}, failureThreshold: 30, periodSeconds: 2}
+        trap: "Liveness sai path làm container bị giết liên tục dù app khỏe; readiness không bao giờ restart."
+        learn: probes
+        docs: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/"
+        src: [[dgk, e.observability.md], [bmc, exercises/18-pod-probes]]
+      - t: Use built-in CLI tools to monitor Kubernetes applications
+        vi: k top cho CPU/RAM hiện tại (cần metrics-server); k get -w và events cho thay đổi.
+        cmd: "k top pod -A --sort-by=memory | head -5; k events -n app --types=Warning"
+        yaml: ""
+        trap: "k top báo Metrics API not available khi chưa có metrics-server."
+        learn: scale
+        docs: "https://kubernetes.io/docs/tasks/debug/debug-cluster/resource-metrics-pipeline/"
+        src: [[dgk, e.observability.md], [bmc, exercises/19-pod-metrics]]
+      - t: Utilize container logs
+        vi: logs theo container, lần chạy trước, khoảng thời gian, theo label.
+        cmd: "k logs web -c app --previous; k logs -l app=web --all-containers --prefix --since=10m"
+        yaml: ""
+        trap: "Pod nhiều container mà không có -c thì kubectl báo phải chọn container (hoặc lấy container mặc định)."
+        docs: "https://kubernetes.io/docs/concepts/cluster-administration/logging/"
+        src: [[dgk, e.observability.md]]
+      - t: Debugging in Kubernetes
+        vi: describe xem Events; logs --previous; exec vào trong; debug gắn container tạm vào Pod không có shell.
+        cmd: "k debug -it web --image=busybox:1.36 --target=web"
+        yaml: ""
+        trap: "Đọc cột STATUS trước: ImagePullBackOff, CrashLoopBackOff, Pending mỗi cái có chỗ xem khác nhau."
+        learn: trouble
+        docs: "https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/"
+        src: [[dgk, e.observability.md], [bmc, exercises/20-troubleshooting-pod]]
+  - id: env
+    w: 25
+    t: Application Environment, Configuration and Security
+    vi: Môi trường, cấu hình và bảo mật
+    topics:
+      - t: Discover and use resources that extend Kubernetes (CRD, Operators)
+        vi: CRD thêm kind mới vào API; Operator là controller xử lý kind đó. Dùng như mọi object khác.
+        cmd: "k get crd; k api-resources --api-group=stable.example.com; k explain backup.spec"
+        yaml: |
+          apiVersion: stable.example.com/v1
+          kind: Backup
+          metadata: {name: nightly}
+          spec: {schedule: "0 2 * * *", target: db}
+        trap: "Tên đầy đủ của CRD là <plural>.<group>; k get backups.stable.example.com khi có kind trùng tên."
+        docs: "https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/"
+        src: [[dgk, i.crd.md], [bmc, exercises/21-crd]]
+      - t: Understand authentication, authorization and admission control
+        vi: request đi qua xác thực (ai), phân quyền RBAC (được làm gì), admission (có hợp lệ không).
+        cmd: "k auth can-i list pods -n app --as=system:serviceaccount:app:reader"
+        yaml: |
+          k create role pod-reader -n app --verb=get,list,watch --resource=pods
+          k create rolebinding reader -n app --role=pod-reader --serviceaccount=app:reader
+        trap: "--serviceaccount nhận <namespace>:<tên>, không phải chỉ tên."
+        learn: security
+        docs: "https://kubernetes.io/docs/reference/access-authn-authz/rbac/"
+        src: [[bmc, exercises/22-rbac-serviceaccount], [bmg, ch17]]
+      - t: Understand requests, limits, quotas
+        vi: requests để xếp lịch và tính quota; limits bị kernel chặn; ResourceQuota và LimitRange giới hạn theo namespace.
+        cmd: "k create quota q -n app --hard=requests.cpu=1,requests.memory=1Gi,pods=5"
+        yaml: |
+          apiVersion: v1
+          kind: LimitRange
+          metadata: {name: defaults}
+          spec:
+            limits:
+              - type: Container
+                defaultRequest: {cpu: 100m, memory: 128Mi}
+                default: {cpu: 200m, memory: 256Mi}
+        trap: "Có quota CPU/RAM mà Pod không khai requests thì bị từ chối, trừ khi có LimitRange điền mặc định."
+        learn: scale
+        docs: "https://kubernetes.io/docs/concepts/policy/resource-quotas/"
+        src: [[dgk, d.configuration.md], [bmc, exercises/24-resourcequota], [bmc, exercises/25-limitrange]]
+      - t: Define resource requirements
+        vi: Khai requests và limits cho từng container; requests = limits ở mọi container thì QoS là Guaranteed.
+        cmd: "k set resources deploy/web --requests=cpu=100m,memory=128Mi --limits=cpu=200m,memory=256Mi"
+        yaml: |
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: 200m, memory: 256Mi}
+        trap: "Đơn vị: 0.5 = 500m CPU; 1Gi khác 1G."
+        learn: perf
+        docs: "https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/"
+        src: [[dgk, d.configuration.md], [bmc, exercises/23-resource-requests-limits]]
+      - t: Understand ConfigMaps
+        vi: Cấu hình không bí mật; đưa vào Pod bằng env, envFrom hoặc volume (volume tự cập nhật, env thì không).
+        cmd: "k create cm app-cfg --from-literal=MODE=dev --from-file=app.properties"
+        yaml: |
+          env:
+            - name: MODE
+              valueFrom: {configMapKeyRef: {name: app-cfg, key: MODE}}
+          envFrom: [{configMapRef: {name: app-cfg}}]
+        trap: "Sửa ConfigMap không làm env của Pod đang chạy đổi: phải restart (k rollout restart)."
+        docs: "https://kubernetes.io/docs/concepts/configuration/configmap/"
+        src: [[dgk, d.configuration.md], [bmc, exercises/26-configmap]]
+      - t: Create & consume Secrets
+        vi: Như ConfigMap nhưng cho dữ liệu nhạy cảm; base64 chỉ là cách viết, không phải mã hóa.
+        cmd: "k create secret generic db --from-literal=password=s3cr3t; k get secret db -o jsonpath='{.data.password}' | base64 -d"
+        yaml: |
+          volumes: [{name: db, secret: {secretName: db}}]
+          # container
+          volumeMounts: [{name: db, mountPath: /etc/db, readOnly: true}]
+        trap: "Viết YAML bằng data: thì giá trị phải base64; dùng stringData: để viết chữ thường."
+        learn: wire
+        docs: "https://kubernetes.io/docs/concepts/configuration/secret/"
+        src: [[dgk, d.configuration.md], [bmc, exercises/27-secret]]
+      - t: Understand ServiceAccounts
+        vi: Danh tính của Pod khi gọi API; mỗi namespace có SA default; tắt automount nếu app không gọi API.
+        cmd: "k create sa app; k create token app --duration=1h"
+        yaml: |
+          spec:
+            serviceAccountName: app
+            automountServiceAccountToken: false
+        trap: "serviceAccountName của Pod đang chạy không sửa được: sửa Deployment để tạo Pod mới."
+        learn: security
+        docs: "https://kubernetes.io/docs/concepts/security/service-accounts/"
+        src: [[dgk, d.configuration.md], [bmc, exercises/22-rbac-serviceaccount]]
+      - t: Understand Application Security (SecurityContexts, Capabilities, etc.)
+        vi: Chạy bằng user không phải root, không leo quyền, bỏ capability thừa, root filesystem chỉ đọc.
+        cmd: "k exec secure -- id"
+        yaml: |
+          securityContext:                 # cấp Pod
+            runAsUser: 1000
+            runAsNonRoot: true
+            fsGroup: 2000
+          containers:
+            - name: app
+              securityContext:             # cấp container (ghi đè cấp Pod)
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities: {drop: [ALL], add: [NET_BIND_SERVICE]}
+        trap: "capabilities và readOnlyRootFilesystem chỉ có ở cấp container; fsGroup chỉ có ở cấp Pod."
+        learn: security
+        docs: "https://kubernetes.io/docs/tasks/configure-pod-container/security-context/"
+        src: [[dgk, d.configuration.md], [bmc, exercises/28-securitycontext]]
+  - id: net
+    w: 20
+    t: Services and Networking
+    vi: Service và mạng
+    topics:
+      - t: Demonstrate basic understanding of NetworkPolicies
+        vi: Có policy chọn Pod thì Pod đó chỉ nhận/gửi những gì được liệt kê; nhớ mở DNS khi chặn egress.
+        cmd: "k get netpol -n app; k describe netpol db-allow -n app"
+        yaml: |
+          apiVersion: networking.k8s.io/v1
+          kind: NetworkPolicy
+          metadata: {name: db-allow}
+          spec:
+            podSelector: {matchLabels: {app: db}}
+            policyTypes: [Ingress]
+            ingress:
+              - from: [{podSelector: {matchLabels: {access: granted}}}]
+                ports: [{port: 5432}]
+        trap: "from có hai phần tử (- namespaceSelector, - podSelector) là HOẶC; gộp vào một phần tử là VÀ."
+        learn: network
+        docs: "https://kubernetes.io/docs/concepts/services-networking/network-policies/"
+        src: [[dgk, f.services.md], [bmc, exercises/32-networkpolicy]]
+      - t: Provide and troubleshoot access to applications via services
+        vi: Service chọn Pod bằng label; không có endpoint thì kiểm selector, targetPort, readiness.
+        cmd: "k expose deploy web --port=80 --target-port=8080; k get endpointslices -l kubernetes.io/service-name=web"
+        yaml: |
+          spec:
+            type: NodePort
+            selector: {app: web}
+            ports: [{port: 80, targetPort: 8080, nodePort: 30080}]
+        trap: "Service không có endpoint gần như luôn là selector sai hoặc targetPort sai."
+        learn: network
+        docs: "https://kubernetes.io/docs/concepts/services-networking/service/"
+        src: [[dgk, f.services.md], [bmc, exercises/29-service], [bmc, exercises/30-troubleshooting-service]]
+      - t: Use Ingress rules to expose applications
+        vi: Ingress định tuyến HTTP theo host và path tới Service; cần ingress controller và ingressClassName.
+        cmd: "k create ingress shop --class=nginx --rule='shop.lab/app*=app:80' --rule='shop.lab/api*=api:8080'"
+        yaml: |
+          spec:
+            ingressClassName: nginx
+            rules:
+              - host: shop.lab
+                http:
+                  paths:
+                    - {path: /api, pathType: Prefix, backend: {service: {name: api, port: {number: 8080}}}}
+        trap: "pathType bắt buộc (Prefix hoặc Exact); backend trỏ tới Service cùng namespace với Ingress."
+        learn: network
+        docs: "https://kubernetes.io/docs/concepts/services-networking/ingress/"
+        src: [[dgk, f.services.md], [bmc, exercises/31-ingress]]

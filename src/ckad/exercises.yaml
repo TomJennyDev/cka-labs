@@ -1,0 +1,1278 @@
+# Bài tập CKAD tự viết, chủ đề lấy theo curriculum và các bộ bài tập trong topics.yaml (sources).
+# sol: lời giải (k = kubectl). check: lệnh kiểm tra, thoát 0 là đạt. test: false = không chạy tự động
+# (cần podman/helm/internet). ns: namespace bài dùng, bộ kiểm thử tự tạo trước khi chạy.
+- id: b-image
+  d: build
+  tp: 0
+  title: Build image, đổi tag và lưu ra file
+  ns: ""
+  mins: 6
+  test: false
+  task: |
+    Trong thư mục /opt/web có file index.html.
+    1. Viết Dockerfile dùng nginx:1.27-alpine, chép index.html vào /usr/share/nginx/html/.
+    2. Build image tên web:1.0 bằng podman (hoặc docker).
+    3. Gắn thêm tag registry.lab:5000/web:1.0 và lưu image web:1.0 ra file /opt/web-1.0.tar.
+  hint: "podman build -t, podman tag, podman save -o"
+  sol: |
+    cd /opt/web
+    cat > Dockerfile <<'EOF'
+    FROM nginx:1.27-alpine
+    COPY index.html /usr/share/nginx/html/
+    EOF
+    podman build -t web:1.0 .
+    podman tag web:1.0 registry.lab:5000/web:1.0
+    podman save -o /opt/web-1.0.tar web:1.0
+    podman images | grep web            # kiểm tra
+    podman image history web:1.0        # mỗi dòng Dockerfile một layer
+  check: "ls -lh /opt/web-1.0.tar && tar -tf /opt/web-1.0.tar | head"
+  src: [[dgk, j.podman.md], [bmc, exercises/01-container]]
+
+- id: b-job
+  d: build
+  tp: 1
+  title: Job chạy 5 lần, 2 Pod song song, có hạn giờ
+  ns: ck-jobs
+  mins: 4
+  task: |
+    Namespace ck-jobs. Tạo Job calc với image busybox:1.36 chạy lệnh sh -c 'echo $((6*7))'.
+    Job phải hoàn thành 5 lần, tối đa 2 Pod chạy cùng lúc, thử lại tối đa 2 lần và bị dừng nếu chạy quá 60 giây.
+    Đợi Job xong và in kết quả của một Pod.
+  hint: "k create job --dry-run=client -o yaml rồi thêm completions, parallelism, backoffLimit, activeDeadlineSeconds"
+  sol: |
+    k config set-context --current --namespace=ck-jobs
+    k create job calc --image=busybox:1.36 --dry-run=client -o yaml -- sh -c 'echo $((6*7))' > calc.yaml
+    # sửa calc.yaml bằng vim, phần spec thành như dưới:
+    cat > calc.yaml <<'EOF'
+    apiVersion: batch/v1
+    kind: Job
+    metadata: {name: calc}
+    spec:
+      completions: 5
+      parallelism: 2
+      backoffLimit: 2
+      activeDeadlineSeconds: 60
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: calc
+              image: busybox:1.36
+              command: ["sh", "-c", "echo $((6*7))"]
+    EOF
+    k apply -f calc.yaml
+    k wait --for=condition=complete job/calc --timeout=120s
+    k logs job/calc            # một Pod bất kỳ của Job
+  check: |
+    test "$(k get job calc -n ck-jobs -o jsonpath='{.spec.completions}/{.spec.parallelism}/{.spec.backoffLimit}/{.spec.activeDeadlineSeconds}')" = "5/2/2/60"
+    k wait -n ck-jobs --for=condition=complete job/calc --timeout=120s >/dev/null
+    test "$(k logs -n ck-jobs job/calc)" = "42"
+  src: [[dgk, c.pod_design.md], [bmc, exercises/03-job]]
+
+- id: b-cron
+  d: build
+  tp: 1
+  title: CronJob giữ lịch sử ngắn, không chạy chồng
+  ns: ck-cron
+  mins: 4
+  task: |
+    Namespace ck-cron. Tạo CronJob report chạy mỗi 5 phút với image busybox:1.36, lệnh sh -c 'date; echo report'.
+    Chỉ giữ 2 Job thành công và 1 Job lỗi gần nhất, không cho hai lần chạy chồng lên nhau.
+    Sau đó chạy ngay một lần bằng tay thành Job tên report-manual.
+  hint: "successfulJobsHistoryLimit, failedJobsHistoryLimit, concurrencyPolicy: Forbid; k create job --from=cronjob/…"
+  sol: |
+    k config set-context --current --namespace=ck-cron
+    k create cronjob report --image=busybox:1.36 --schedule='*/5 * * * *' -- sh -c 'date; echo report'
+    k patch cj report --type=merge -p '{"spec":{"successfulJobsHistoryLimit":2,"failedJobsHistoryLimit":1,"concurrencyPolicy":"Forbid"}}'
+    k create job report-manual --from=cronjob/report
+    k wait --for=condition=complete job/report-manual --timeout=90s && k logs job/report-manual
+  check: |
+    test "$(k get cj report -n ck-cron -o jsonpath='{.spec.schedule}|{.spec.successfulJobsHistoryLimit}|{.spec.failedJobsHistoryLimit}|{.spec.concurrencyPolicy}')" = "*/5 * * * *|2|1|Forbid"
+    k wait -n ck-cron --for=condition=complete job/report-manual --timeout=90s >/dev/null
+    k logs -n ck-cron job/report-manual | grep -q report
+  src: [[dgk, c.pod_design.md], [bmc, exercises/04-cronjob]]
+
+- id: b-ds
+  d: build
+  tp: 1
+  title: DaemonSet chạy trên mọi node, kể cả control plane
+  ns: ck-ds
+  mins: 4
+  task: |
+    Namespace ck-ds. Tạo DaemonSet node-agent (image busybox:1.36, lệnh sleep 3600) chạy một Pod trên mọi node,
+    kể cả node control plane đang có taint node-role.kubernetes.io/control-plane:NoSchedule.
+  hint: "Không có lệnh create daemonset: tạo Deployment dry-run rồi đổi kind, bỏ replicas và strategy, thêm toleration"
+  sol: |
+    k config set-context --current --namespace=ck-ds
+    k create deploy node-agent --image=busybox:1.36 --dry-run=client -o yaml -- sleep 3600 > ds.yaml
+    # vim ds.yaml: kind: DaemonSet, xóa replicas, strategy, status; thêm tolerations. Kết quả:
+    cat > ds.yaml <<'EOF'
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata: {name: node-agent, labels: {app: node-agent}}
+    spec:
+      selector: {matchLabels: {app: node-agent}}
+      template:
+        metadata: {labels: {app: node-agent}}
+        spec:
+          tolerations:
+            - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+          containers:
+            - name: busybox
+              image: busybox:1.36
+              command: ["sleep", "3600"]
+    EOF
+    k apply -f ds.yaml
+    k rollout status ds/node-agent
+    k get pod -o wide
+  check: |
+    k rollout status ds/node-agent -n ck-ds --timeout=120s >/dev/null
+    test "$(k get ds node-agent -n ck-ds -o jsonpath='{.status.numberReady}')" = "$(k get nodes --no-headers | wc -l | tr -d ' ')"
+  src: [[dgk, c.pod_design.md], [bmg, ch10]]
+
+- id: b-sidecar
+  d: build
+  tp: 2
+  title: Sidecar đọc log qua emptyDir (sidecar kiểu mới)
+  ns: ck-multi
+  mins: 6
+  task: |
+    Namespace ck-multi. Tạo Pod app gồm:
+    - container app (busybox:1.36) ghi một dòng date vào /var/log/app/app.log mỗi 2 giây;
+    - sidecar log-tail (busybox:1.36) chạy tail -F /var/log/app/app.log, khai báo là init container có restartPolicy: Always;
+    - cả hai dùng chung volume emptyDir tên logs.
+    Kiểm tra log của log-tail có dữ liệu.
+  hint: "Sidecar kiểu mới nằm trong initContainers với restartPolicy: Always, khởi động trước và chạy suốt đời Pod"
+  sol: |
+    k config set-context --current --namespace=ck-multi
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: app}
+    spec:
+      initContainers:
+        - name: log-tail
+          image: busybox:1.36
+          restartPolicy: Always
+          command: ["sh", "-c", "tail -F /var/log/app/app.log"]
+          volumeMounts: [{name: logs, mountPath: /var/log/app}]
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do date >> /var/log/app/app.log; sleep 2; done"]
+          volumeMounts: [{name: logs, mountPath: /var/log/app}]
+      volumes: [{name: logs, emptyDir: {}}]
+    EOF
+    k wait --for=condition=Ready pod/app --timeout=90s
+    sleep 5; k logs app -c log-tail --tail=3
+  check: |
+    k wait -n ck-multi --for=condition=Ready pod/app --timeout=90s >/dev/null
+    test "$(k get pod app -n ck-multi -o jsonpath='{.spec.initContainers[0].restartPolicy}')" = "Always"
+    for i in 1 2 3 4 5 6; do k logs -n ck-multi app -c log-tail --tail=1 | grep -q UTC && exit 0; sleep 2; done; exit 1
+  src: [[bmg, ch08], [k8sdocs, content/en/docs/concepts/workloads/pods/sidecar-containers.md]]
+
+- id: b-init
+  d: build
+  tp: 2
+  title: Init container chuẩn bị nội dung cho nginx
+  ns: ck-multi
+  mins: 5
+  task: |
+    Namespace ck-multi. Tạo Pod web với container nginx (nginx:1.27) phục vụ /usr/share/nginx/html.
+    Thêm init container prepare (busybox:1.36) ghi chữ "Hello CKAD" vào index.html của một emptyDir dùng chung,
+    để nginx trả về nội dung đó.
+  hint: "Init container ghi vào emptyDir mount ở /work, nginx mount cùng volume ở /usr/share/nginx/html"
+  sol: |
+    k config set-context --current --namespace=ck-multi
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: web}
+    spec:
+      initContainers:
+        - name: prepare
+          image: busybox:1.36
+          command: ["sh", "-c", "echo 'Hello CKAD' > /work/index.html"]
+          volumeMounts: [{name: html, mountPath: /work}]
+      containers:
+        - name: nginx
+          image: nginx:1.27
+          ports: [{containerPort: 80}]
+          volumeMounts: [{name: html, mountPath: /usr/share/nginx/html}]
+      volumes: [{name: html, emptyDir: {}}]
+    EOF
+    k wait --for=condition=Ready pod/web --timeout=90s
+    IP=$(k get pod web -o jsonpath='{.status.podIP}')
+    k run tmp --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://$IP
+  check: |
+    k wait -n ck-multi --for=condition=Ready pod/web --timeout=90s >/dev/null
+    IP=$(k get pod web -n ck-multi -o jsonpath='{.status.podIP}')
+    k run tmp-chk -n ck-multi --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://$IP | grep -q "Hello CKAD"
+  src: [[dgk, b.multi_container_pods.md], [bmc, exercises/07-init-container]]
+
+- id: b-adapter
+  d: build
+  tp: 2
+  title: Adapter đổi định dạng đầu ra
+  ns: ck-multi
+  mins: 6
+  task: |
+    Namespace ck-multi. Pod metrics có container app (busybox:1.36) cứ 3 giây ghi một dòng dạng "cpu=37,mem=512" vào /var/log/raw.log.
+    Thêm container adapter (busybox:1.36) đọc file đó và in ra stdout dạng "CPU 37% MEM 512Mi".
+  hint: "Hai container chung emptyDir; adapter dùng tail -F | awk (nhớ fflush để log ra ngay)"
+  sol: |
+    k config set-context --current --namespace=ck-multi
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: metrics}
+    spec:
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sh", "-c", "while true; do echo cpu=$((RANDOM%100)),mem=512 >> /var/log/raw.log; sleep 3; done"]
+          volumeMounts: [{name: logs, mountPath: /var/log}]
+        - name: adapter
+          image: busybox:1.36
+          command: ["sh", "-c", "tail -F /var/log/raw.log | awk -F'[=,]' '{print \"CPU \" $2 \"% MEM \" $4 \"Mi\"; fflush()}'"]
+          volumeMounts: [{name: logs, mountPath: /var/log}]
+      volumes: [{name: logs, emptyDir: {}}]
+    EOF
+    sleep 8; k logs metrics -c adapter --tail=2
+  check: |
+    k wait -n ck-multi --for=condition=Ready pod/metrics --timeout=90s >/dev/null
+    for i in 1 2 3 4 5 6 7 8; do k logs -n ck-multi metrics -c adapter --tail=1 | grep -qE '^CPU [0-9]+% MEM 512Mi$' && exit 0; sleep 2; done; exit 1
+  src: [[bmc, exercises/08-adapter-pattern], [bmg, ch08]]
+
+- id: b-pvc
+  d: build
+  tp: 3
+  title: PV tĩnh, PVC và Pod ghi dữ liệu
+  ns: ck-store
+  mins: 7
+  task: |
+    Tạo PersistentVolume pv-ck (1Gi, ReadWriteOnce, storageClassName manual, hostPath /tmp/pv-ck).
+    Trong namespace ck-store tạo PVC data xin 500Mi cùng storageClassName, rồi Pod writer (busybox:1.36)
+    mount PVC ở /data và ghi "saved" vào /data/out.txt rồi ngủ.
+  hint: "PVC chỉ gắn với PV khi storageClassName, accessModes khớp và dung lượng PV ≥ yêu cầu"
+  sol: |
+    k config set-context --current --namespace=ck-store
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata: {name: pv-ck}
+    spec:
+      capacity: {storage: 1Gi}
+      accessModes: [ReadWriteOnce]
+      storageClassName: manual
+      hostPath: {path: /tmp/pv-ck}
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata: {name: data}
+    spec:
+      accessModes: [ReadWriteOnce]
+      storageClassName: manual
+      resources: {requests: {storage: 500Mi}}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: writer}
+    spec:
+      containers:
+        - name: writer
+          image: busybox:1.36
+          command: ["sh", "-c", "echo saved > /data/out.txt && sleep 3600"]
+          volumeMounts: [{name: data, mountPath: /data}]
+      volumes: [{name: data, persistentVolumeClaim: {claimName: data}}]
+    EOF
+    k get pv pv-ck; k get pvc data
+    k wait --for=condition=Ready pod/writer --timeout=90s && k exec writer -- cat /data/out.txt
+  check: |
+    test "$(k get pvc data -n ck-store -o jsonpath='{.status.phase}/{.spec.volumeName}')" = "Bound/pv-ck"
+    k wait -n ck-store --for=condition=Ready pod/writer --timeout=90s >/dev/null
+    test "$(k exec -n ck-store writer -- cat /data/out.txt)" = "saved"
+  cleanup: "k delete pod writer -n ck-store --wait=false; k delete pvc data -n ck-store --wait=false; k delete pv pv-ck --wait=false"
+  src: [[dgk, g.state.md], [bmc, exercises/06-persistentvolume-static-provisioning]]
+
+- id: b-labels
+  d: build
+  tp: 1
+  title: Label, selector và annotation
+  ns: ck-labels
+  mins: 4
+  task: |
+    Namespace ck-labels. Tạo 3 Pod nginx1, nginx2, nginx3 (nginx:1.27) có label app=v1.
+    Đổi label của nginx2 thành app=v2, thêm tier=web cho mọi Pod có app là v1 hoặc v2,
+    gắn annotation owner=marketing cho Pod app=v2, rồi liệt kê Pod có cột APP.
+  hint: "k label --overwrite; selector dạng tập hợp: -l 'app in (v1,v2)'; k get -L app"
+  sol: |
+    k config set-context --current --namespace=ck-labels
+    for n in 1 2 3; do k run nginx$n --image=nginx:1.27 -l app=v1; done
+    k label pod nginx2 app=v2 --overwrite
+    k label pod -l 'app in (v1,v2)' tier=web
+    k annotate pod -l app=v2 owner=marketing
+    k get pod -L app,tier
+  check: |
+    test "$(k get pod -n ck-labels -l 'app=v1,tier=web' --no-headers | wc -l | tr -d ' ')" = "2"
+    test "$(k get pod nginx2 -n ck-labels -o jsonpath='{.metadata.labels.app}/{.metadata.labels.tier}/{.metadata.annotations.owner}')" = "v2/web/marketing"
+  src: [[dgk, c.pod_design.md], [bmc, exercises/10-labels-annotations-cli]]
+
+- id: d-rolling
+  d: deploy
+  tp: 1
+  title: Rolling update có ghi nguyên nhân, rồi quay lại bản cũ
+  ns: ck-roll
+  mins: 6
+  task: |
+    Namespace ck-roll. Tạo Deployment web (nginx:1.27, 3 replicas) với maxSurge 1, maxUnavailable 0.
+    Cập nhật lên nginx:1.28 và ghi change-cause "upgrade to 1.28".
+    Xem lịch sử rollout, rồi quay lại revision 1 và xác nhận image là nginx:1.27.
+  hint: "k annotate deploy web kubernetes.io/change-cause=…; k rollout history; k rollout undo --to-revision=1"
+  sol: |
+    k config set-context --current --namespace=ck-roll
+    k create deploy web --image=nginx:1.27 --replicas=3
+    k patch deploy web -p '{"spec":{"strategy":{"rollingUpdate":{"maxSurge":1,"maxUnavailable":0}}}}'
+    k rollout status deploy/web
+    k set image deploy/web nginx=nginx:1.28
+    k annotate deploy/web kubernetes.io/change-cause="upgrade to 1.28"
+    k rollout status deploy/web
+    k rollout history deploy/web
+    k rollout undo deploy/web --to-revision=1 && k rollout status deploy/web
+    k get deploy web -o jsonpath='{.spec.template.spec.containers[0].image}'
+  check: |
+    k rollout status deploy/web -n ck-roll --timeout=120s >/dev/null
+    test "$(k get deploy web -n ck-roll -o jsonpath='{.spec.template.spec.containers[0].image}|{.spec.strategy.rollingUpdate.maxSurge}|{.spec.strategy.rollingUpdate.maxUnavailable}')" = "nginx:1.27|1|0"
+    k rollout history deploy/web -n ck-roll | grep -q "upgrade to 1.28"
+  src: [[dgk, c.pod_design.md], [bmc, exercises/11-deployment-rolling-update]]
+
+- id: d-pause
+  d: deploy
+  tp: 1
+  title: Gom nhiều thay đổi vào một lần rollout (pause/resume)
+  ns: ck-roll
+  mins: 4
+  task: |
+    Namespace ck-roll. Tạo Deployment api (nginx:1.27, 2 replicas). Tạm dừng rollout, đổi image sang nginx:1.28
+    và đặt requests cpu=50m,memory=64Mi, rồi tiếp tục để mọi thay đổi ra trong một ReplicaSet mới.
+  hint: "k rollout pause; k set image; k set resources; k rollout resume"
+  sol: |
+    k config set-context --current --namespace=ck-roll
+    k create deploy api --image=nginx:1.27 --replicas=2
+    k rollout status deploy/api
+    k rollout pause deploy/api
+    k set image deploy/api nginx=nginx:1.28
+    k set resources deploy/api --requests=cpu=50m,memory=64Mi
+    k get rs -l app=api                 # chưa có ReplicaSet mới khi đang pause
+    k rollout resume deploy/api && k rollout status deploy/api
+  check: |
+    k rollout status deploy/api -n ck-roll --timeout=120s >/dev/null
+    test "$(k get deploy api -n ck-roll -o jsonpath='{.spec.paused}')" != "true"
+    test "$(k get rs -n ck-roll -l app=api --no-headers | wc -l | tr -d ' ')" = "2"
+    test "$(k get deploy api -n ck-roll -o jsonpath='{.spec.template.spec.containers[0].image}|{.spec.template.spec.containers[0].resources.requests.cpu}')" = "nginx:1.28|50m"
+  src: [[dgk, c.pod_design.md]]
+
+- id: d-bluegreen
+  d: deploy
+  tp: 0
+  title: Blue/green bằng cách đổi selector của Service
+  ns: ck-bg
+  mins: 7
+  task: |
+    Namespace ck-bg. Deployment shop-blue (nginx:1.27, 2 replicas, label app=shop, version=blue)
+    và Service shop (ClusterIP, port 80) chọn app=shop, version=blue.
+    Tạo shop-green (nginx:1.28, 2 replicas, version=green), đợi Ready, chuyển Service sang green rồi xóa shop-blue.
+  hint: "Deployment cần label riêng trong template; k patch svc để đổi selector"
+  sol: |
+    k config set-context --current --namespace=ck-bg
+    deploy() {   # $1 = blue|green, $2 = tag
+    cat <<EOF | k apply -f -
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: shop-$1}
+    spec:
+      replicas: 2
+      selector: {matchLabels: {app: shop, version: $1}}
+      template:
+        metadata: {labels: {app: shop, version: $1}}
+        spec: {containers: [{name: nginx, image: "nginx:$2"}]}
+    EOF
+    }
+    deploy blue 1.27
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Service
+    metadata: {name: shop}
+    spec:
+      selector: {app: shop, version: blue}
+      ports: [{port: 80, targetPort: 80}]
+    EOF
+    deploy green 1.28
+    k rollout status deploy/shop-green
+    k patch svc shop -p '{"spec":{"selector":{"app":"shop","version":"green"}}}'
+    k delete deploy shop-blue
+    k get endpointslices -l kubernetes.io/service-name=shop
+  check: |
+    test "$(k get svc shop -n ck-bg -o jsonpath='{.spec.selector.version}')" = "green"
+    ! k get deploy shop-blue -n ck-bg >/dev/null 2>&1
+    k rollout status deploy/shop-green -n ck-bg --timeout=120s >/dev/null
+    for i in $(seq 1 15); do n=$(k get endpointslices -n ck-bg -l kubernetes.io/service-name=shop -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]} {end}' | wc -w); [ "$n" = "2" ] && exit 0; sleep 2; done; exit 1
+  src: [[bmc, exercises/13-deployment-blue-green], [bmg, ch11]]
+
+- id: d-canary
+  d: deploy
+  tp: 0
+  title: Canary 20% bằng số replicas
+  ns: ck-canary
+  mins: 6
+  task: |
+    Namespace ck-canary. Service api chọn app=api. Deployment api-stable (nginx:1.27, 4 replicas, track=stable)
+    và api-canary (nginx:1.28, 1 replica, track=canary), cả hai có label app=api, để khoảng 20% request vào bản mới.
+  hint: "Service chỉ chọn app=api nên phủ cả hai Deployment; tỉ lệ = số Pod"
+  sol: |
+    k config set-context --current --namespace=ck-canary
+    deploy() {   # $1 = track, $2 = tag, $3 = replicas
+    cat <<EOF | k apply -f -
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata: {name: api-$1}
+    spec:
+      replicas: $3
+      selector: {matchLabels: {app: api, track: $1}}
+      template:
+        metadata: {labels: {app: api, track: $1}}
+        spec: {containers: [{name: nginx, image: "nginx:$2"}]}
+    EOF
+    }
+    deploy stable 1.27 4
+    deploy canary 1.28 1
+    k create svc clusterip api --tcp=80:80     # selector mặc định app=api
+    k get endpointslices -l kubernetes.io/service-name=api -o wide
+  check: |
+    test "$(k get svc api -n ck-canary -o jsonpath='{.spec.selector}')" = '{"app":"api"}'
+    k rollout status deploy/api-stable -n ck-canary --timeout=120s >/dev/null && k rollout status deploy/api-canary -n ck-canary --timeout=120s >/dev/null
+    for i in $(seq 1 15); do n=$(k get endpointslices -n ck-canary -l kubernetes.io/service-name=api -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]} {end}' | wc -w); [ "$n" = "5" ] && exit 0; sleep 2; done; exit 1
+  src: [[dgk, c.pod_design.md], [bmg, ch11]]
+
+- id: d-helm
+  d: deploy
+  tp: 2
+  title: Cài, nâng cấp và quay lại release Helm
+  ns: ""
+  mins: 7
+  test: false
+  task: |
+    Thêm repo podinfo (https://stefanprodan.github.io/podinfo). Cài chart podinfo/podinfo thành release web
+    trong namespace web (tạo mới) với replicaCount=2. Nâng cấp release đặt replicaCount=3,
+    xem lịch sử, quay lại revision 1, cuối cùng liệt kê mọi release kể cả đang lỗi trên toàn cluster.
+  hint: "helm repo add/update, helm install -n --create-namespace --set, helm upgrade, helm history, helm rollback, helm list -A --all"
+  sol: |
+    helm repo add podinfo https://stefanprodan.github.io/podinfo && helm repo update
+    helm install web podinfo/podinfo -n web --create-namespace --set replicaCount=2
+    helm upgrade web podinfo/podinfo -n web --set replicaCount=3
+    helm history web -n web
+    helm rollback web 1 -n web
+    helm get values web -n web            # giá trị đang dùng
+    helm list -A --all
+  check: "test \"$(kubectl get deploy -n web -l app.kubernetes.io/instance=web -o jsonpath='{.items[0].spec.replicas}')\" = 2"
+  src: [[dgk, h.helm.md], [bmc, exercises/14-helm-consume-chart], [helm, docs/intro/using_helm.mdx]]
+
+- id: d-helm-find
+  d: deploy
+  tp: 2
+  title: Tìm và gỡ release Helm đang lỗi
+  ns: ""
+  mins: 4
+  test: false
+  task: |
+    Trên cluster có release bị kẹt ở trạng thái pending-install hoặc failed. Tìm chúng ở mọi namespace,
+    ghi tên release và namespace vào /opt/broken-releases.txt rồi gỡ chúng.
+  hint: "helm list -A --pending --failed; helm uninstall -n"
+  sol: |
+    helm list -A --pending --failed
+    helm list -A --pending --failed -o json | jq -r '.[] | "\(.name) \(.namespace)"' > /opt/broken-releases.txt
+    while read name ns; do helm uninstall "$name" -n "$ns"; done < /opt/broken-releases.txt
+  check: "test -z \"$(helm list -A --pending --failed -q)\""
+  src: [[dgk, h.helm.md]]
+
+- id: d-kustomize
+  d: deploy
+  tp: 3
+  title: Kustomize base và overlay prod
+  ns: ck-kz
+  mins: 8
+  task: |
+    Trong thư mục /opt/kz có base gồm Deployment web (nginx:1.27, 1 replica).
+    Tạo overlay /opt/kz/overlays/prod: namespace ck-kz, tiền tố tên prod-, 3 replicas, image nginx:1.28,
+    thêm ConfigMap web-cfg sinh ra từ MODE=prod. Áp overlay lên cluster.
+  hint: "kustomization.yaml: resources, namespace, namePrefix, replicas, images, configMapGenerator; k apply -k"
+  sol: |
+    mkdir -p /opt/kz/base /opt/kz/overlays/prod
+    k create deploy web --image=nginx:1.27 --dry-run=client -o yaml > /opt/kz/base/deployment.yaml
+    cat > /opt/kz/base/kustomization.yaml <<'EOF'
+    resources: [deployment.yaml]
+    EOF
+    cat > /opt/kz/overlays/prod/kustomization.yaml <<'EOF'
+    resources: [../../base]
+    namespace: ck-kz
+    namePrefix: prod-
+    replicas: [{name: web, count: 3}]
+    images: [{name: nginx, newTag: "1.28"}]
+    configMapGenerator: [{name: web-cfg, literals: [MODE=prod]}]
+    EOF
+    k kustomize /opt/kz/overlays/prod      # xem trước
+    k apply -k /opt/kz/overlays/prod
+  check: |
+    test "$(k get deploy prod-web -n ck-kz -o jsonpath='{.spec.replicas}|{.spec.template.spec.containers[0].image}')" = "3|nginx:1.28"
+    k get cm -n ck-kz -o name | grep -q 'configmap/prod-web-cfg-'
+  workdir: /opt/kz
+  src: [[bmc, exercises/16-kustomize-secret-patch], [k8sdocs, content/en/docs/tasks/manage-kubernetes-objects/kustomization.md]]
+
+- id: d-kz-secret
+  d: deploy
+  tp: 3
+  title: Kustomize sinh Secret và patch env vào Deployment
+  ns: ck-kz2
+  mins: 7
+  task: |
+    Thư mục /opt/kz2 chứa deployment.yaml (Deployment api, nginx:1.27, container nginx).
+    Viết kustomization.yaml sinh Secret api-secret từ DB_PASS=s3cr3t và patch Deployment
+    để container nginx nhận biến DB_PASS từ Secret đó. Áp vào namespace ck-kz2.
+  hint: "secretGenerator; patches với target kind Deployment; tên Secret được tự thêm hậu tố hash và tự sửa ở chỗ tham chiếu"
+  sol: |
+    mkdir -p /opt/kz2 && cd /opt/kz2
+    k create deploy api --image=nginx:1.27 --dry-run=client -o yaml > deployment.yaml
+    cat > kustomization.yaml <<'EOF'
+    namespace: ck-kz2
+    resources: [deployment.yaml]
+    secretGenerator:
+      - name: api-secret
+        literals: [DB_PASS=s3cr3t]
+    patches:
+      - target: {kind: Deployment, name: api}
+        patch: |-
+          - op: add
+            path: /spec/template/spec/containers/0/env
+            value:
+              - name: DB_PASS
+                valueFrom: {secretKeyRef: {name: api-secret, key: DB_PASS}}
+    EOF
+    k kustomize . | grep -A3 secretKeyRef      # tên đã có hậu tố hash
+    k apply -k .
+  check: |
+    s=$(k get deploy api -n ck-kz2 -o jsonpath='{.spec.template.spec.containers[0].env[0].valueFrom.secretKeyRef.name}')
+    case "$s" in api-secret-*) ;; *) exit 1;; esac
+    test "$(k get secret "$s" -n ck-kz2 -o jsonpath='{.data.DB_PASS}' | base64 -d)" = "s3cr3t"
+  workdir: /opt/kz2
+  src: [[bmc, exercises/16-kustomize-secret-patch]]
+
+- id: d-hpa
+  d: deploy
+  tp: 1
+  title: Scale và HorizontalPodAutoscaler
+  ns: ck-hpa
+  mins: 4
+  task: |
+    Namespace ck-hpa. Tạo Deployment load (nginx:1.27) với requests cpu=50m, scale lên 3 replicas,
+    rồi tạo HPA giữ từ 2 tới 6 Pod, mục tiêu CPU 70%.
+  hint: "HPA tính % trên requests: không có requests thì TARGETS là <unknown>"
+  sol: |
+    k config set-context --current --namespace=ck-hpa
+    k create deploy load --image=nginx:1.27
+    k set resources deploy/load --requests=cpu=50m
+    k scale deploy/load --replicas=3
+    k autoscale deploy/load --min=2 --max=6 --cpu=70%
+    k get hpa load
+  check: |
+    test "$(k get hpa load -n ck-hpa -o jsonpath='{.spec.minReplicas}/{.spec.maxReplicas}/{.spec.metrics[0].resource.target.averageUtilization}')" = "2/6/70"
+    test "$(k get deploy load -n ck-hpa -o jsonpath='{.spec.template.spec.containers[0].resources.requests.cpu}')" = "50m"
+  src: [[dgk, c.pod_design.md], [bmc, exercises/12-deployment-horizontal-pod-autoscaler]]
+
+- id: o-deprec
+  d: obs
+  tp: 0
+  title: Sửa manifest dùng API đã bị gỡ
+  ns: ck-api
+  mins: 5
+  task: |
+    File /opt/hpa-old.yaml dùng apiVersion autoscaling/v2beta2 cho HorizontalPodAutoscaler web (min 1, max 4, CPU 60%)
+    nên apply báo lỗi. Tìm apiVersion còn phục vụ, sửa file và áp vào namespace ck-api (Deployment web có sẵn).
+  hint: "k api-resources | grep -i horizontal; k explain hpa.spec.metrics --api-version=autoscaling/v2"
+  sol: |
+    k config set-context --current --namespace=ck-api
+    k create deploy web --image=nginx:1.27 2>/dev/null || true
+    k api-resources | grep -i horizontalpodautoscalers     # APIVERSION: autoscaling/v2
+    cat > /opt/hpa-new.yaml <<'EOF'
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata: {name: web}
+    spec:
+      scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web}
+      minReplicas: 1
+      maxReplicas: 4
+      metrics:
+        - type: Resource
+          resource: {name: cpu, target: {type: Utilization, averageUtilization: 60}}
+    EOF
+    k apply -f /opt/hpa-new.yaml
+  check: |
+    test "$(k get hpa.v2.autoscaling web -n ck-api -o jsonpath='{.spec.maxReplicas}/{.spec.metrics[0].resource.target.averageUtilization}')" = "4/60"
+  src: [[bmc, exercises/17-api-deprecation], [bmg, ch13], [k8sdocs, content/en/docs/reference/using-api/deprecation-guide.md]]
+
+- id: o-probes
+  d: obs
+  tp: 1
+  title: Đủ ba loại probe
+  ns: ck-probe
+  mins: 6
+  task: |
+    Namespace ck-probe. Tạo Pod web (nginx:1.27, port 80) có:
+    startupProbe tcpSocket cổng 80 (tối đa 30 lần, mỗi 2 giây),
+    readinessProbe httpGet / cổng 80 mỗi 5 giây,
+    livenessProbe exec "ls /usr/share/nginx/html" bắt đầu sau 5 giây, mỗi 10 giây.
+  hint: "Lấy YAML bằng k run --dry-run=client -o yaml rồi thêm ba khối probe"
+  sol: |
+    k config set-context --current --namespace=ck-probe
+    k run web --image=nginx:1.27 --port=80 --dry-run=client -o yaml > web.yaml
+    # vim web.yaml, thêm ba khối probe vào container:
+    cat > web.yaml <<'EOF'
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: web, labels: {run: web}}
+    spec:
+      containers:
+        - name: web
+          image: nginx:1.27
+          ports: [{containerPort: 80}]
+          startupProbe: {tcpSocket: {port: 80}, failureThreshold: 30, periodSeconds: 2}
+          readinessProbe: {httpGet: {path: /, port: 80}, periodSeconds: 5}
+          livenessProbe:
+            exec: {command: ["ls", "/usr/share/nginx/html"]}
+            initialDelaySeconds: 5
+            periodSeconds: 10
+    EOF
+    k apply -f web.yaml
+    k wait --for=condition=Ready pod/web --timeout=90s
+    k describe pod web | grep -E 'Liveness|Readiness|Startup'
+  check: |
+    k wait -n ck-probe --for=condition=Ready pod/web --timeout=90s >/dev/null
+    test "$(k get pod web -n ck-probe -o jsonpath='{.spec.containers[0].startupProbe.failureThreshold}|{.spec.containers[0].readinessProbe.httpGet.path}|{.spec.containers[0].livenessProbe.initialDelaySeconds}')" = "30|/|5"
+  src: [[dgk, e.observability.md], [bmc, exercises/18-pod-probes]]
+
+- id: o-findprobe
+  d: obs
+  tp: 1
+  title: Tìm Pod có liveness probe đang hỏng
+  ns: ck-probe2
+  mins: 5
+  task: |
+    Namespace ck-probe2 có nhiều Pod. Một Pod có liveness probe gọi sai path nên bị restart liên tục.
+    Tìm Pod đó qua Events và ghi tên Pod vào /opt/bad-probe.txt, rồi sửa probe (path đúng là /).
+  hint: "k get events --field-selector reason=Unhealthy; Pod đang chạy không sửa được probe: xuất YAML, sửa, tạo lại"
+  setup: |
+    k run ok1 --image=nginx:1.27 -n ck-probe2
+    printf 'apiVersion: v1\nkind: Pod\nmetadata: {name: sick}\nspec:\n  containers:\n    - name: sick\n      image: nginx:1.27\n      livenessProbe: {httpGet: {path: /healthz, port: 80}, periodSeconds: 3, failureThreshold: 1}\n' | k apply -n ck-probe2 -f -
+    sleep 15
+  sol: |
+    k config set-context --current --namespace=ck-probe2
+    k get events --field-selector reason=Unhealthy -o custom-columns=POD:.involvedObject.name,MSG:.message
+    k get events --field-selector reason=Unhealthy -o jsonpath='{.items[0].involvedObject.name}' > /opt/bad-probe.txt
+    k get pod sick -o yaml > sick.yaml
+    sed -i 's#path: /healthz#path: /#' sick.yaml
+    k replace --force -f sick.yaml
+  check: |
+    test "$(cat /opt/bad-probe.txt)" = "sick"
+    test "$(k get pod sick -n ck-probe2 -o jsonpath='{.spec.containers[0].livenessProbe.httpGet.path}')" = "/"
+  src: [[dgk, e.observability.md]]
+
+- id: o-logs
+  d: obs
+  tp: 3
+  title: Lấy log đúng container, đúng khoảng
+  ns: ck-logs
+  mins: 4
+  task: |
+    Namespace ck-logs. Tạo Pod counter (busybox:1.36) in "i: <date>" mỗi giây với i tăng dần.
+    Ghi 5 dòng log mới nhất vào /opt/counter.log. Cho biết lệnh lấy log của lần chạy trước nếu container đã restart.
+  hint: "k logs --tail=5 > file; k logs --previous"
+  sol: |
+    k config set-context --current --namespace=ck-logs
+    k run counter --image=busybox:1.36 -- sh -c 'i=0; while true; do echo "$i: $(date)"; i=$((i+1)); sleep 1; done'
+    k wait --for=condition=Ready pod/counter --timeout=60s; sleep 6
+    k logs counter --tail=5 > /opt/counter.log
+    # lần chạy trước (khi RESTARTS > 0):
+    # k logs counter --previous
+  check: |
+    test "$(wc -l < /opt/counter.log | tr -d ' ')" = "5"
+    grep -qE '^[0-9]+: ' /opt/counter.log
+  src: [[dgk, e.observability.md]]
+
+- id: o-debug
+  d: obs
+  tp: 4
+  title: Sửa Deployment bị CrashLoopBackOff
+  ns: ck-debug
+  mins: 6
+  task: |
+    Namespace ck-debug. Deployment worker không lên: Pod CrashLoopBackOff.
+    Tìm nguyên nhân bằng describe và logs --previous, sửa để Pod chạy (lệnh đúng là sh -c 'sleep 3600').
+  hint: "Đọc Last State và Exit Code; k logs --previous; k edit hoặc k patch deploy"
+  setup: |
+    k create deploy worker -n ck-debug --image=busybox:1.36 -- sh -c 'ls /notexist'
+    sleep 10
+  sol: |
+    k config set-context --current --namespace=ck-debug
+    k get pod -l app=worker
+    k describe pod -l app=worker | grep -A4 'Last State'
+    k logs deploy/worker --previous || k logs deploy/worker   # ls: /notexist: No such file or directory
+    k patch deploy worker --type=json -p '[{"op":"replace","path":"/spec/template/spec/containers/0/command","value":["sh","-c","sleep 3600"]}]'
+    k rollout status deploy/worker
+  check: |
+    k rollout status deploy/worker -n ck-debug --timeout=120s >/dev/null
+    test "$(k get pod -n ck-debug -l app=worker --field-selector=status.phase=Running --no-headers | wc -l | tr -d ' ')" -ge 1
+  src: [[dgk, e.observability.md], [bmc, exercises/20-troubleshooting-pod], [bmg, ch15]]
+
+- id: o-top
+  d: obs
+  tp: 2
+  title: Pod tốn RAM nhất
+  ns: ""
+  mins: 3
+  task: |
+    Tìm Pod dùng nhiều memory nhất trong toàn cluster và ghi "<namespace>/<tên>" vào /opt/top-mem.txt.
+  hint: "k top pod -A --sort-by=memory --no-headers"
+  sol: |
+    k top pod -A --sort-by=memory --no-headers | head -1 | awk '{print $1"/"$2}' > /opt/top-mem.txt
+    cat /opt/top-mem.txt
+  check: "grep -qE '^[a-z0-9-]+/[a-z0-9.-]+$' /opt/top-mem.txt"
+  src: [[dgk, e.observability.md], [bmc, exercises/19-pod-metrics]]
+
+- id: o-ephemeral
+  d: obs
+  tp: 4
+  title: Gỡ lỗi Pod không có shell bằng container tạm
+  ns: ck-debug
+  mins: 4
+  test: false
+  task: |
+    Pod app trong ck-debug dùng image không có shell. Gắn một container gỡ lỗi busybox:1.36 dùng chung
+    namespace tiến trình với container app để xem các tiến trình đang chạy.
+  hint: "k debug -it <pod> --image=… --target=<container>"
+  sol: |
+    k debug -it app -n ck-debug --image=busybox:1.36 --target=app -- sh
+    # trong shell: ps aux   (thấy tiến trình của container app)
+    k get pod app -n ck-debug -o jsonpath='{.spec.ephemeralContainers[*].name}'
+  check: "k get pod app -n ck-debug -o jsonpath='{.spec.ephemeralContainers[*].name}' | grep -q debugger"
+  src: [[k8sdocs, content/en/docs/tasks/debug/debug-application/debug-running-pod.md]]
+
+- id: e-cm
+  d: env
+  tp: 4
+  title: ConfigMap qua env, envFrom và volume
+  ns: ck-cfg
+  mins: 6
+  task: |
+    Namespace ck-cfg. Tạo ConfigMap app-cfg có MODE=dev và LEVEL=info.
+    Tạo Pod cfg (busybox:1.36, sleep 3600): biến APP_MODE lấy từ khóa MODE, nạp toàn bộ app-cfg làm biến môi trường,
+    và mount app-cfg ở /etc/app.
+  hint: "valueFrom.configMapKeyRef, envFrom.configMapRef, volumes.configMap"
+  sol: |
+    k config set-context --current --namespace=ck-cfg
+    k create cm app-cfg --from-literal=MODE=dev --from-literal=LEVEL=info
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: cfg}
+    spec:
+      containers:
+        - name: cfg
+          image: busybox:1.36
+          command: ["sleep", "3600"]
+          env:
+            - name: APP_MODE
+              valueFrom: {configMapKeyRef: {name: app-cfg, key: MODE}}
+          envFrom: [{configMapRef: {name: app-cfg}}]
+          volumeMounts: [{name: cfg, mountPath: /etc/app}]
+      volumes: [{name: cfg, configMap: {name: app-cfg}}]
+    EOF
+    k wait --for=condition=Ready pod/cfg --timeout=60s
+    k exec cfg -- sh -c 'echo $APP_MODE $LEVEL; cat /etc/app/MODE'
+  check: |
+    k wait -n ck-cfg --for=condition=Ready pod/cfg --timeout=60s >/dev/null
+    test "$(k exec -n ck-cfg cfg -- sh -c 'echo $APP_MODE $LEVEL $(cat /etc/app/MODE)')" = "dev info dev"
+  src: [[dgk, d.configuration.md], [bmc, exercises/26-configmap]]
+
+- id: e-secret
+  d: env
+  tp: 5
+  title: Secret qua volume chỉ đọc và một biến môi trường
+  ns: ck-sec
+  mins: 5
+  task: |
+    Namespace ck-sec. Tạo Secret db có username=admin, password=s3cr3t.
+    Pod db-client (busybox:1.36, sleep 3600) mount Secret ở /etc/db chỉ đọc và có biến DB_USER lấy từ khóa username.
+    In ra giá trị password đã giải mã bằng kubectl.
+  hint: "k create secret generic --from-literal; jsonpath .data.password | base64 -d"
+  sol: |
+    k config set-context --current --namespace=ck-sec
+    k create secret generic db --from-literal=username=admin --from-literal=password=s3cr3t
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: db-client}
+    spec:
+      containers:
+        - name: c
+          image: busybox:1.36
+          command: ["sleep", "3600"]
+          env:
+            - name: DB_USER
+              valueFrom: {secretKeyRef: {name: db, key: username}}
+          volumeMounts: [{name: db, mountPath: /etc/db, readOnly: true}]
+      volumes: [{name: db, secret: {secretName: db}}]
+    EOF
+    k get secret db -o jsonpath='{.data.password}' | base64 -d; echo
+  check: |
+    k wait -n ck-sec --for=condition=Ready pod/db-client --timeout=60s >/dev/null
+    test "$(k exec -n ck-sec db-client -- sh -c 'echo $DB_USER $(cat /etc/db/password)')" = "admin s3cr3t"
+    test "$(k get pod db-client -n ck-sec -o jsonpath='{.spec.containers[0].volumeMounts[0].readOnly}')" = "true"
+  src: [[dgk, d.configuration.md], [bmc, exercises/27-secret]]
+
+- id: e-tls
+  d: env
+  tp: 5
+  title: Secret kiểu TLS từ cặp file
+  ns: ck-sec
+  mins: 4
+  task: |
+    Tạo khóa và chứng chỉ tự ký cho shop.lab bằng openssl (hạn 30 ngày), rồi tạo Secret shop-tls kiểu kubernetes.io/tls trong ck-sec.
+  hint: "openssl req -x509 -newkey rsa:2048 -nodes; k create secret tls --cert --key"
+  sol: |
+    openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=shop.lab" -keyout /tmp/tls.key -out /tmp/tls.crt
+    k create secret tls shop-tls -n ck-sec --cert=/tmp/tls.crt --key=/tmp/tls.key
+    k get secret shop-tls -n ck-sec -o jsonpath='{.type}'
+  check: |
+    test "$(k get secret shop-tls -n ck-sec -o jsonpath='{.type}')" = "kubernetes.io/tls"
+    k get secret shop-tls -n ck-sec -o jsonpath='{.data.tls\.crt}' | base64 -d | openssl x509 -noout -subject | grep -q shop.lab
+  src: [[dgk, d.configuration.md], [k8sdocs, content/en/docs/concepts/configuration/secret.md]]
+
+- id: e-secctx
+  d: env
+  tp: 7
+  title: SecurityContext không root, không leo quyền
+  ns: ck-secctx
+  mins: 6
+  task: |
+    Namespace ck-secctx. Pod secure (busybox:1.36, sleep 3600) chạy với user 1000, group 3000, fsGroup 2000, runAsNonRoot.
+    Container không được leo quyền, root filesystem chỉ đọc, bỏ mọi capability.
+    Mount emptyDir ở /tmp để vẫn ghi được file tạm.
+  hint: "runAsUser, runAsGroup, fsGroup, runAsNonRoot ở cấp Pod; allowPrivilegeEscalation, readOnlyRootFilesystem, capabilities ở cấp container"
+  sol: |
+    k config set-context --current --namespace=ck-secctx
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: secure}
+    spec:
+      securityContext: {runAsUser: 1000, runAsGroup: 3000, fsGroup: 2000, runAsNonRoot: true}
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {}}]
+    EOF
+    k wait --for=condition=Ready pod/secure --timeout=60s
+    k exec secure -- id                         # uid=1000 gid=3000 groups=2000,3000
+    k exec secure -- touch /x || echo "root fs chỉ đọc: đúng"
+    k exec secure -- touch /tmp/ok && echo "/tmp ghi được"
+  check: |
+    k wait -n ck-secctx --for=condition=Ready pod/secure --timeout=60s >/dev/null
+    k exec -n ck-secctx secure -- id | grep -q 'uid=1000 gid=3000'
+    ! k exec -n ck-secctx secure -- touch /x 2>/dev/null
+    k exec -n ck-secctx secure -- touch /tmp/ok
+  src: [[dgk, d.configuration.md], [bmc, exercises/28-securitycontext], [bmg, ch20]]
+
+- id: e-sa
+  d: env
+  tp: 6
+  title: ServiceAccount riêng, chỉ được đọc Pod
+  ns: ck-rbac
+  mins: 6
+  task: |
+    Namespace ck-rbac. Tạo ServiceAccount reader, Role pod-reader (get, list, watch pods) và RoleBinding gắn hai thứ đó.
+    Tạo Pod viewer (busybox:1.36, sleep 3600) dùng SA reader. Xác nhận SA đọc được Pod nhưng không xóa được.
+  hint: "k create sa/role/rolebinding --serviceaccount=ck-rbac:reader; k auth can-i --as=system:serviceaccount:…"
+  sol: |
+    k config set-context --current --namespace=ck-rbac
+    k create sa reader
+    k create role pod-reader --verb=get,list,watch --resource=pods
+    k create rolebinding reader --role=pod-reader --serviceaccount=ck-rbac:reader
+    k run viewer --image=busybox:1.36 --overrides='{"spec":{"serviceAccountName":"reader"}}' -- sleep 3600
+    k auth can-i list pods --as=system:serviceaccount:ck-rbac:reader      # yes
+    k auth can-i delete pods --as=system:serviceaccount:ck-rbac:reader || true   # no (mã thoát 1)
+  check: |
+    test "$(k auth can-i list pods -n ck-rbac --as=system:serviceaccount:ck-rbac:reader)" = "yes"
+    test "$(k auth can-i delete pods -n ck-rbac --as=system:serviceaccount:ck-rbac:reader)" = "no"
+    test "$(k get pod viewer -n ck-rbac -o jsonpath='{.spec.serviceAccountName}')" = "reader"
+  src: [[bmc, exercises/22-rbac-serviceaccount], [bmg, ch17], [dgk, d.configuration.md]]
+
+- id: e-token
+  d: env
+  tp: 6
+  title: Tắt token tự gắn và xin token có hạn
+  ns: ck-rbac
+  mins: 3
+  task: |
+    Namespace ck-rbac. Tạo ServiceAccount batch với automountServiceAccountToken: false.
+    Xin một token cho batch có hạn 10 phút và lưu vào /opt/batch.token.
+  hint: "k patch sa; k create token --duration"
+  sol: |
+    k create sa batch -n ck-rbac
+    k patch sa batch -n ck-rbac -p '{"automountServiceAccountToken":false}'
+    k create token batch -n ck-rbac --duration=10m > /opt/batch.token
+    cut -d. -f2 /opt/batch.token | tr '_-' '/+' | base64 -d 2>/dev/null | head -c 200; echo
+  check: |
+    test "$(k get sa batch -n ck-rbac -o jsonpath='{.automountServiceAccountToken}')" = "false"
+    test "$(cut -d. -f1 /opt/batch.token | cut -c1-3)" = "eyJ"
+  src: [[dgk, d.configuration.md]]
+
+- id: e-resources
+  d: env
+  tp: 3
+  title: Requests, limits và lớp QoS
+  ns: ck-res
+  mins: 4
+  task: |
+    Namespace ck-res. Tạo Pod g (nginx:1.27) có QoS Guaranteed với 100m CPU, 128Mi RAM
+    và Pod b (nginx:1.27) có QoS Burstable: requests 50m/64Mi, limits memory 256Mi.
+  hint: "Guaranteed: mọi container requests = limits cho cả CPU và RAM"
+  sol: |
+    k config set-context --current --namespace=ck-res
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: g}
+    spec:
+      containers:
+        - name: g
+          image: nginx:1.27
+          resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 100m, memory: 128Mi}}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: b}
+    spec:
+      containers:
+        - name: b
+          image: nginx:1.27
+          resources: {requests: {cpu: 50m, memory: 64Mi}, limits: {memory: 256Mi}}
+    EOF
+    k get pod -o custom-columns=NAME:.metadata.name,QOS:.status.qosClass
+  check: |
+    test "$(k get pod g -n ck-res -o jsonpath='{.status.qosClass}')" = "Guaranteed"
+    test "$(k get pod b -n ck-res -o jsonpath='{.status.qosClass}')" = "Burstable"
+  src: [[dgk, d.configuration.md], [bmc, exercises/23-resource-requests-limits]]
+
+- id: e-quota
+  d: env
+  tp: 2
+  title: ResourceQuota chặn Pod quá tay
+  ns: ck-quota
+  mins: 5
+  task: |
+    Namespace ck-quota. Tạo ResourceQuota team với requests.cpu=1, requests.memory=1Gi, limits.cpu=2, limits.memory=2Gi, pods=3.
+    Thử tạo Pod big xin requests cpu=2 (sẽ bị từ chối), rồi tạo Pod small (nginx:1.27) requests 500m/512Mi, limits 1/1Gi.
+  hint: "k create quota --hard=…; k describe quota xem Used/Hard"
+  sol: |
+    k config set-context --current --namespace=ck-quota
+    k create quota team --hard=requests.cpu=1,requests.memory=1Gi,limits.cpu=2,limits.memory=2Gi,pods=3
+    pod() {   # $1 tên, $2 req cpu, $3 req mem, $4 lim cpu, $5 lim mem
+    cat <<EOF | k apply -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: $1}
+    spec:
+      containers:
+        - name: $1
+          image: nginx:1.27
+          resources: {requests: {cpu: "$2", memory: $3}, limits: {cpu: "$4", memory: $5}}
+    EOF
+    }
+    pod big 2 1Gi 3 2Gi || echo "bị từ chối: exceeded quota"
+    pod small 500m 512Mi 1 1Gi
+    k describe quota team
+  check: |
+    ! k get pod big -n ck-quota >/dev/null 2>&1
+    k get pod small -n ck-quota >/dev/null
+    test "$(k get quota team -n ck-quota -o jsonpath='{.status.used.requests\.cpu}')" = "500m"
+  src: [[dgk, d.configuration.md], [bmc, exercises/24-resourcequota]]
+
+- id: e-limitrange
+  d: env
+  tp: 2
+  title: LimitRange tự điền requests
+  ns: ck-lr
+  mins: 4
+  task: |
+    Namespace ck-lr. Tạo LimitRange defaults cho Container: defaultRequest cpu 100m / memory 128Mi,
+    default (limit) cpu 200m / memory 256Mi, max memory 512Mi. Tạo Pod plain (nginx:1.27) không khai resources
+    và xác nhận nó nhận giá trị mặc định.
+  hint: "LimitRange không có lệnh create: viết YAML; xem kết quả trong spec của Pod"
+  sol: |
+    k config set-context --current --namespace=ck-lr
+    cat <<'EOF' | k apply -f -
+    apiVersion: v1
+    kind: LimitRange
+    metadata: {name: defaults}
+    spec:
+      limits:
+        - type: Container
+          defaultRequest: {cpu: 100m, memory: 128Mi}
+          default: {cpu: 200m, memory: 256Mi}
+          max: {memory: 512Mi}
+    EOF
+    k run plain --image=nginx:1.27
+    k get pod plain -o jsonpath='{.spec.containers[0].resources}'
+  check: |
+    test "$(k get pod plain -n ck-lr -o jsonpath='{.spec.containers[0].resources.requests.cpu}|{.spec.containers[0].resources.limits.memory}')" = "100m|256Mi"
+  src: [[dgk, d.configuration.md], [bmc, exercises/25-limitrange]]
+
+- id: e-crd
+  d: env
+  tp: 0
+  title: Dùng CustomResourceDefinition
+  ns: ck-crd
+  mins: 6
+  task: |
+    Tạo CRD backups.stable.example.com (kind Backup, scope Namespaced, version v1, spec có schedule: string, target: string, cả hai bắt buộc).
+    Tạo object nightly trong ck-crd với schedule "0 2 * * *", target db, rồi liệt kê bằng kubectl.
+  hint: "openAPIV3Schema bắt buộc; k api-resources --api-group=stable.example.com; k explain backup.spec"
+  sol: |
+    cat <<'EOF' | k apply -f -
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata: {name: backups.stable.example.com}
+    spec:
+      group: stable.example.com
+      scope: Namespaced
+      names: {plural: backups, singular: backup, kind: Backup, shortNames: [bk]}
+      versions:
+        - name: v1
+          served: true
+          storage: true
+          schema:
+            openAPIV3Schema:
+              type: object
+              properties:
+                spec:
+                  type: object
+                  required: [schedule, target]
+                  properties:
+                    schedule: {type: string}
+                    target: {type: string}
+    EOF
+    k wait --for=condition=Established crd/backups.stable.example.com
+    cat <<'EOF' | k apply -n ck-crd -f -
+    apiVersion: stable.example.com/v1
+    kind: Backup
+    metadata: {name: nightly}
+    spec: {schedule: "0 2 * * *", target: db}
+    EOF
+    k get bk -n ck-crd; k explain backup.spec
+  check: |
+    test "$(k get backup nightly -n ck-crd -o jsonpath='{.spec.target}')" = "db"
+    ! printf 'apiVersion: stable.example.com/v1\nkind: Backup\nmetadata: {name: bad}\nspec: {target: x}\n' | k apply -n ck-crd --dry-run=server -f - >/dev/null 2>&1
+  cleanup: "k delete crd backups.stable.example.com --wait=false"
+  src: [[dgk, i.crd.md], [bmc, exercises/21-crd], [bmg, ch16]]
+
+- id: e-psa
+  d: env
+  tp: 1
+  title: "Admission Pod Security: làm Pod hợp lệ với restricted"
+  ns: ck-psa
+  mins: 6
+  task: |
+    Gắn label pod-security.kubernetes.io/enforce=restricted cho namespace ck-psa.
+    Tạo Pod hardened (busybox:1.36, sleep 3600) được admission chấp nhận.
+  hint: "Thiếu trường nào thì thông báo lỗi liệt kê đúng trường đó: thử --dry-run=server"
+  sol: |
+    k label ns ck-psa pod-security.kubernetes.io/enforce=restricted --overwrite
+    k run test --image=busybox:1.36 -n ck-psa --dry-run=server -- sleep 3600 || true   # đọc danh sách trường thiếu
+    cat <<'EOF' | k apply -n ck-psa -f -
+    apiVersion: v1
+    kind: Pod
+    metadata: {name: hardened}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: app
+          image: busybox:1.36
+          command: ["sleep", "3600"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+    EOF
+  check: |
+    test "$(k get ns ck-psa -o jsonpath='{.metadata.labels.pod-security\.kubernetes\.io/enforce}')" = "restricted"
+    k get pod hardened -n ck-psa >/dev/null
+  src: [[bmg, ch17], [k8sdocs, content/en/docs/concepts/security/pod-security-admission.md]]
+
+- id: n-expose
+  d: net
+  tp: 1
+  title: Expose Deployment và gọi thử từ Pod tạm
+  ns: ck-svc
+  mins: 4
+  task: |
+    Namespace ck-svc. Deployment echo (nginx:1.27, 3 replicas). Tạo Service ClusterIP echo cổng 8080 trỏ về cổng 80 của Pod,
+    rồi dùng một Pod busybox tạm (tự xóa) gọi http://echo:8080.
+  hint: "k expose --port --target-port; k run tmp --rm -it --restart=Never --image=busybox:1.36 -- wget -qO- …"
+  sol: |
+    k config set-context --current --namespace=ck-svc
+    k create deploy echo --image=nginx:1.27 --replicas=3
+    k expose deploy echo --port=8080 --target-port=80
+    k rollout status deploy/echo
+    k run tmp --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://echo:8080 | head -4
+  check: |
+    k rollout status deploy/echo -n ck-svc --timeout=120s >/dev/null
+    test "$(k get svc echo -n ck-svc -o jsonpath='{.spec.ports[0].port}/{.spec.ports[0].targetPort}')" = "8080/80"
+    k run tmp-check -n ck-svc --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://echo:8080 | grep -q nginx
+  src: [[dgk, f.services.md], [bmc, exercises/29-service]]
+
+- id: n-nodeport
+  d: net
+  tp: 1
+  title: NodePort cố định
+  ns: ck-svc
+  mins: 3
+  task: |
+    Namespace ck-svc. Tạo Service web-np kiểu NodePort cho Deployment echo, port 80, nodePort 30080.
+  hint: "k expose --type=NodePort rồi patch nodePort, hoặc k create svc nodeport --node-port"
+  sol: |
+    k expose deploy echo -n ck-svc --name=web-np --type=NodePort --port=80
+    k patch svc web-np -n ck-svc --type=json -p '[{"op":"replace","path":"/spec/ports/0/nodePort","value":30080}]'
+    k get svc web-np -n ck-svc
+  check: |
+    test "$(k get svc web-np -n ck-svc -o jsonpath='{.spec.type}/{.spec.ports[0].nodePort}/{.spec.selector.app}')" = "NodePort/30080/echo"
+  src: [[dgk, f.services.md], [bmc, exercises/29-service]]
+
+- id: n-fixsvc
+  d: net
+  tp: 1
+  title: "Service không có endpoint: sửa selector và targetPort"
+  ns: ck-fix
+  mins: 6
+  task: |
+    Namespace ck-fix. Service api không trả lời. Pod của Deployment api có label app=api và nghe cổng 80.
+    Tìm hai chỗ sai trong Service rồi sửa để gọi http://api từ Pod khác được.
+  hint: "So sánh selector với label Pod (k get pod --show-labels) và targetPort với containerPort; xem EndpointSlice"
+  setup: |
+    k create deploy api -n ck-fix --image=nginx:1.27 --replicas=2
+    printf 'apiVersion: v1\nkind: Service\nmetadata: {name: api}\nspec:\n  selector: {app: api-v2}\n  ports: [{port: 80, targetPort: 8080}]\n' | k apply -n ck-fix -f -
+  sol: |
+    k config set-context --current --namespace=ck-fix
+    k get endpointslices -l kubernetes.io/service-name=api     # không có endpoint
+    k get svc api -o jsonpath='{.spec.selector} {.spec.ports[0].targetPort}'; echo
+    k get pod --show-labels
+    k patch svc api --type=json -p '[{"op":"replace","path":"/spec/selector","value":{"app":"api"}},{"op":"replace","path":"/spec/ports/0/targetPort","value":80}]'
+    k run tmp --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://api | head -3
+  check: |
+    k rollout status deploy/api -n ck-fix --timeout=120s >/dev/null
+    k run tmp-check -n ck-fix --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 5 http://api | grep -q nginx
+  src: [[bmc, exercises/30-troubleshooting-service], [dgk, f.services.md]]
+
+- id: n-ingress
+  d: net
+  tp: 2
+  title: Ingress định tuyến theo host và path
+  ns: ck-ing
+  mins: 6
+  task: |
+    Namespace ck-ing có Service app (cổng 80) và api (cổng 8080). Tạo Ingress shop với ingressClassName traefik
+    (trong đề sẽ cho tên class), host shop.lab: /app* tới app:80, /api* tới api:8080.
+  hint: "k create ingress --class --rule='host/path*=svc:port' (dấu * nghĩa là pathType Prefix)"
+  setup: |
+    k create svc clusterip app -n ck-ing --tcp=80:80
+    k create svc clusterip api -n ck-ing --tcp=8080:8080
+  sol: |
+    k create ingress shop -n ck-ing --class=traefik \
+      --rule='shop.lab/app*=app:80' --rule='shop.lab/api*=api:8080'
+    k describe ingress shop -n ck-ing
+  check: |
+    test "$(k get ingress shop -n ck-ing -o jsonpath='{.spec.ingressClassName}|{.spec.rules[0].host}|{.spec.rules[0].http.paths[1].path}|{.spec.rules[0].http.paths[1].pathType}|{.spec.rules[0].http.paths[1].backend.service.port.number}')" = "traefik|shop.lab|/api|Prefix|8080"
+  src: [[dgk, f.services.md], [bmc, exercises/31-ingress], [bmg, ch22]]
+
+- id: n-netpol
+  d: net
+  tp: 0
+  title: NetworkPolicy chỉ cho Pod có nhãn truy cập database
+  ns: ck-np
+  mins: 7
+  task: |
+    Namespace ck-np. Pod db (nginx:1.27, label app=db). Tạo NetworkPolicy db-allow: Pod db chỉ nhận kết nối cổng 80
+    từ Pod có label access=granted trong cùng namespace. Kiểm tra bằng hai Pod busybox tạm, một có nhãn, một không.
+  hint: "podSelector chọn Pod được bảo vệ; ingress.from.podSelector chọn Pod được phép; policyTypes [Ingress]"
+  sol: |
+    k config set-context --current --namespace=ck-np
+    k run db --image=nginx:1.27 -l app=db --port=80
+    cat <<'EOF' | k apply -f -
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: db-allow}
+    spec:
+      podSelector: {matchLabels: {app: db}}
+      policyTypes: [Ingress]
+      ingress:
+        - from: [{podSelector: {matchLabels: {access: granted}}}]
+          ports: [{protocol: TCP, port: 80}]
+    EOF
+    k wait --for=condition=Ready pod/db --timeout=60s
+    IP=$(k get pod db -o jsonpath='{.status.podIP}')
+    k run ok --rm -i --restart=Never --image=busybox:1.36 -l access=granted -- wget -qO- -T 3 http://$IP | head -2
+    k run no --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 3 http://$IP || echo "bị chặn: đúng"
+  check: |
+    k wait -n ck-np --for=condition=Ready pod/db --timeout=60s >/dev/null
+    IP=$(k get pod db -n ck-np -o jsonpath='{.status.podIP}')
+    k run ok-chk -n ck-np --rm -i --restart=Never --image=busybox:1.36 -l access=granted -- wget -qO- -T 5 http://$IP | grep -q nginx
+    ! k run no-chk -n ck-np --rm -i --restart=Never --image=busybox:1.36 -- wget -qO- -T 3 http://$IP >/dev/null 2>&1
+  src: [[dgk, f.services.md], [bmc, exercises/32-networkpolicy], [bmg, ch23]]
+
+- id: n-egress
+  d: net
+  tp: 0
+  title: Chặn egress nhưng vẫn cho DNS
+  ns: ck-np2
+  mins: 6
+  task: |
+    Namespace ck-np2. Tạo NetworkPolicy lockdown áp cho mọi Pod: chặn mọi egress, chỉ cho DNS (UDP và TCP 53)
+    tới Pod kube-dns trong kube-system và HTTP cổng 80 tới Pod có label app=api trong cùng namespace.
+  hint: "namespaceSelector kubernetes.io/metadata.name: kube-system VÀ podSelector k8s-app: kube-dns trong cùng một phần tử to"
+  sol: |
+    cat <<'EOF' | k apply -n ck-np2 -f -
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata: {name: lockdown}
+    spec:
+      podSelector: {}
+      policyTypes: [Egress]
+      egress:
+        - to:
+            - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+              podSelector: {matchLabels: {k8s-app: kube-dns}}
+          ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+        - to: [{podSelector: {matchLabels: {app: api}}}]
+          ports: [{protocol: TCP, port: 80}]
+    EOF
+    k describe netpol lockdown -n ck-np2
+  check: |
+    test "$(k get netpol lockdown -n ck-np2 -o jsonpath='{.spec.policyTypes[0]}|{.spec.egress[0].ports[1].port}|{.spec.egress[1].to[0].podSelector.matchLabels.app}')" = "Egress|53|api"
+    test "$(k get netpol lockdown -n ck-np2 -o jsonpath='{.spec.egress[0].to[0].podSelector.matchLabels.k8s-app}')" = "kube-dns"
+  src: [[bmc, exercises/32-networkpolicy], [k8sdocs, content/en/docs/concepts/services-networking/network-policies.md]]
