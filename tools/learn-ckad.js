@@ -5,7 +5,7 @@
 const LC_D = CKAD.domains, LC_DM = Object.fromEntries(LC_D.map(d => [d.id, d]));
 const LC_COL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)", env: "var(--data)", net: "var(--bad)" };
 /* năng lực CKAD có module riêng trong trang này: "domain:index" → view */
-const LC_HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "storage", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
+const LC_HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "volumes", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
   "obs:0": "image", "obs:1": "probes", "obs:2": "obs", "obs:3": "obs", "obs:4": "trouble", "env:0": "ops", "env:1": "security", "env:2": "scale", "env:3": "perf", "env:4": "config", "env:5": "config",
   "env:6": "security", "env:7": "security", "net:0": "netpol", "net:1": "network", "net:2": "ingress" };
 const lcEa = s => esc(s).replace(/"/g, "&quot;");

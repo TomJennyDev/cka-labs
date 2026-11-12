@@ -1879,23 +1879,107 @@ k edit deploy web</pre></div>
 </section>
 
 <!-- ============ 06 STORAGE ============ -->
-<section class="view" data-view="storage" hidden>
+<!-- ============ 5.1 Volume trong Pod ============ -->
+<section class="view" data-view="volumes" hidden>
   <header class="vh">
-    <p class="eyebrow">Storage · 10%</p>
-    <h2>PVC gặp PV: dynamic provisioning qua CSI</h2>
-    <p class="lead">Pod không biết ổ đĩa là gì. Nó xin một <b>PVC</b>; StorageClass và driver CSI tạo ra <b>PV</b>; kubelet mount volume vào node rồi bind-mount vào container.</p>
+    <p class="eyebrow">Storage</p>
+    <h2>Volume trong Pod</h2>
+    <p class="lead">Filesystem của container mất sạch khi container restart. Volume là thư mục khai ở cấp Pod rồi mount vào từng container; loại volume quyết định dữ liệu sống bao lâu và nằm ở đâu.</p>
   </header>
-  <div class="domap" data-dom="stor"></div>
-  <div class="stage"><svg id="stSvg" viewBox="0 0 1000 400" role="img" aria-label="Luồng cấp phát volume"></svg></div>
-  <div class="controls">
-    <button class="btn" id="stPrev">← Trước</button>
-    <button class="btn primary" id="stNext">Bước tiếp →</button>
-    <div class="dots" id="stDots"></div>
-  </div>
-  <div class="panel stepbox" id="stStep" aria-live="polite"></div>
+  <ul class="tldr"><li>Khai <code>volumes</code> ở <code>spec</code> của Pod, mount bằng <code>volumeMounts</code> trong từng container. Hai container mount cùng volume là cách chia sẻ file.</li><li><b>Tạm</b> (sống theo Pod): emptyDir, configMap, secret, projected, generic ephemeral. <b>Bền</b> (sống ngoài Pod): PVC, và hostPath (sống theo node).</li><li>Cần dữ liệu còn sau khi Pod bị xóa hay chuyển node: dùng <b>PVC</b> (bài 5.2).</li></ul>
+  <div class="domap" data-dom="stor" data-only="1"></div>
+  <div class="panel col" id="volSim"></div>
   <div class="split even">
     <div class="panel">
-      <h3>Access mode và reclaim policy</h3>
+      <h3>Các loại hay gặp trong đề</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Loại</th><th>Dữ liệu nằm ở</th><th>Dùng khi</th></tr></thead>
+        <tbody>
+          <tr><td><b>emptyDir</b></td><td>Disk của node; <code>medium: Memory</code> thì là tmpfs trong RAM (tính vào memory limit)</td><td>Cache, file trung gian giữa các container</td></tr>
+          <tr><td><b>hostPath</b></td><td>Một đường dẫn trên node</td><td>Agent đọc log, socket của node. Rủi ro bảo mật: Pod Security mức baseline cấm</td></tr>
+          <tr><td><b>configMap</b>, <b>secret</b></td><td>Object trong API, kubelet ghi ra file</td><td>File cấu hình, chứng chỉ (bài 2.5)</td></tr>
+          <tr><td><b>downwardAPI</b></td><td>Thông tin của chính Pod</td><td>Tên Pod, label, giới hạn CPU dưới dạng file</td></tr>
+          <tr><td><b>projected</b></td><td>Gộp nhiều nguồn vào một thư mục</td><td>secret + configMap + downwardAPI + token ServiceAccount</td></tr>
+          <tr><td><b>ephemeral</b> (generic)</td><td>PVC tạo cùng Pod, xóa cùng Pod</td><td>Cần disk tạm lớn, đúng StorageClass</td></tr>
+          <tr><td><b>persistentVolumeClaim</b></td><td>PV bên ngoài Pod</td><td>Dữ liệu phải giữ lại</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <h3>Một Pod, bốn loại volume</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: v1
+kind: Pod
+metadata: {name: app, labels: {app: web}}
+spec:
+  containers:
+  - name: app
+    image: busybox:1.36
+    command: ["sh", "-c", "sleep 3600"]
+    volumeMounts:
+    - {name: cache, mountPath: /cache}
+    - {name: logs, mountPath: /var/log/node, readOnly: true}
+    - {name: info, mountPath: /etc/podinfo}
+    - {name: scratch, mountPath: /scratch}
+  volumes:
+  - name: cache
+    emptyDir: {medium: Memory, sizeLimit: 64Mi}
+  - name: logs
+    hostPath: {path: /var/log, type: Directory}
+  - name: info
+    projected:
+      sources:
+      - downwardAPI:
+          items:
+          - {path: name, fieldRef: {fieldPath: metadata.name}}
+          - {path: labels, fieldRef: {fieldPath: metadata.labels}}
+      - configMap: {name: app-config}
+  - name: scratch
+    ephemeral:
+      volumeClaimTemplate:
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          storageClassName: standard
+          resources: {requests: {storage: 1Gi}}</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Chi tiết khi mount</h3>
+      <ul class="tight">
+        <li><code>subPath: app.conf</code> mount một file con thay vì cả thư mục; file mount kiểu này không được cập nhật khi ConfigMap đổi.</li>
+        <li><code>subPathExpr: $(POD_NAME)</code> tách thư mục theo tên Pod (biến lấy từ downward API trong <code>env</code>).</li>
+        <li><code>readOnly: true</code> ở volumeMount chặn container ghi.</li>
+        <li>hostPath <code>type</code>: <code>DirectoryOrCreate</code>, <code>Directory</code>, <code>FileOrCreate</code>, <code>File</code>, <code>Socket</code>… Sai type thì Pod đứng <code>ContainerCreating</code>.</li>
+        <li>Generic ephemeral tạo PVC tên <code>&lt;pod&gt;-&lt;volume&gt;</code>, Pod là chủ nên xóa Pod thì PVC bị dọn theo.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Disk tạm cũng có giới hạn</h3>
+      <div class="codewrap"><pre class="code" data-hl>resources:
+  requests: {ephemeral-storage: 1Gi}
+  limits:   {ephemeral-storage: 2Gi}   # log + lớp ghi của container + emptyDir trên disk
+# vượt limit → kubelet evict Pod, lý do "ephemeral local storage usage exceeds"</pre></div>
+      <div class="codewrap" style="margin-top:10px"><pre class="code" data-hl>k exec app -- df -h /cache /scratch
+k describe pod app | grep -A12 Volumes
+k get pvc                                  # thấy app-scratch của generic ephemeral</pre></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5.2 PV & PVC ============ -->
+<section class="view" data-view="pv" hidden>
+  <header class="vh">
+    <p class="eyebrow">Storage</p>
+    <h2>PersistentVolume và PersistentVolumeClaim</h2>
+    <p class="lead">PV là một khối lưu trữ của cluster. PVC là lời xin của ứng dụng: bao nhiêu, kiểu truy cập nào, lớp nào. Control plane ghép một PVC với đúng một PV.</p>
+  </header>
+  <ul class="tldr"><li>PVC chọn PV khi khớp đủ: <b>storageClassName</b>, <b>accessModes</b>, <b>volumeMode</b>, dung lượng ≥ yêu cầu, label (nếu có selector). Ghép một-một: PV 10Gi cho PVC 1Gi thì cả 10Gi bị giữ.</li><li>Xóa PVC thì <b>reclaim policy</b> của PV quyết định: <b>Retain</b> giữ dữ liệu (PV thành <code>Released</code>), <b>Delete</b> xóa luôn disk.</li><li>PVC không ghi <code>storageClassName</code> sẽ nhận StorageClass mặc định và đi đường dynamic. Muốn ghép với PV tạo tay không có lớp: ghi rõ <code>storageClassName: ""</code>.</li></ul>
+  <div class="domap" data-dom="stor" data-only="2"></div>
+  <div class="panel col" id="pvBind"></div>
+  <div class="panel col ck-anim" id="pvLife"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Access mode và volumeMode</h3>
       <div class="tbl"><table>
         <thead><tr><th>Mode</th><th>Viết tắt</th><th>Nghĩa</th></tr></thead>
         <tbody>
@@ -1906,51 +1990,178 @@ k edit deploy web</pre></div>
         </tbody>
       </table></div>
       <ul class="tight" style="margin-top:12px">
-        <li><b>Retain</b>: xóa PVC, PV chuyển <code>Released</code>, dữ liệu còn nguyên, admin dọn tay. Mặc định cho PV tạo tay.</li>
-        <li><b>Delete</b>: xóa PVC thì xóa luôn PV và disk thật. Mặc định của hầu hết StorageClass.</li>
-        <li><b>WaitForFirstConsumer</b>: chờ Pod được schedule rồi mới tạo disk, để disk nằm đúng zone với node.</li>
+        <li>Access mode là khả năng của loại lưu trữ, không phải khóa ghi: disk block (EBS, PD) chỉ có RWO.</li>
+        <li><code>volumeMode: Filesystem</code> (mặc định) mount thành thư mục; <code>Block</code> đưa thiết bị thô vào container qua <code>volumeDevices</code>.</li>
+        <li>Reclaim <code>Recycle</code> (xóa sạch rồi dùng lại) đã bỏ; chỉ còn Retain và Delete.</li>
       </ul>
     </div>
     <div class="panel">
-      <h3>YAML mẫu cần thuộc</h3>
-      <div class="codewrap"><pre class="code" data-hl>apiVersion: storage.k8s.io/v1
-kind: StorageClass
-metadata: {name: fast}
-provisioner: ebs.csi.aws.com
-parameters: {type: gp3}
-reclaimPolicy: Delete
-volumeBindingMode: WaitForFirstConsumer
-allowVolumeExpansion: true
----
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata: {name: data}
-spec:
-  accessModes: ["ReadWriteOnce"]
-  storageClassName: fast
-  resources: {requests: {storage: 20Gi}}
----
-# PV tạo tay (static) cho lab: hostPath
-apiVersion: v1
+      <h3>PV tạo tay và PVC ghép với nó</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: v1
 kind: PersistentVolume
-metadata: {name: pv-log}
+metadata: {name: pv-log, labels: {tier: log}}
 spec:
   capacity: {storage: 1Gi}
   accessModes: ["ReadWriteOnce"]
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
-  hostPath: {path: /mnt/log}</pre></div>
+  hostPath: {path: /mnt/log}           # chỉ dùng cho lab một node
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: log, namespace: shop}
+spec:
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: manual            # phải giống PV
+  resources: {requests: {storage: 500Mi}}
+  selector: {matchLabels: {tier: log}} # tùy chọn
+  # volumeName: pv-log                # ép ghép đúng PV này
+---
+# Pod dùng PVC
+spec:
+  volumes:
+  - name: data
+    persistentVolumeClaim: {claimName: log}</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Local PV và StatefulSet</h3>
+      <div class="codewrap"><pre class="code" data-hl># disk gắn trên một node: PV phải có nodeAffinity
+apiVersion: v1
+kind: PersistentVolume
+metadata: {name: local-ssd-w1}
+spec:
+  capacity: {storage: 100Gi}
+  accessModes: ["ReadWriteOnce"]
+  storageClassName: local-ssd   # StorageClass provisioner: kubernetes.io/no-provisioner
+  local: {path: /mnt/ssd1}      #   + volumeBindingMode: WaitForFirstConsumer
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - {key: kubernetes.io/hostname, operator: In, values: [worker-1]}</pre></div>
+      <ul class="tight" style="margin-top:10px">
+        <li>StatefulSet tạo PVC theo <code>volumeClaimTemplates</code>, tên <code>&lt;template&gt;-&lt;sts&gt;-&lt;số&gt;</code>, ví dụ <code>data-db-0</code>. Pod db-0 tạo lại vẫn gắn đúng PVC đó.</li>
+        <li>Mặc định xóa hoặc scale down StatefulSet <b>không xóa PVC</b>. Đổi bằng <code>persistentVolumeClaimRetentionPolicy</code> (<code>whenDeleted</code>, <code>whenScaled</code>: Retain hoặc Delete).</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Lệnh và lỗi hay gặp</h3>
+      <div class="codewrap"><pre class="code" data-hl>k get pv                                   # STATUS, CLAIM, RECLAIM POLICY
+k get pvc -A ; k describe pvc log -n shop  # event cuối nói vì sao Pending
+# PV Released → dùng lại: bỏ claimRef (dữ liệu cũ vẫn còn trên disk)
+k patch pv pv-log --type json -p '[{"op":"remove","path":"/spec/claimRef"}]'
+# đổi reclaim policy của PV đang dùng
+k patch pv pv-log -p '{"spec":{"persistentVolumeReclaimPolicy":"Retain"}}'
+# mở rộng: sửa dung lượng của PVC (StorageClass phải cho phép)
+k patch pvc data -p '{"spec":{"resources":{"requests":{"storage":"30Gi"}}}}'</pre></div>
+      <ul class="tight" style="margin-top:10px">
+        <li>PVC <b>Pending</b>: không PV nào khớp, lệch storageClassName (kể cả "" với không ghi), hoặc đang chờ Pod vì WaitForFirstConsumer.</li>
+        <li>PVC đứng <b>Terminating</b>: còn Pod dùng nó, finalizer <code>kubernetes.io/pvc-protection</code> giữ lại tới khi Pod bị xóa.</li>
+        <li>Pod đứng <code>ContainerCreating</code> với <i>Multi-Attach error</i>: disk RWO đang gắn ở node khác.</li>
+        <li>Dung lượng PVC chỉ tăng, không giảm được.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5.3 StorageClass & CSI ============ -->
+<section class="view" data-view="storage" hidden>
+  <header class="vh">
+    <p class="eyebrow">Storage · 10%</p>
+    <h2>StorageClass, dynamic provisioning và CSI</h2>
+    <p class="lead">Không ai phải tạo PV bằng tay: PVC nêu StorageClass, driver CSI tạo disk thật và object PV, kubelet mount vào node rồi vào container. Bấm từng bước để xem ai làm gì.</p>
+  </header>
+  <ul class="tldr"><li><b>StorageClass</b> = driver nào tạo disk, tham số gì, reclaim policy và lúc nào tạo.</li><li>Driver <b>CSI</b> có hai nửa: controller (tạo, gắn disk) và node plugin trên mọi node (mount).</li><li>PVC Pending: xem event của PVC, rồi log sidecar csi-provisioner.</li></ul>
+  <div class="domap" data-dom="stor" data-only="0"></div>
+  <div class="stage"><svg id="stSvg" viewBox="0 0 1000 400" role="img" aria-label="Luồng cấp phát volume"></svg></div>
+  <div class="controls">
+    <button class="btn" id="stPrev">← Trước</button>
+    <button class="btn primary" id="stNext">Bước tiếp →</button>
+    <div class="dots" id="stDots"></div>
+  </div>
+  <div class="panel stepbox" id="stStep" aria-live="polite"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>StorageClass: từng trường làm gì</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: fast
+  annotations:
+    storageclass.kubernetes.io/is-default-class: "true"   # PVC không ghi lớp sẽ dùng lớp này
+provisioner: ebs.csi.aws.com          # tên driver CSI (k get csidrivers)
+parameters: {type: gp3}               # tham số riêng của driver
+reclaimPolicy: Delete                 # PV sinh ra mang policy này (mặc định Delete)
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+allowedTopologies:                    # chỉ tạo disk ở các zone này
+- matchLabelExpressions:
+  - {key: topology.kubernetes.io/zone, values: [ap-southeast-1a, ap-southeast-1b]}</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Immediate hay WaitForFirstConsumer</h3>
+      <ul class="tight">
+        <li><b>Immediate</b> (mặc định): tạo disk ngay khi có PVC. Disk có thể nằm ở zone mà Pod không chạy được, Pod sau đó kẹt <code>Pending</code> với lỗi <i>volume node affinity conflict</i>.</li>
+        <li><b>WaitForFirstConsumer</b>: chờ scheduler chọn node cho Pod rồi mới tạo disk đúng zone đó. PVC đứng <code>Pending</code> với event <i>waiting for first consumer</i> là bình thường.</li>
+        <li>Local PV bắt buộc dùng WaitForFirstConsumer.</li>
+      </ul>
+      <h3 style="margin-top:14px">StorageClass mặc định</h3>
+      <div class="codewrap"><pre class="code" data-hl>k get sc                                  # dòng có (default)
+k patch sc fast -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
+k patch sc old  -p '{"metadata":{"annotations":{"storageclass.kubernetes.io/is-default-class":"false"}}}'</pre></div>
+      <p class="small muted" style="margin:10px 0 0">Hai lớp cùng là mặc định thì lớp tạo sau cùng thắng. PVC không ghi lớp mà chưa có lớp mặc định sẽ được gán khi có lớp mặc định.</p>
     </div>
   </div>
   <div class="panel">
-    <h3>Khi PVC đứng ở Pending</h3>
-    <ul class="tight">
-      <li><code>k describe pvc data</code>: đọc event cuối. "waiting for first consumer" là bình thường khi chưa có Pod dùng nó.</li>
-      <li>PV tạo tay phải khớp: <code>storageClassName</code>, accessModes, dung lượng ≥ yêu cầu, và không bị PVC khác giữ.</li>
-      <li>Không có StorageClass mặc định: <code>k get sc</code> xem dòng nào có <code>(default)</code>.</li>
-      <li>Driver CSI chưa chạy: <code>k get pods -n kube-system | grep csi</code> và <code>k get csidrivers</code>.</li>
-      <li>Mở rộng volume: sửa <code>spec.resources.requests.storage</code> của PVC (StorageClass cần <code>allowVolumeExpansion: true</code>). Không thu nhỏ được.</li>
-    </ul>
+    <h3>Driver CSI gồm những gì</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Phần</th><th>Chạy dạng</th><th>Làm gì</th></tr></thead>
+      <tbody>
+        <tr><td><b>Controller plugin</b> + sidecar <code>external-provisioner</code></td><td>Deployment</td><td>Watch PVC, gọi <code>CreateVolume</code> / <code>DeleteVolume</code>, tạo object PV</td></tr>
+        <tr><td>Sidecar <code>external-attacher</code></td><td>cùng Deployment</td><td>Đọc <code>VolumeAttachment</code>, gắn disk vào máy của node (<code>ControllerPublishVolume</code>)</td></tr>
+        <tr><td>Sidecar <code>external-resizer</code>, <code>external-snapshotter</code></td><td>cùng Deployment</td><td>Mở rộng volume, chụp snapshot</td></tr>
+        <tr><td><b>Node plugin</b> + <code>node-driver-registrar</code></td><td>DaemonSet</td><td>Đăng ký với kubelet; kubelet gọi <code>NodeStageVolume</code> (mount vào thư mục chung) rồi <code>NodePublishVolume</code> (bind mount vào thư mục của Pod)</td></tr>
+        <tr><td>Object API</td><td>—</td><td><code>CSIDriver</code> (khả năng driver), <code>CSINode</code> (driver trên node), <code>VolumeAttachment</code> (disk nào gắn ở node nào)</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Snapshot và clone</h3>
+      <div class="codewrap"><pre class="code" data-hl># cần CRD + snapshot-controller (external-snapshotter) và driver hỗ trợ
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshot
+metadata: {name: data-snap}
+spec:
+  volumeSnapshotClassName: csi-snap
+  source: {persistentVolumeClaimName: data}
+---
+# khôi phục: PVC mới lấy dữ liệu từ snapshot
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: data-restore}
+spec:
+  storageClassName: fast
+  accessModes: ["ReadWriteOnce"]
+  resources: {requests: {storage: 20Gi}}
+  dataSource: {kind: VolumeSnapshot, name: data-snap, apiGroup: snapshot.storage.k8s.io}
+# clone: dataSource: {kind: PersistentVolumeClaim, name: data}  (cùng namespace, cùng lớp)</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Gỡ lỗi dynamic provisioning</h3>
+      <div class="codewrap"><pre class="code" data-hl>k describe pvc data          # "waiting for a volume to be created by external provisioner"
+k get csidrivers ; k get csinode
+k -n kube-system get pod | grep -i csi
+k -n kube-system logs deploy/ebs-csi-controller -c csi-provisioner | tail
+k get volumeattachment       # disk đã gắn vào node chưa</pre></div>
+      <ul class="tight" style="margin-top:10px">
+        <li>Không có lớp mặc định và PVC không ghi lớp: PVC chờ mãi, không ai tạo PV.</li>
+        <li>Sai tên <code>provisioner</code>: không driver nào nhận, PVC Pending, không có event lỗi rõ.</li>
+        <li><b>VolumeAttributesClass</b> (đã ổn định ở v1.37) cho đổi thuộc tính như IOPS của volume đang chạy, không phải tạo lại PVC.</li>
+      </ul>
+    </div>
   </div>
 </section>
 
@@ -2488,7 +2699,7 @@ const CHAPTERS = [
   { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
   { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào, xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler & nơi Pod chạy"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
   { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
-  { id: "c5", n: "5", t: "Storage", d: "Volume, PV, PVC, StorageClass và dynamic provisioning.", ex: "CKA Storage 10% · CKAD Build", ls: [["storage", "Volume, PV, PVC & StorageClass"]] },
+  { id: "c5", n: "5", t: "Storage", d: "Volume trong Pod, PV và PVC, StorageClass và CSI: từ thư mục tạm tới disk tự cấp phát.", ex: "CKA Storage 10% · CKAD Build 20%", ls: [["volumes", "Volume trong Pod"], ["pv", "PV, PVC & reclaim"], ["storage", "StorageClass & CSI"]] },
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
   { id: "c8", n: "8", t: "Troubleshooting & observability", d: "Đọc trạng thái Pod, gỡ lỗi node và control plane, lỗi kết nối, log và metric.", ex: "CKA Troubleshooting 30% · CKAD Observability 15%", ls: [["trouble", "Lỗi Pod, node & control plane"], ["connerr", "Lỗi kết nối & chứng chỉ"], ["obs", "Log, metric & cảnh báo"]] },
@@ -2496,7 +2707,7 @@ const CHAPTERS = [
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
 /* năng lực CKA (domain:index) → bài dạy chính */
-const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "podnet", "net:1": "netpol", "net:2": "network", "net:3": "gateway", "net:4": "ingress", "net:5": "dns", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "storage", "stor:2": "storage" };
+const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "podnet", "net:1": "netpol", "net:2": "network", "net:3": "gateway", "net:4": "ingress", "net:5": "dns", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "pv", "stor:2": "pv" };
 const onShow = {};
 let current = "overview";
 let learned = store.get("learned", {});
@@ -4481,7 +4692,7 @@ const CM_REL = [
   [["Namespace", "Finalizer"], "mech-gc", "trouble:0"],
   [["Garbage collection", "Owner và dependent", "Finalizer"], "mech-gc", "work:0"],
   [["Garbage collection", "Vòng đời Pod"], "", ""],
-  [["PersistentVolume và PVC", "Dynamic provisioning", "Reclaim policy"], "storage", "stor:2"],
+  [["PersistentVolume và PVC", "Dynamic provisioning", "Reclaim policy"], "pv", "stor:2"],
   [["Kiến trúc CSI"], "storage", "stor:0"],
   [["Finalizer", "PersistentVolume và PVC"], "mech-gc", ""],
   [["Autoscaling workload"], "mech-hpa", "work:2"],
@@ -7820,7 +8031,7 @@ if (current === "scale" || (location.hash || "").slice(1) === "scale") scInit();
 const LC_D = CKAD.domains, LC_DM = Object.fromEntries(LC_D.map(d => [d.id, d]));
 const LC_COL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)", env: "var(--data)", net: "var(--bad)" };
 /* năng lực CKAD có module riêng trong trang này: "domain:index" → view */
-const LC_HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "storage", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
+const LC_HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "volumes", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
   "obs:0": "image", "obs:1": "probes", "obs:2": "obs", "obs:3": "obs", "obs:4": "trouble", "env:0": "ops", "env:1": "security", "env:2": "scale", "env:3": "perf", "env:4": "config", "env:5": "config",
   "env:6": "security", "env:7": "security", "net:0": "netpol", "net:1": "network", "net:2": "ingress" };
 const lcEa = s => esc(s).replace(/"/g, "&quot;");
@@ -8554,6 +8765,118 @@ function npInit() {
   render();
 }
 lcOnce("netpol", npInit);
+
+/* ---------- chương 5 Storage: mô phỏng cho 5.1 và 5.2 ----------
+   Dùng helper của learn.html và learn-ckad.js / learn-net.js (netSeg, netPress, lcBox, lcOnce). Tên toàn cục có tiền tố vs/pb/pl. */
+
+/* ---------- 5.1 dữ liệu sống bao lâu ---------- */
+const VS_EV = [["restart", "Container restart"], ["delpod", "Xóa Pod, Pod mới thay"], ["move", "Pod mới chạy ở node khác"], ["node", "Node hỏng hẳn"]];
+const VS_ROWS = [
+  ["Filesystem của container", { restart: [0, "Mất: container mới chạy từ image sạch"], delpod: [0, "Mất"], move: [0, "Mất"], node: [0, "Mất"] }],
+  ["emptyDir", { restart: [1, "Còn: emptyDir sống theo Pod, không theo container"], delpod: [0, "Mất: xóa cùng Pod"], move: [0, "Mất"], node: [0, "Mất"] }],
+  ["emptyDir medium: Memory", { restart: [1, "Còn (nằm trong RAM của node)"], delpod: [0, "Mất"], move: [0, "Mất"], node: [0, "Mất"] }],
+  ["hostPath", { restart: [1, "Còn"], delpod: [2, "Còn trên node đó; Pod mới thấy chỉ khi về đúng node"], move: [0, "Không thấy: dữ liệu ở node cũ"], node: [0, "Mất cùng node (trừ khi cứu được disk)"] }],
+  ["configMap, secret, projected", { restart: [1, "Còn"], delpod: [1, "Ghi lại từ API: nguồn nằm trong etcd, không nằm trong Pod"], move: [1, "Ghi lại từ API"], node: [1, "Ghi lại từ API"] }],
+  ["generic ephemeral", { restart: [1, "Còn"], delpod: [0, "Mất: PVC có chủ là Pod nên bị xóa theo"], move: [0, "Mất"], node: [0, "Mất (PVC xóa theo Pod)"] }],
+  ["PVC, disk mạng (EBS, Ceph, NFS)", { restart: [1, "Còn"], delpod: [1, "Còn: PVC và PV không thuộc Pod"], move: [1, "Còn: disk được gỡ khỏi node cũ, gắn vào node mới"], node: [2, "Còn, nhưng disk RWO có thể kẹt ở node chết vài phút trước khi gắn được sang node mới"] }],
+  ["PVC trên local PV", { restart: [1, "Còn"], delpod: [1, "Còn"], move: [0, "Không chuyển được: PV gắn chặt node qua nodeAffinity, Pod mới đứng Pending"], node: [0, "Pod kẹt Pending tới khi node sống lại"] }]
+];
+function vsInit() {
+  const box = $("#volSim"); let ev = "delpod";
+  box.innerHTML = "<h3>Dữ liệu còn không khi…</h3>" + netSeg(VS_EV, ev, "data-vs") + '<div class="tbl" id="vsTbl"></div>';
+  const ic = [["✕", "var(--bad)"], ["✓", "var(--node)"], ["~", "var(--pkt)"]];
+  const render = () => {
+    $("#vsTbl").innerHTML = "<table><thead><tr><th>Nơi ghi dữ liệu</th><th></th><th>Chuyện gì xảy ra</th></tr></thead><tbody>" +
+      VS_ROWS.map(([n, m]) => { const [k, t] = m[ev]; return "<tr><td><b>" + esc(n) + '</b></td><td style="font-weight:700;font-size:18px;color:' + ic[k][1] + '">' + ic[k][0] + "</td><td>" + esc(t) + "</td></tr>"; }).join("") + "</tbody></table>";
+  };
+  box.addEventListener("click", e => { const b = e.target.closest("[data-vs]"); if (b) { ev = b.dataset.vs; netPress(box, "data-vs", ev); render(); } });
+  render();
+}
+lcOnce("volumes", vsInit);
+
+/* ---------- 5.2 PVC ghép với PV nào ---------- */
+const PB_PV = [
+  { n: "pv-a", cap: 1, modes: ["RWO"], sc: "manual", lab: "tier=log", st: "Available" },
+  { n: "pv-b", cap: 5, modes: ["RWX", "ROX", "RWO"], sc: "manual", lab: "", st: "Available", note: "NFS" },
+  { n: "pv-c", cap: 2, modes: ["RWO"], sc: "manual", lab: "tier=log", st: "Bound", note: "đã gắn với shop/old" },
+  { n: "pv-d", cap: 10, modes: ["RWO"], sc: "", lab: "", st: "Available", note: "không có lớp" },
+  { n: "pv-e", cap: 20, modes: ["RWO"], sc: "fast", lab: "", st: "Available" }
+];
+const PB_SIZE = { "500Mi": .5, "1Gi": 1, "3Gi": 3, "8Gi": 8, "50Gi": 50 };
+function pbInit() {
+  const box = $("#pvBind"); const st = { size: "1Gi", mode: "RWO", sc: "manual", sel: false };
+  const sel = (id, opts, cur) => '<select id="' + id + '">' + opts.map(([v, t]) => '<option value="' + v + '"' + (v === cur ? " selected" : "") + ">" + t + "</option>").join("") + "</select>";
+  box.innerHTML = "<h3>PVC này ghép với PV nào?</h3>" +
+    '<p class="hint" style="margin:0">Cluster có 5 PV tạo sẵn. StorageClass mặc định là <code>fast</code> (có driver CSI tự tạo disk). Lớp <code>manual</code> không có driver.</p>' +
+    '<div class="formrow"><label class="f">Dung lượng ' + sel("pbSize", Object.keys(PB_SIZE).map(k => [k, k]), st.size) + '</label><label class="f">accessModes ' + sel("pbMode", [["RWO", "ReadWriteOnce"], ["RWX", "ReadWriteMany"], ["ROX", "ReadOnlyMany"], ["RWOP", "ReadWriteOncePod"]], st.mode) +
+    '</label><label class="f">storageClassName ' + sel("pbSc", [["manual", "manual"], ["", '"" (chuỗi rỗng)'], ["~", "(không ghi)"], ["fast", "fast"]], st.sc) + '</label><label class="check"><input type="checkbox" id="pbSel"> selector tier=log</label></div>' +
+    '<div class="codewrap"><pre class="code" id="pbYaml"></pre></div><div id="pbOut"></div>';
+  const render = () => {
+    const need = PB_SIZE[st.size], cls = st.sc === "~" ? "fast" : st.sc;
+    const why = pv => pv.st !== "Available" ? "đang Bound với PVC khác" : pv.sc !== cls ? "khác storageClassName (" + (pv.sc === "" ? '""' : pv.sc) + ")" : !(pv.modes.includes(st.mode) || (st.mode === "RWOP" && pv.modes.includes("RWO") && false)) ? "không có mode " + st.mode : pv.cap < need ? "nhỏ hơn " + st.size : st.sel && pv.lab !== "tier=log" ? "không có label tier=log" : "";
+    const ok = PB_PV.filter(pv => !why(pv)).sort((a, b) => a.cap - b.cap), win = ok[0];
+    $("#pbYaml").textContent = "kind: PersistentVolumeClaim\nspec:\n  accessModes: [" + ({ RWO: "ReadWriteOnce", RWX: "ReadWriteMany", ROX: "ReadOnlyMany", RWOP: "ReadWriteOncePod" })[st.mode] + "]\n" + (st.sc === "~" ? "" : '  storageClassName: "' + st.sc + '"\n') + "  resources: {requests: {storage: " + st.size + "}}" + (st.sel ? "\n  selector: {matchLabels: {tier: log}}" : "");
+    hlPre($("#pbYaml"));
+    let res;
+    if (win) res = "<b>Bound với " + win.n + "</b> (" + win.cap + "Gi): trong các PV khớp, controller chọn PV <b>nhỏ nhất</b> đủ chỗ." + (win.cap > need ? " Cả " + win.cap + "Gi bị giữ cho PVC này, dù chỉ xin " + st.size + "." : "");
+    else if (cls === "fast" && !st.sel) res = "<b>Không PV có sẵn nào khớp → dynamic provisioning</b>: driver của lớp fast tạo disk " + st.size + " và một PV mới (bài 5.3)." + (st.mode === "RWX" || st.mode === "ROX" ? " Nếu driver chỉ hỗ trợ disk block thì tạo thất bại với mode " + st.mode + "." : "");
+    else res = "<b>Pending</b>: không PV nào khớp" + (cls === "fast" && st.sel ? " (có selector thì không dynamic provisioning được)" : cls === "" ? ', và lớp "" nghĩa là không dùng dynamic provisioning' : ", và lớp " + cls + " không có driver tự tạo") + ".";
+    $("#pbOut").innerHTML = (st.sc === "~" ? '<p class="small" style="margin:6px 0">Không ghi storageClassName: admission gán lớp mặc định <code>fast</code>. Muốn ghép PV không lớp thì ghi rõ <code>""</code>.</p>' : "") +
+      '<div class="tbl"><table><thead><tr><th>PV</th><th>Dung lượng</th><th>Modes</th><th>Lớp</th><th>Label</th><th>Trạng thái</th><th>Với PVC này</th></tr></thead><tbody>' +
+      PB_PV.map(pv => { const w = why(pv); return "<tr" + (pv === win ? ' style="background:var(--node-soft)"' : "") + "><td><code>" + pv.n + "</code>" + (pv.note ? '<br><span class="small muted">' + esc(pv.note) + "</span>" : "") + "</td><td>" + pv.cap + "Gi</td><td>" + pv.modes.join(",") + "</td><td><code>" + (pv.sc === "" ? '""' : pv.sc) + "</code></td><td>" + (pv.lab || "—") + "</td><td>" + pv.st + "</td><td>" + (pv === win ? "<b>được chọn</b>" : w ? esc(w) : "khớp nhưng lớn hơn") + "</td></tr>"; }).join("") +
+      '</tbody></table></div><p class="small" style="margin:6px 0 0">' + res + "</p>";
+  };
+  box.addEventListener("change", e => {
+    const id = e.target.id; if (id === "pbSize") st.size = e.target.value; else if (id === "pbMode") st.mode = e.target.value; else if (id === "pbSc") st.sc = e.target.value; else if (id === "pbSel") st.sel = e.target.checked; else return; render();
+  });
+  render();
+}
+
+/* ---------- 5.2 vòng đời PV khi xóa PVC ---------- */
+function plInit() {
+  const p = $("#pvLife");
+  p.innerHTML = "<h3>Vòng đời PV: tạo, dùng, xóa</h3>" + '<div class="formrow"><span class="small">Reclaim policy của PV</span>' + netSeg([["Retain", "Retain"], ["Delete", "Delete"]], "Retain", "data-pol") + "</div>" +
+    '<div class="chips" id="plBtns"></div><div class="stage sm"><svg viewBox="0 0 760 200"></svg></div><p class="hint cap" aria-live="polite"></p><div class="codewrap"><pre class="code" id="plOut"></pre></div>';
+  const svg = $("svg", p), cap = $(".cap", p);
+  let S;
+  const reset = () => { S = { pol: S ? S.pol : "Retain", pv: null, pvc: null, pod: false, disk: false, data: false }; };
+  const A = {
+    mkpv: ["1. Admin tạo PV", () => !S.pv, () => { S.pv = "Available"; S.disk = true; return "PV trỏ tới một disk có sẵn. Chưa ai xin nên PV ở trạng thái Available."; }],
+    mkpvc: ["2. Tạo PVC", () => S.pv === "Available" && !S.pvc, () => { S.pvc = "Bound"; S.pv = "Bound"; return "Controller ghép PVC với PV: cả hai thành Bound, PV ghi claimRef trỏ về PVC."; }],
+    mkpod: ["3. Pod dùng PVC, ghi dữ liệu", () => S.pvc === "Bound" && !S.pod, () => { S.pod = true; S.data = true; return "kubelet mount disk vào node rồi vào container. App ghi dữ liệu lên disk."; }],
+    delpvc: ["4. Xóa PVC", () => S.pvc === "Bound", () => { if (S.pod) { S.pvc = "Terminating"; return "Pod vẫn dùng PVC nên finalizer kubernetes.io/pvc-protection giữ nó ở Terminating. Lệnh k delete pvc treo ở đây."; } return release(); }],
+    delpod: ["5. Xóa Pod", () => S.pod, () => { S.pod = false; return S.pvc === "Terminating" ? "Pod đi rồi, finalizer được gỡ. " + release() : "Pod bị xóa, disk được gỡ khỏi node. PVC và PV vẫn Bound, dữ liệu còn."; }],
+    unclaim: ["6. Bỏ claimRef để dùng lại", () => S.pv === "Released", () => { S.pv = "Available"; return "k patch pv … remove /spec/claimRef: PV về Available. Dữ liệu cũ vẫn trên disk, PVC mới ghép vào sẽ thấy nó; muốn sạch thì admin tự xóa."; }],
+    reset: ["↺ Làm lại", () => true, () => { reset(); return "Bắt đầu lại."; }]
+  };
+  function release() {
+    S.pvc = null;
+    if (S.pol === "Retain") { S.pv = "Released"; return "PVC bị xóa. Retain: PV thành Released, vẫn giữ claimRef cũ nên không PVC mới nào ghép được, disk và dữ liệu còn nguyên."; }
+    S.pv = null; S.disk = false; S.data = false; return "PVC bị xóa. Delete: PV bị xóa và driver xóa luôn disk thật. Dữ liệu mất hẳn.";
+  }
+  const draw = () => {
+    svg.innerHTML = "";
+    const col = { Available: "run", Bound: "v1", Released: "start", Terminating: "term" };
+    const B = (x, t, s, on) => lcBox(svg, x, 60, 150, 64, "an-c " + (on ? col[s] || "run" : "done"), t, s || "chưa có");
+    B(20, "Pod", S.pod ? "Running" : "", S.pod);
+    B(210, "PVC data", S.pvc, !!S.pvc);
+    B(400, "PV pv-data", S.pv ? S.pv + " · " + S.pol : "", !!S.pv);
+    lcBox(svg, 590, 60, 150, 64, S.disk ? "an-vol" : "an-c done", "Disk thật", S.disk ? (S.data ? "có dữ liệu" : "trống") : "không còn");
+    [[170, 210, S.pod && S.pvc], [360, 400, S.pvc && S.pv === "Bound"], [550, 590, S.pv && S.disk]].forEach(([a, b, on]) => el("path", { d: "M" + a + " 92 H" + b, class: "an-l" + (on ? " on" : "") }, svg));
+    if (S.pv === "Released") txt(svg, 475, 150, "claimRef: shop/data (cũ)", "sv-s", "middle");
+    if (S.pvc === "Terminating") txt(svg, 285, 150, "finalizer pvc-protection", "sv-s", "middle");
+    $("#plBtns").innerHTML = Object.entries(A).map(([k, [t, can]]) => '<button type="button" data-pl="' + k + '"' + (can() ? "" : " disabled") + ">" + t + "</button>").join("");
+    $("#plOut").textContent = "$ k get pv,pvc\nNAME                 CAPACITY  RECLAIM POLICY  STATUS      CLAIM\n" +
+      (S.pv ? "persistentvolume/pv-data   10Gi  " + S.pol.padEnd(14) + "  " + S.pv.padEnd(10) + "  " + (S.pv === "Available" ? "" : "shop/data") : "(không có PV)") +
+      "\n\nNAME                    STATUS        VOLUME\n" + (S.pvc ? "persistentvolumeclaim/data  " + S.pvc.padEnd(12) + "  pv-data" : "(không có PVC)");
+  };
+  p.addEventListener("click", e => {
+    const b = e.target.closest("[data-pl]"); if (b && !b.disabled) { cap.textContent = A[b.dataset.pl][2](); draw(); return; }
+    const q = e.target.closest("[data-pol]"); if (q) { S.pol = q.dataset.pol; netPress(p, "data-pol", S.pol); draw(); }
+  });
+  reset(); draw(); cap.textContent = "Bấm lần lượt các bước. Thử cả hai reclaim policy.";
+}
+lcOnce("pv", () => { pbInit(); plInit(); });
 
 /* ---------- khung chương / bài của trang Lý thuyết ----------
    lessonFrame(): đầu bài (chương + tab các bài) và cuối bài (ôn thi: năng lực CKA, thẻ CKAD, bài tập; đã học; bài trước/sau).

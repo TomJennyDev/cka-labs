@@ -6,7 +6,7 @@ Bộ **46 bài lab thực hành** để thi Certified Kubernetes Administrator (
 
 | Trang | Nội dung |
 |---|---|
-| **Lý thuyết** [`docs/learn.html`](docs/learn.html) | Lý thuyết CKA và CKAD trong 9 chương theo domain thi: 0 Bắt đầu (kỳ thi, đề cương) · 1 Kiến trúc & cơ chế · 2 Workload & ứng dụng · 3 Scheduling & tài nguyên · 4 Mạng (Mạng Pod & CNI, Service, DNS, Ingress, Gateway API, NetworkPolicy) · 5 Storage · 6 Bảo mật · 7 Vận hành cluster · 8 Troubleshooting & observability, cộng phần Tra cứu (khái niệm, cheatsheet CKA + CKAD, quiz). Mỗi chủ đề dạy ở đúng một bài; cuối bài có phần ôn thi (năng lực CKA, thẻ CKAD, link bài tập) và nút bài trước/sau |
+| **Lý thuyết** [`docs/learn.html`](docs/learn.html) | Lý thuyết CKA và CKAD trong 9 chương theo domain thi: 0 Bắt đầu (kỳ thi, đề cương) · 1 Kiến trúc & cơ chế · 2 Workload & ứng dụng · 3 Scheduling & tài nguyên · 4 Mạng (Mạng Pod & CNI, Service, DNS, Ingress, Gateway API, NetworkPolicy) · 5 Storage (Volume trong Pod, PV & PVC, StorageClass & CSI) · 6 Bảo mật · 7 Vận hành cluster · 8 Troubleshooting & observability, cộng phần Tra cứu (khái niệm, cheatsheet CKA + CKAD, quiz). Mỗi chủ đề dạy ở đúng một bài; cuối bài có phần ôn thi (năng lực CKA, thẻ CKAD, link bài tập) và nút bài trước/sau |
 | **Bài tập CKA** [`docs/index.html`](docs/index.html) | 46 lab tự chấm theo lộ trình 10 cấp; mục *Theo domain* xếp lab và 68 bài viết theo từng năng lực của curriculum CKA, kèm đề thi thử 17 câu 120 phút |
 | **Bài tập CKAD** [`docs/ckad.html`](docs/ckad.html) | 42 bài theo 5 domain và từng năng lực của curriculum CKAD v1.37, lời giải và lệnh kiểm tra, đề thi thử 2 giờ |
 
