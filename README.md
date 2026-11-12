@@ -6,7 +6,7 @@ Bộ **46 bài lab thực hành** để thi Certified Kubernetes Administrator (
 
 | Trang | Nội dung |
 |---|---|
-| **Lý thuyết** [`docs/learn.html`](docs/learn.html) | Toàn bộ lý thuyết CKA và CKAD: kỳ thi, kiến trúc, luồng từ kubectl tới kernel, workload (kể cả Pod nhiều container, Job/CronJob, image và API bị gỡ, chiến lược triển khai), mạng, storage, bảo mật, troubleshooting, scaling, best practices, Curriculum CKAD, quiz, cheatsheet CKA + CKAD |
+| **Lý thuyết** [`docs/learn.html`](docs/learn.html) | Lý thuyết CKA và CKAD trong 9 chương theo domain thi: 0 Bắt đầu (kỳ thi, đề cương) · 1 Kiến trúc & cơ chế · 2 Workload & ứng dụng · 3 Scheduling & tài nguyên · 4 Mạng · 5 Storage · 6 Bảo mật · 7 Vận hành cluster · 8 Troubleshooting & observability, cộng phần Tra cứu (khái niệm, cheatsheet CKA + CKAD, quiz). Mỗi chủ đề dạy ở đúng một bài; cuối bài có phần ôn thi (năng lực CKA, thẻ CKAD, link bài tập) và nút bài trước/sau |
 | **Bài tập CKA** [`docs/index.html`](docs/index.html) | 46 lab tự chấm theo lộ trình 10 cấp; mục *Theo domain* xếp lab và 68 bài viết theo từng năng lực của curriculum CKA, kèm đề thi thử 17 câu 120 phút |
 | **Bài tập CKAD** [`docs/ckad.html`](docs/ckad.html) | 42 bài theo 5 domain và từng năng lực của curriculum CKAD v1.37, lời giải và lệnh kiểm tra, đề thi thử 2 giờ |
 
@@ -207,7 +207,7 @@ tests/                  bộ kiểm thử chính các bài lab
 docs/index.html         trang hướng dẫn, sinh tự động
 tools/build.py          sinh labs/, README (bảng), docs/ từ src/
 tools/check_diagrams.py render thử mọi sơ đồ Mermaid để bắt lỗi cú pháp
-tools/learn.html        nguồn của trang Lý thuyết (docs/learn.html); learn-*.js là các module thêm, learn-ckad.js là lý thuyết CKAD
+tools/learn.html        nguồn của trang Lý thuyết (docs/learn.html): CHAPTERS định nghĩa chương/bài; learn-*.js là các bài thêm, learn-ckad.js lý thuyết CKAD, learn-path.js khung chương (đầu bài, ôn thi cuối bài, trước/sau)
 src/cka/bank.json       68 bài viết theo năng lực CKA, hiện ở docs/index.html#bank
 examples/               ứng dụng mẫu theo best practice: YAML chuẩn, Kustomize, Helm chart
 src/ckad/              curriculum, cheatsheet (vào trang Lý thuyết) và bài tập CKAD; tools/ckad.html, ckad.js dựng docs/ckad.html

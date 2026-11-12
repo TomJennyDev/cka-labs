@@ -5,7 +5,9 @@
 const LC_D = CKAD.domains, LC_DM = Object.fromEntries(LC_D.map(d => [d.id, d]));
 const LC_COL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)", env: "var(--data)", net: "var(--bad)" };
 /* năng lực CKAD có module riêng trong trang này: "domain:index" → view */
-const LC_HOME = { "build:0": "image", "build:2": "multi", "deploy:0": "workloads", "obs:0": "image" };
+const LC_HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "storage", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
+  "obs:0": "image", "obs:1": "probes", "obs:2": "obs", "obs:3": "obs", "obs:4": "trouble", "env:0": "ops", "env:1": "security", "env:2": "scale", "env:3": "perf", "env:4": "config", "env:5": "config",
+  "env:6": "security", "env:7": "security", "net:0": "network", "net:1": "network", "net:2": "network" };
 const lcEa = s => esc(s).replace(/"/g, "&quot;");
 const lcCode = t => '<div class="codewrap"><pre class="code" data-hl>' + esc(String(t).replace(/\n$/, "")) + "</pre></div>";
 const lcTl = items => '<ul class="tldr">' + items.map(x => "<li>" + x + "</li>").join("") + "</ul>";
@@ -25,16 +27,12 @@ const lcExLinks = (dom, tp) => {
 };
 const lcExById = (...ids) => '<div class="ck-links"><span class="small muted">Bài tập CKAD:</span>' + ids.map(id => { const e = CKAD.ex.find(x => x.id === id); return e ? '<a class="pill cp" href="ckad.html#ex-' + id + '">' + esc(e.title) + " ↗</a>" : ""; }).join("") + "</div>";
 /* thẻ năng lực: full = đủ lệnh, mẫu, bẫy; compact = chỉ chỗ học */
-function lcCard(dom, i, full) {
-  const t = LC_DM[dom].topics[i], home = LC_HOME[dom + ":" + i];
-  let h = '<article class="ck-topic"><span class="en">' + esc(t.t) + '</span><span class="vi">' + esc(t.vi) + "</span>";
-  if (full || !home) {
-    h += lcCode(t.cmd) + (t.yaml ? lcDet("Mẫu YAML", lcCode(t.yaml)) : "") + '<div class="trap"><b>Bẫy:</b> ' + esc(t.trap) + "</div>" +
-      '<div class="ck-links"><a class="ck-src" href="' + lcEa(t.docs) + '" target="_blank" rel="noopener">' + (t.docs.includes("helm.sh") ? "helm.sh/docs" : "kubernetes.io") + " ↗</a>" +
-      (t.learn ? '<a class="ck-src" href="#' + t.learn + '" data-go="' + t.learn + '">Học sâu: ' + esc(lcModName(t.learn)) + "</a>" : "") +
-      (/CronJob/.test(t.t) ? '<a class="ck-src" href="#jobs" data-go="jobs">Học sâu: ' + esc(lcModName("jobs")) + "</a>" : "") + (t.src || []).map(lcSrcChip).join("") + "</div>";
-  } else h += '<div class="ck-links"><a class="btn" href="#' + home + '" data-go="' + home + '">Học ở module ' + esc(lcModName(home)) + " →</a></div>";
-  return h + lcExLinks(dom, i) + "</article>";
+function lcCard(dom, i) {
+  const t = LC_DM[dom].topics[i];
+  return '<article class="ck-topic"><span class="en">CKAD · ' + esc(LC_DM[dom].vi) + " · " + esc(t.t) + '</span><span class="vi">' + esc(t.vi) + "</span>" +
+    lcCode(t.cmd) + (t.yaml ? lcDet("Mẫu YAML", lcCode(t.yaml)) : "") + '<div class="trap"><b>Bẫy:</b> ' + esc(t.trap) + "</div>" +
+    '<div class="ck-links"><a class="ck-src" href="' + lcEa(t.docs) + '" target="_blank" rel="noopener">' + (t.docs.includes("helm.sh") ? "helm.sh/docs" : "kubernetes.io") + " ↗</a>" + (t.src || []).map(lcSrcChip).join("") + "</div>" +
+    lcExLinks(dom, i) + "</article>";
 }
 function lcPkt(svg, pts, opt = {}) {
   return new Promise(res => {
@@ -111,7 +109,7 @@ function lcMulti() {
       ["Ambassador", "containers", "Song song với app", "Proxy tới DB, chia shard, thêm TLS hay retry"]
     ].map(r => "<tr>" + r.map((c, i) => "<td>" + (i === 1 ? "<code>" + esc(c) + "</code>" : i ? esc(c) : "<b>" + esc(c) + "</b>") + "</td>").join("") + "</tr>").join("") + "</tbody></table></div>" +
     '<p class="small muted" style="margin:0">Pod đứng <code>Init:0/1</code> hay <code>Init:CrashLoopBackOff</code>: đọc log của init bằng <code>k logs pod -c &lt;tên-init&gt;</code>.</p></div>' +
-    '<div class="ck-topics">' + lcCard("build", 2, true) + "</div>";
+    "";
   lcEnhance(box); lcAnimMulti($("#lcMultiAnim"));
 }
 lcOnce("multi", lcMulti);
@@ -169,7 +167,7 @@ function lcStrategy() {
   const p = $("#lcStrategy");
   const MODES = { rolling: "Rolling update", recreate: "Recreate", bluegreen: "Blue/green", canary: "Canary" };
   p.innerHTML = "<h3>Bốn cách đưa phiên bản mới lên</h3>" + lcTl(["<b>Rolling</b> và <b>Recreate</b> là <code>strategy.type</code> của Deployment.", "<b>Blue/green</b> và <b>canary</b> không có field riêng: ghép từ hai Deployment và một Service bằng label."]) +
-    '<div class="seg" role="group">' + Object.entries(MODES).map(([k, v], i) => '<button type="button" data-m="' + k + '" aria-pressed="' + !i + '">' + v + "</button>").join("") + '</div><div class="stage sm"><svg viewBox="0 0 760 260"></svg></div><div class="controls"><button class="btn primary" type="button" data-play>▶ Chạy</button><span class="hint cap" aria-live="polite"></span></div><div class="ck-topics" style="margin-top:6px">' + lcCard("deploy", 0, true) + "</div>";
+    '<div class="seg" role="group">' + Object.entries(MODES).map(([k, v], i) => '<button type="button" data-m="' + k + '" aria-pressed="' + !i + '">' + v + "</button>").join("") + '</div><div class="stage sm"><svg viewBox="0 0 760 260"></svg></div><div class="controls"><button class="btn primary" type="button" data-play>▶ Chạy</button><span class="hint cap" aria-live="polite"></span></div>';
   lcEnhance(p);
   const svg = $("svg", p), cap = $(".cap", p); let mode = "rolling", run = 0, pods = [], sel = "v1", hits = { v1: 0, v2: 0 };
   const SX = 380, slot = i => 20 + i * 90;
@@ -228,7 +226,6 @@ function lcImage() {
   const box = $("#lcImage");
   box.innerHTML = '<div class="panel col">' + lcTl(["Mỗi lệnh đổi file trong Dockerfile (<code>COPY</code>, <code>RUN</code>) tạo một <b>layer</b>; <code>USER</code>, <code>ENV</code>, <code>EXPOSE</code> chỉ ghi metadata.", "Đề cho <b>podman</b> hoặc docker: <code>build -t</code>, <code>tag</code>, <code>push</code>, <code>save -o</code> ra file tar.", "API bị gỡ: <code>apply</code> báo <i>no matches for kind</i>. Tra apiVersion mới bằng <code>k api-resources</code>, <code>k explain</code>."]) + "</div>" +
     '<div class="panel col ck-anim" id="lcLayers"></div>' +
-    '<div class="ck-topics">' + lcCard("build", 0, true) + lcCard("obs", 0, true) + "</div>" +
     '<div class="panel col"><h4>API hay bị hỏi khi nâng phiên bản</h4><div class="tbl"><table><thead><tr><th>Kind</th><th>apiVersion cũ (đã gỡ)</th><th>Dùng bây giờ</th></tr></thead><tbody>' + [
       ["Deployment, DaemonSet, StatefulSet", "extensions/v1beta1, apps/v1beta1, apps/v1beta2", "apps/v1"], ["Ingress", "extensions/v1beta1, networking.k8s.io/v1beta1", "networking.k8s.io/v1"],
       ["CronJob", "batch/v1beta1", "batch/v1"], ["HorizontalPodAutoscaler", "autoscaling/v2beta1, v2beta2", "autoscaling/v2"], ["PodDisruptionBudget", "policy/v1beta1", "policy/v1"], ["PodSecurityPolicy", "policy/v1beta1", "đã gỡ hẳn: dùng Pod Security Admission"]
@@ -476,15 +473,17 @@ function lcCronShow() {
   } catch (e) { box.innerHTML = '<p class="small" style="color:var(--bad);margin:0">' + esc(e.message) + "</p>"; }
 }
 
-/* ---------- 22 curriculum CKAD ---------- */
+/* ---------- 0.3 đề cương: mỗi năng lực CKAD → bài dạy nó + số bài tập ---------- */
 let lcCurDom = "all";
 function lcCurRender() {
-  const box = $("#lcCur");
-  box.innerHTML = '<div class="panel col">' + lcTl(["Danh sách năng lực lấy nguyên văn từ <a href=\"https://github.com/cncf/curriculum\" target=\"_blank\" rel=\"noopener\">cncf/curriculum</a> (CKAD v1.37), kèm giải thích tiếng Việt.", "Năng lực có module riêng trong trang này thì thẻ chỉ dẫn sang đó, không lặp lại nội dung.", "Mỗi thẻ có link tới bài tập tương ứng ở trang <a href=\"ckad.html#overview\">Bài tập CKAD</a>."]) +
-    '<div class="chips" id="lcCurDoms"><button type="button" data-cd="all" aria-pressed="' + (lcCurDom === "all") + '">Tất cả</button>' + LC_D.map(d => '<button type="button" data-cd="' + d.id + '" aria-pressed="' + (lcCurDom === d.id) + '">' + esc(d.vi) + " · " + d.w + "%</button>").join("") + "</div></div>" +
-    LC_D.filter(d => lcCurDom === "all" || d.id === lcCurDom).map(d => '<div class="col" style="gap:12px"><div class="controls" style="justify-content:space-between;margin:0"><h3 style="margin:0"><span class="ck-dom dom-' + d.id + '">' + d.w + "%</span> " + esc(d.vi) + ' <span class="small muted" style="font-weight:400">· ' + esc(d.t) + '</span></h3><a class="btn" href="ckad.html#' + d.id + '">' + CKAD.ex.filter(e => e.d === d.id).length + " bài tập ↗</a></div>" +
-      '<div class="ck-topics">' + d.topics.map((t, i) => lcCard(d.id, i, false)).join("") + "</div></div>").join("");
-  lcEnhance(box);
+  const box = $("#lcCur"), name = id => { const m = MODULES.find(x => x.id === id); return m ? m.n + " " + m.t : id; };
+  box.innerHTML = '<div class="panel col"><h3 style="margin:0">CKAD: 5 domain, 24 năng lực</h3><p class="muted small" style="margin:0">Năng lực lấy nguyên văn từ <a href="https://github.com/cncf/curriculum" target="_blank" rel="noopener">cncf/curriculum</a> (CKAD v1.37). Mỗi năng lực được dạy ở đúng một bài; thẻ ôn thi nằm cuối bài đó.</p>' +
+    '<div class="chips" id="lcCurDoms"><button type="button" data-cd="all" aria-pressed="' + (lcCurDom === "all") + '">Tất cả</button>' + LC_D.map(d => '<button type="button" data-cd="' + d.id + '" aria-pressed="' + (lcCurDom === d.id) + '">' + esc(d.vi) + " · " + d.w + "%</button>").join("") + "</div>" +
+    '<div class="tbl"><table><thead><tr><th>Năng lực</th><th>Học ở bài</th><th>Bài tập</th></tr></thead><tbody>' +
+    LC_D.filter(d => lcCurDom === "all" || d.id === lcCurDom).map(d => '<tr><td colspan="3"><span class="ck-dom dom-' + d.id + '">' + d.w + "%</span> <b>" + esc(d.vi) + "</b></td></tr>" + d.topics.map((t, i) => {
+      const home = LC_HOME[d.id + ":" + i], n = CKAD.ex.filter(e => e.d === d.id && e.tp === i).length;
+      return "<tr><td>" + esc(t.t) + '<br><span class="small muted">' + esc(t.vi) + '</span></td><td><a href="#' + home + '" data-go="' + home + '">' + esc(name(home)) + "</a></td><td>" + (n ? '<a href="ckad.html#' + d.id + '">' + n + " bài ↗</a>" : '<span class="muted">—</span>') + "</td></tr>";
+    }).join("")).join("") + "</tbody></table></div></div>";
 }
 lcOnce("ckadcur", () => {
   $("#lcCur").addEventListener("click", e => { const b = e.target.closest("[data-cd]"); if (b) { lcCurDom = b.dataset.cd; lcCurRender(); } });

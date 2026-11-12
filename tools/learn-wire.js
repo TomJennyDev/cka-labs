@@ -461,7 +461,7 @@ const WIRE_PROVIDERS = [
   ["kms v2", "Envelope encryption: khóa dữ liệu (DEK) mã hóa object, khóa chính (KEK) nằm trong KMS bên ngoài", "Khuyên dùng cho production: khóa chính không nằm trên đĩa control plane"]
 ];
 
-const WIRE_TABS = [["map", "Bản đồ kết nối"], ["pkt", "Mổ một gói tin"], ["tls", "TLS và danh tính"], ["pki", "Chứng chỉ kubeadm"], ["rest", "Mã hóa lúc lưu"], ["err", "Sự cố & khắc phục"], ["obs", "Quan sát (observability)"], ["cheat", "Bảng tra nhanh"]];
+const WIRE_TABS = [["map", "Bản đồ kết nối"], ["pkt", "Mổ một gói tin"], ["tls", "TLS và danh tính"], ["pki", "Chứng chỉ kubeadm"], ["rest", "Mã hóa lúc lưu"], ["cheat", "Bảng tra nhanh"]];
 let wireCur = "map", wireConn = "kubectl", wirePkt = "kubectl", wireVar = 0, wireEye = 0;
 
 const wCode = (t, cls) => '<div class="codewrap"><pre class="code' + (cls ? " " + cls : "") + '">' + kEsc(t) + "</pre></div>";
@@ -507,7 +507,7 @@ function wireInit() {
       const y = e.target.closest("[data-eye]"); if (y) { wireEye = +y.dataset.eye; wireShow(); return; }
       if (e.target.closest("#wmTour")) { wmTour(); return; }
       const pk = e.target.closest("[data-pki]"); if (pk) { const r = WIRE_PKI[+pk.dataset.pki]; $$(".pki-c").forEach(b => b.classList.toggle("on", b === pk)); $("#pkiInfo").innerHTML = "<b><code>" + kEsc(r[0]) + "</code></b><br>" + kEsc(r[3]) + '<br><span class="small muted">' + kEsc(r[2]) + " · ký bởi " + kEsc(r[1]) + " · hạn " + kEsc(r[4]) + "</span>"; return; }
-      const ge = e.target.closest("[data-go-err]"); if (ge) { errConn = ge.dataset.ec; errQ = ""; wireCur = "err"; store.set("wire", "err"); wireShow(); window.scrollTo(0, $("#errList").getBoundingClientRect().top + scrollY - 140); return; }
+      const ge = e.target.closest("[data-go-err]"); if (ge) { errConn = ge.dataset.ec; errQ = ""; show("connerr"); return; }
       const ob = e.target.closest("[data-obs]"); if (ob) { obsComp = +ob.dataset.obs; $$("#obsChips button").forEach(b => b.setAttribute("aria-pressed", b === ob ? "true" : "false")); $("#obsCard").innerHTML = obsCompHTML(); return; }
       const row = e.target.closest(".pk-row"); if (row) { const on = !row.classList.contains("hl"); $$(".pk-row.hl").forEach(x => x.classList.remove("hl")); if (on) row.classList.add("hl"); return; }
       if (e.target.closest("#pkPlay")) { const sc = WIRE_PKTS.find(p => p.id === wirePkt) || WIRE_PKTS[0]; pkPlay(sc, typeof sc.layers === "function" ? sc.layers(wireVar) : sc.layers); return; }
@@ -519,7 +519,7 @@ function wireInit() {
     $("#wireBody").addEventListener("input", e => { if (e.target.id === "errQ") { errQ = e.target.value; wireErrList(); } });
     $("#wireBody").addEventListener("change", e => { if (e.target.id === "sjEnc") { sjEnc = e.target.checked; sjTok(0); } });
     $("#wireBody").addEventListener("keydown", e => { const n = e.target.closest(".wm-n"); if (n && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); n.dispatchEvent(new MouseEvent("click", { bubbles: true })); } });
-    wireCur = store.get("wire", "map"); wireConn = store.get("wireConn", "kubectl");
+    wireCur = store.get("wire", "map"); if (!WIRE_TABS.some(t => t[0] === wireCur)) wireCur = "map"; wireConn = store.get("wireConn", "kubectl");
   }
   wireShow();
 }
@@ -550,7 +550,7 @@ function wireMapDetail() {
   wireCopy();
 }
 function wireCopy() {
-  $$("#wireBody pre.code").forEach(pre => { if (pre.parentElement.querySelector(".copy")) return; const b = document.createElement("button"); b.className = "copy"; b.type = "button"; b.textContent = "Chép"; b.onclick = () => { try { navigator.clipboard.writeText(pre.textContent); b.textContent = "Đã chép"; } catch (e) {} setTimeout(() => b.textContent = "Chép", 1200); }; pre.parentElement.appendChild(b); });
+  $$("#wireBody pre.code, #ceBody pre.code, #obsBody pre.code").forEach(pre => { if (pre.parentElement.querySelector(".copy")) return; const b = document.createElement("button"); b.className = "copy"; b.type = "button"; b.textContent = "Chép"; b.onclick = () => { try { navigator.clipboard.writeText(pre.textContent); b.textContent = "Đã chép"; } catch (e) {} setTimeout(() => b.textContent = "Chép", 1200); }; pre.parentElement.appendChild(b); });
 }
 
 function wirePktHTML() {

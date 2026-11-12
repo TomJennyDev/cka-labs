@@ -36,9 +36,13 @@ const det = (t, b, open) => '<details class="bp more"' + (open ? " open" : "") +
 const D = CKAD.domains, SRC = CKAD.sources, EX = CKAD.exercises, DM = Object.fromEntries(D.map(d => [d.id, d]));
 const DCOL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)", env: "var(--data)", net: "var(--bad)" };
 /* năng lực → module lý thuyết trong learn.html */
-const HOME = { "build:0": "image", "build:2": "multi", "deploy:0": "workloads", "obs:0": "image" };
-const LEARN_NAME = { image: "Container image & API", multi: "Pod nhiều container", workloads: "Triển khai & scheduling", kinds: "Workload resources", storage: "Storage", best: "Helm & Kustomize", probes: "Probes", scale: "Scaling & quota", trouble: "Troubleshooting", security: "RBAC & bảo mật", perf: "Hiệu năng & QoS", wire: "Giao tiếp & mã hóa", network: "Mạng & Service", jobs: "Job & CronJob", ckadcur: "Curriculum CKAD" };
-const theoryOf = (d, i) => HOME[d + ":" + i] || (/workload resource/i.test(DM[d].topics[i].t) ? "jobs" : DM[d].topics[i].learn) || "ckadcur";
+const HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "storage", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
+  "obs:0": "image", "obs:1": "probes", "obs:2": "obs", "obs:3": "obs", "obs:4": "trouble", "env:0": "ops", "env:1": "security", "env:2": "scale", "env:3": "perf", "env:4": "config", "env:5": "config",
+  "env:6": "security", "env:7": "security", "net:0": "network", "net:1": "network", "net:2": "network" };
+const LEARN_NAME = { image: "2.1 Container image & API", kinds: "2.2 Chọn loại workload", multi: "2.3 Pod nhiều container", jobs: "2.4 Job & CronJob", config: "2.5 ConfigMap & Secret", probes: "2.6 Probe & tự phục hồi", workloads: "2.7 Triển khai & cập nhật",
+  perf: "3.2 Requests, limits & QoS", scale: "3.3 Scaling, quota & ước lượng node", network: "4.1 Service, DNS, Ingress & NetworkPolicy", storage: "5.1 Volume, PV, PVC & StorageClass", security: "6.1 RBAC, ServiceAccount & securityContext",
+  ops: "7.1 kubeadm, nâng cấp, etcd & HA", best: "7.2 Helm, Kustomize & best practice", trouble: "8.1 Lỗi Pod, node & control plane", obs: "8.3 Log, metric & cảnh báo" };
+const theoryOf = (d, i) => HOME[d + ":" + i] || "ckadcur";
 const theoryLink = (d, i) => { const m = theoryOf(d, i); return '<a class="ck-src" href="learn.html#' + m + '">Lý thuyết: ' + esc(LEARN_NAME[m] || m) + " ↗</a>"; };
 function srcUrl(s) {
   const base = SRC[s[0]].url, br = { dgk: "main", bmc: "master", bmg: "master", k8sdocs: "main", helm: "main", curriculum: "main" }[s[0]];
@@ -83,7 +87,7 @@ function openEx(root, id) { const t = $("#" + (root.dataset.view === "ex" ? "ex-
 RENDER.overview = () => {
   const d0 = done();
   return '<header class="vh"><p class="eyebrow">Bài tập CKAD · Kubernetes v1.37 · curriculum CNCF</p><h2>Bài tập theo đề cương CKAD</h2><p class="lead">' + EX.length + " bài viết theo giọng đề thi, xếp đúng 5 domain và từng năng lực của Linux Foundation. Lời giải có lệnh tự kiểm tra; hầu hết đã chạy thử trên cluster.</p></header>" +
-    '<div class="panel col">' + tl(["Chọn một domain, làm lần lượt các bài dưới từng năng lực. Chưa nắm thì bấm <b>Lý thuyết</b> để sang trang Lý thuyết.", "Làm xong thì chạy <b>lệnh kiểm tra</b> rồi tick <b>Đã làm xong</b>; tiến độ lưu trong trình duyệt này.", "Cuối cùng làm <a href=\"#mock\" data-go=\"mock\">đề thi thử 2 giờ</a> bốc 15 task theo tỉ trọng. Thông tin kỳ thi, mẹo làm bài, cheatsheet: <a href=\"learn.html#exam\">Lý thuyết · Kỳ thi CKA &amp; CKAD</a>."]) + "</div>" +
+    '<div class="panel col">' + tl(["Chọn một domain, làm lần lượt các bài dưới từng năng lực. Chưa nắm thì bấm <b>Lý thuyết</b> để sang trang Lý thuyết.", "Làm xong thì chạy <b>lệnh kiểm tra</b> rồi tick <b>Đã làm xong</b>; tiến độ lưu trong trình duyệt này.", "Cuối cùng làm <a href=\"#mock\" data-go=\"mock\">đề thi thử 2 giờ</a> bốc 15 task theo tỉ trọng. Thông tin kỳ thi, mẹo làm bài: <a href=\"learn.html#exam\">Lý thuyết 0.2</a>; cheatsheet: <a href=\"learn.html#commands\">Lý thuyết R.2</a>."]) + "</div>" +
     '<div class="panel col"><h4>5 domain, tỉ trọng và tiến độ</h4><div class="ck-bars" id="ckBars">' +
     D.map(d => { const xs = EX.filter(e => e.d === d.id), n = xs.filter(e => d0[e.id]).length;
       return '<button type="button" class="ck-bar" data-go="' + d.id + '"><span class="lab"><b>' + esc(d.vi) + "</b><small>" + esc(d.t) + " · " + d.topics.length + " năng lực · " + n + "/" + xs.length + ' bài đã làm</small><span class="track"><i style="background:' + DCOL[d.id] + '" data-w="' + (xs.length ? n / xs.length * 100 : 0) + '"></i></span></span><span class="w">' + d.w + '%</span><span class="m">≈ ' + Math.round(d.w * 1.2) + " phút</span></button>"; }).join("") + "</div>" +

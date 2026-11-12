@@ -39,7 +39,7 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--paper-2);border:
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;background:var(--paper);border-bottom:1px solid var(--line);display:flex;align-items:center;gap:14px;height:52px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 .brand{display:flex;align-items:center;gap:10px;font-family:var(--f-display);font-weight:800;font-size:19px;letter-spacing:-.01em;white-space:nowrap}
 .xnav{display:flex;gap:4px;margin-left:6px}.xnav a{font-size:14px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:6px;white-space:nowrap}.xnav a[aria-current="page"]{color:var(--ink);background:var(--paper-2)}
-@media (max-width:560px){.xnav{margin-left:0}.xnav a{padding:6px 7px;font-size:13px}.top .meta,.brand .tag{display:none!important}.top{gap:8px}}
+@media (max-width:560px){.brand .bx{display:none}.xnav{margin-left:0}.xnav a{padding:6px 7px;font-size:13px}.top .meta,.brand .tag{display:none!important}.top{gap:8px}}
 .plan li>div{min-width:0;overflow-wrap:anywhere}
 .mmd{overflow-x:auto;text-align:center;padding:4px 0;contain:paint}
 .mmd pre.mermaid{background:none;margin:0;font:12px/1.5 var(--f-mono);color:var(--ink);text-align:left;white-space:pre-wrap}
@@ -59,7 +59,7 @@ code{font-family:var(--f-mono);font-size:.88em;background:var(--paper-2);border:
 .rail a{display:flex;gap:9px;align-items:baseline;padding:6px 10px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500;font-size:14px;line-height:1.35}
 .rail a .n{font:600 11px var(--f-mono);opacity:.75}
 .rail a:hover{color:var(--ink)}
-.rail a[aria-current="page"]{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
+.rail a[aria-current="page"],.rail a[aria-current="true"]{background:var(--paper);color:var(--ink);box-shadow:inset 0 0 0 1px var(--line)}
 .rail a[aria-current="page"] .n{color:var(--accent);opacity:1}
 @media (min-width:1024px){
   .layout{grid-template-columns:236px minmax(0,1fr)}
@@ -600,6 +600,49 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 #cpMap .comp:hover > rect{stroke-width:2.6}
 
 @media (prefers-reduced-motion: reduce){*{animation:none !important;transition:none !important}}
+/* ---------- chương / bài ---------- */
+.rail .sub{display:none;list-style:none;margin:0;padding:0}
+.rail li.ch{list-style:none}
+.rail a .cp{margin-left:auto;font:600 10.5px var(--f-mono);color:var(--muted)}.rail a .cp.full{color:var(--node)}
+.rail .sub a.ok span:last-child::after{content:" ✓";color:var(--node)}
+@media (min-width:1024px){
+  .rail li.ch>a{font-weight:600;color:var(--ink)}
+  .rail li.ch.open>.sub{display:flex;flex-direction:column;gap:1px;margin:2px 0 8px 14px;padding-left:8px;border-left:2px solid var(--line)}
+  .rail .sub a{font-size:13.5px;padding:5px 8px}
+  .rail li.ch>a[aria-current="true"]{color:var(--accent)}
+}
+.view>.vh .eyebrow{display:none}
+#lhead{display:flex;flex-direction:column;gap:10px;margin-bottom:26px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+#lhead .chx{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}
+#lhead .chx b{font:600 12px var(--f-mono);letter-spacing:.07em;text-transform:uppercase;color:var(--accent)}
+#lhead .chx span{font-size:13px;color:var(--muted)}
+.ltabs{display:flex;gap:4px;overflow-x:auto;scrollbar-width:thin;padding-bottom:2px}
+.ltabs a{flex:0 0 auto;display:flex;gap:6px;align-items:baseline;text-decoration:none;color:var(--muted);font-size:13.5px;font-weight:500;padding:6px 11px;border:1px solid var(--line);border-radius:999px;background:var(--paper);white-space:nowrap}
+.ltabs a .n{font:600 11px var(--f-mono)}
+.ltabs a.ok .n::after{content:" ✓";color:var(--node)}
+.ltabs a[aria-current="page"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.ltabs a[aria-current="page"] .n{color:inherit}
+#lfoot{display:flex;flex-direction:column;gap:14px;margin-top:6px}
+#lfoot:empty{display:none}
+.lf-prac{display:flex;flex-direction:column;gap:12px}
+.lf-prac h3{margin:0;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.lf-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.lf-row>.small{min-width:92px}
+.lf-row a.pill{text-decoration:none;white-space:normal;text-align:left;max-width:100%}
+.lf-nav{display:grid;gap:10px;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.lf-nav a{display:flex;flex-direction:column;gap:2px;text-decoration:none;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:12px 14px;background:var(--paper);min-width:0}
+.lf-nav a:hover{border-color:var(--accent)}
+.lf-nav a small{font:600 11px var(--f-mono);color:var(--muted);letter-spacing:.04em}
+.lf-nav a b{font-size:14.5px;overflow-wrap:anywhere}
+.lf-nav a.next{text-align:right;grid-column:2}
+.lf-done{display:flex;justify-content:center}
+.chmap{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(min(260px,100%),1fr))}
+.chmap .c{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;background:var(--paper)}
+.chmap .c h4{margin:0;display:flex;gap:8px;align-items:baseline}.chmap .c h4 .n{font:700 12px var(--f-mono);color:var(--accent)}
+.chmap .c p{margin:0;font-size:13px;color:var(--muted)}
+.chmap .c ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:2px}
+.chmap .c ol a{font-size:13.5px;text-decoration:none}.chmap .c ol a.ok::after{content:" ✓";color:var(--node)}
+.chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
 /* ---------- CKAD: thẻ năng lực, animation, bài tập (dùng chung cho learn.html và ckad.html) ---------- */
 .ck-bars{display:flex;flex-direction:column;gap:10px}
 .ck-bar{display:grid;grid-template-columns:minmax(0,1fr) 54px 70px;gap:10px;align-items:center;cursor:pointer;border:0;background:none;text-align:left;color:var(--ink);font:inherit;padding:0}
@@ -676,13 +719,14 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 </style>
 
 <header class="top">
-  <a class="brand" href="learn.html#overview" style="color:inherit;text-decoration:none">CKA · CKAD <span class="tag">k8s v1.37</span></a>
+  <a class="brand" href="learn.html#overview" style="color:inherit;text-decoration:none"><span>CKA<span class="bx"> · CKAD</span></span> <span class="tag">k8s v1.37</span></a>
   <nav class="xnav" aria-label="Các phần"><a href="learn.html#overview" aria-current="page">Lý thuyết</a><a href="index.html#home">Bài tập CKA</a><a href="ckad.html#overview">Bài tập CKAD</a></nav>
   <div class="meta"><span id="progTxt">0% checklist</span><span class="meter" aria-hidden="true"><i id="progBar"></i></span></div>
 </header>
 <div class="layout">
 <nav class="rail" aria-label="Module"><ol id="rail"></ol></nav>
 <main id="main">
+<div id="lhead"></div>
 
 <!-- ============ 00 OVERVIEW ============ -->
 <section class="view" data-view="overview">
@@ -690,12 +734,11 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
     <div>
       <p class="eyebrow">CKA và CKAD · ôn theo curriculum Kubernetes v1.37</p>
       <h1>Nhìn cluster chạy, <em>rồi mới gõ lệnh.</em></h1>
-      <p class="lead">Bộ học tương tác cho CKA và CKAD: kiến trúc, đường đi của một Pod từ <code>kubectl</code> xuống tới syscall trong kernel Linux, mạng Service, scheduling, storage, RBAC, vận hành kubeadm, troubleshooting và tối ưu hiệu năng. Có 162 khái niệm theo tài liệu kubernetes.io, kiến trúc 3 lớp, 9 animation cơ chế, mô phỏng probe. Toàn bộ lý thuyết CKA và CKAD gom ở trang này; bài tập nằm ở hai trang Bài tập CKA và Bài tập CKAD.</p>
+      <p class="lead">Lý thuyết CKA và CKAD trong 9 chương, đi từ kiến trúc tới troubleshooting. Mỗi chương gom một domain thi; mỗi bài có animation hoặc mô phỏng, rồi kết thúc bằng phần ôn thi và link bài tập. Bài tập nằm ở hai trang Bài tập CKA và Bài tập CKAD.</p>
       <div class="controls" style="margin-top:18px">
-        <a class="btn primary" href="#flow" data-go="flow">Xem một Pod ra đời</a>
-        <a class="btn" href="#commands" data-go="commands">Mở terminal mô phỏng</a>
-        <a class="btn" href="#concepts" data-go="concepts">Thư viện khái niệm</a>
-        <a class="btn" href="index.html#bank">Bài tập CKA theo domain ↗</a>
+        <a class="btn primary" href="#arch" data-go="arch">Bắt đầu chương 1 →</a>
+        <a class="btn" href="#exam" data-go="exam">Kỳ thi &amp; mẹo làm bài</a>
+        <a class="btn" href="#ckadcur" data-go="ckadcur">Đề cương CKA &amp; CKAD</a>
       </div>
     </div>
     <div class="term" id="heroTerm" aria-label="Terminal minh họa"></div>
@@ -708,15 +751,9 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
     <div><b>30%</b><span>Troubleshooting, domain nặng nhất</span></div>
   </div>
 
-  <div class="panel">
-    <h3>Trọng số 5 domain và checklist năng lực</h3>
-    <p class="muted small">Bấm vào thanh để tới module tương ứng. Tick từng năng lực khi bạn làm được mà không cần xem đáp án; tiến độ lưu trong trình duyệt này.</p>
-    <div class="wbar" id="wbar"></div>
-    <div class="domains" id="domains"></div>
-  </div>
+  <div class="panel col"><h3 style="margin:0">9 chương, đi theo thứ tự</h3><p class="muted small" style="margin:0">Mỗi chương gom một domain thi. Mỗi bài kết thúc bằng phần ôn thi: thẻ CKAD, năng lực CKA và link bài tập. Tick “Đã học” ở cuối bài để theo dõi tiến độ.</p><div id="chMap"></div></div>
 
-  <div class="split even">
-    <div class="panel">
+  <div class="panel">
       <h3>Lộ trình 6 tuần</h3>
       <ol class="plan">
         <li><span class="wk">Tuần 1</span><div><b>Kiến trúc và Linux bên dưới.</b> Dựng cluster kubeadm (1 control plane, 2 worker) trên VM. Đọc 4 static pod manifest, dùng <code>crictl</code>, <code>journalctl -u kubelet</code>.</div></li>
@@ -726,24 +763,6 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
         <li><span class="wk">Tuần 5</span><div><b>Vận hành và Troubleshooting.</b> Upgrade bằng kubeadm, control plane HA, chứng chỉ, sao lưu etcd. Tự phá cluster rồi sửa: đổi port apiserver, dừng kubelet, sai selector.</div></li>
         <li><span class="wk">Tuần 6</span><div><b>Thi thử và tốc độ.</b> Hai lượt killer.sh đi kèm phiếu thi, luyện lệnh imperative, tra docs kubernetes.io thật nhanh.</div></li>
       </ol>
-    </div>
-    <div class="panel">
-      <h3>Mẹo trong phòng thi</h3>
-      <ul class="tight">
-        <li>Mỗi câu có lệnh <code>kubectl config use-context …</code>. Chạy nó trước tiên, sai context là mất trọn điểm câu đó.</li>
-        <li>Sinh YAML bằng lệnh imperative rồi sửa: <code>k create deploy web --image=nginx $do &gt; web.yaml</code>.</li>
-        <li><code>kubectl explain pod.spec.containers --recursive</code> nhanh hơn nhớ field.</li>
-        <li>Câu khó thì flag và đi tiếp. Một câu 7% làm dở vẫn có thể được điểm từng phần.</li>
-        <li>Câu trên node: <code>ssh node01</code>, <code>sudo -i</code>, xong nhớ <code>exit</code> về máy chính.</li>
-        <li>Sau khi sửa static pod manifest, chờ kubelet tạo lại pod (khoảng 20–60 giây) rồi mới kiểm tra.</li>
-      </ul>
-      <div class="codewrap" style="margin-top:14px"><pre class="code" data-hl>alias k=kubectl                       # thường đã có sẵn
-export do="--dry-run=client -o yaml"   # k run x --image=nginx $do
-export now="--force --grace-period 0"  # k delete po x $now
-source &lt;(kubectl completion bash); complete -o default -F __start_kubectl k
-# ~/.vimrc
-set expandtab tabstop=2 shiftwidth=2</pre></div>
-    </div>
   </div>
 </section>
 
@@ -1150,6 +1169,9 @@ k delete deploy web --cascade=orphan   # giữ ReplicaSet và Pod</pre></div>
     <div class="seg" id="kindsTabs" role="group" aria-label="Chọn loại workload"></div>
     <div id="kindBody" class="col" style="gap:16px" aria-live="polite"></div>
   </div>
+  <h3 style="margin:8px 0 0">Thẻ nhanh từng loại</h3>
+  <div class="grid" id="wlCards"></div>
+
 </section>
 
 <!-- ============ BEST PRACTICES ============ -->
@@ -1163,36 +1185,15 @@ k delete deploy web --cascade=orphan   # giữ ReplicaSet và Pod</pre></div>
   <div id="bestBody" class="col" style="gap:16px" aria-live="polite"></div>
 </section>
 
-<section class="view" data-view="workloads" hidden>
+<!-- ============ scheduler (tách từ workloads) ============ -->
+<section class="view" data-view="sched" hidden>
   <header class="vh">
-    <p class="eyebrow">Workloads &amp; Scheduling · 15%</p>
-    <h2>Triển khai và scheduling, chạy thử</h2>
-    <p class="lead">Rolling update, bốn chiến lược đưa bản mới lên (rolling, recreate, blue/green, canary) và scheduler. Mô phỏng dùng đúng luật của Deployment controller và các plugin Filter/Score của kube-scheduler (đã đơn giản hóa phần chấm điểm).</p>
+    <p class="eyebrow">Scheduling</p>
+    <h2>Scheduler và nơi Pod chạy</h2>
+    <p class="lead">kube-scheduler chọn node cho Pod theo hai bước: lọc node không chạy được, rồi chấm điểm node còn lại. Bạn điều khiển kết quả bằng label, affinity, taint, toleration và priority.</p>
   </header>
-  <div class="domap" data-dom="work"></div>
-
-  <div class="panel">
-    <h3>Rolling update: maxSurge và maxUnavailable</h3>
-    <div class="formrow" style="margin:6px 0 14px">
-      <label class="f" style="width:150px">replicas: <span id="ruNv">6</span><input type="range" id="ruN" min="2" max="10" value="6"></label>
-      <label class="f" style="width:150px">maxSurge: <span id="ruSv">1</span><input type="range" id="ruS" min="0" max="4" value="1"></label>
-      <label class="f" style="width:150px">maxUnavailable: <span id="ruUv">0</span><input type="range" id="ruU" min="0" max="4" value="0"></label>
-      <button class="btn primary" id="ruRun">▶ Rollout v1 → v2</button>
-      <button class="btn" id="ruReset">Đặt lại</button>
-    </div>
-    <div class="pods" id="ruPods"></div>
-    <div class="stats" style="margin:10px 0" id="ruStats"></div>
-    <div class="log" id="ruLog"></div>
-    <p class="small muted" style="margin-top:10px">Khung nét đứt = đang khởi động (chưa qua readinessProbe). <code>maxSurge=0</code> và <code>maxUnavailable=0</code> cùng lúc bị API từ chối vì rollout không thể tiến. Với dịch vụ cần không gián đoạn, đặt <code>maxUnavailable: 0</code> và có readinessProbe.</p>
-    <div class="codewrap"><pre class="code" data-hl>k set image deploy/web nginx=nginx:1.27   # kích hoạt rollout
-k rollout status deploy/web
-k rollout history deploy/web
-k rollout undo deploy/web --to-revision=2
-k annotate deploy/web kubernetes.io/change-cause="nâng nginx 1.27"</pre></div>
-  </div>
-
-  <div class="panel col ck-anim" id="lcStrategy"></div>
-
+  <ul class="tldr"><li>Scheduler chỉ ghi <code>spec.nodeName</code>; kubelet trên node đó mới chạy Pod.</li><li><b>Filter</b> loại node thiếu tài nguyên (theo <b>requests</b>), sai label, có taint không chịu được.</li><li>Pod đứng <code>Pending</code>: đọc Events bằng <code>k describe pod</code>, dòng <code>FailedScheduling</code> nói rõ lý do từng node.</li></ul>
+  <div class="domap" data-dom="work" data-only="4"></div>
   <div class="panel">
     <h3>kube-scheduler: Filter rồi Score</h3>
     <p class="muted small">Cấu hình Pod, bấm Schedule và xem từng node bị loại vì sao. Khi không còn node nào, bạn nhận đúng kiểu event <code>FailedScheduling</code> như trong đề.</p>
@@ -1224,11 +1225,20 @@ k annotate deploy/web kubernetes.io/change-cause="nâng nginx 1.27"</pre></div>
     </table></div>
   </div>
 
-  <div class="grid" id="wlCards"></div>
+</section>
 
+<!-- ============ ConfigMap & Secret ============ -->
+<section class="view" data-view="config" hidden>
+  <header class="vh">
+    <p class="eyebrow">Workload &amp; ứng dụng</p>
+    <h2>ConfigMap và Secret: đưa cấu hình vào Pod</h2>
+    <p class="lead">Tách cấu hình khỏi image. ConfigMap cho dữ liệu thường, Secret cho dữ liệu nhạy cảm. Cả hai đưa vào container theo hai cách: biến môi trường hoặc file trong volume.</p>
+  </header>
+  <ul class="tldr"><li><b>Biến môi trường</b> chỉ đọc lúc container khởi động: đổi ConfigMap phải restart Pod.</li><li><b>File trong volume</b> được kubelet cập nhật sau ít phút (trừ khi mount bằng <code>subPath</code>).</li><li>Secret chỉ là <b>base64</b>, không phải mã hóa. Bảo vệ bằng RBAC và bật mã hóa lúc lưu trong etcd.</li></ul>
+  <div class="domap" data-dom="work" data-only="1"></div>
   <div class="split even">
     <div class="panel">
-      <h3>Probes, ConfigMap, Secret</h3>
+      <h3>Một container dùng đủ bốn cách</h3>
       <div class="codewrap"><pre class="code" data-hl>containers:
 - name: api
   image: ghcr.io/acme/api:2.4.1
@@ -1238,14 +1248,6 @@ k annotate deploy/web kubernetes.io/change-cause="nâng nginx 1.27"</pre></div>
   - name: DB_PASSWORD
     valueFrom:
       secretKeyRef: {name: db, key: password}
-  startupProbe:            # chờ app khởi động chậm
-    httpGet: {path: /healthz, port: 8080}
-    failureThreshold: 30
-    periodSeconds: 2
-  readinessProbe:          # trượt = rút khỏi Service
-    httpGet: {path: /ready, port: 8080}
-  livenessProbe:           # trượt = kubelet restart container
-    httpGet: {path: /healthz, port: 8080}
   volumeMounts:
   - {name: cfg, mountPath: /etc/api, readOnly: true}
 volumes:
@@ -1253,30 +1255,76 @@ volumes:
   configMap: {name: api-config}</pre></div>
     </div>
     <div class="panel">
-      <h3>Autoscaling</h3>
-      <p class="small">HPA cần metrics-server (hoặc adapter custom metrics). Tỉ lệ được tính trên <b>requests</b>, nên Pod không đặt requests thì HPA theo CPU không hoạt động.</p>
-      <div class="codewrap"><pre class="code" data-hl>k autoscale deploy web --min=2 --max=10 --cpu-percent=70
-k get hpa -w
-k top pods --sort-by=cpu
+      <h3>Tạo nhanh bằng lệnh</h3>
+      <div class="codewrap"><pre class="code" data-hl>k create cm api-config --from-literal=LOG_LEVEL=info --from-file=app.conf
+k create cm api-env --from-env-file=app.env      # mỗi dòng KEY=VALUE
+k create secret generic db --from-literal=password='S3cr3t!'
+k create secret tls web-tls --cert=tls.crt --key=tls.key
+k create secret docker-registry regcred --docker-server=registry.lab:5000 \
+  --docker-username=dev --docker-password=pass
 
-# HPA v2 với behavior chống dao động
-apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata: {name: web}
-spec:
-  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web}
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  - type: Resource
-    resource:
-      name: cpu
-      target: {type: Utilization, averageUtilization: 70}
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300</pre></div>
+# đọc lại giá trị của Secret
+k get secret db -o jsonpath='{.data.password}' | base64 -d
+
+# gắn vào Deployment có sẵn
+k set env deploy/api --from=configmap/api-config
+k set env deploy/api --from=secret/db --prefix=DB_</pre></div>
     </div>
   </div>
+  <div class="panel">
+    <h3>Chọn cách đưa vào container</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Cách</th><th>Khai báo</th><th>Đổi ConfigMap/Secret thì</th><th>Dùng khi</th></tr></thead>
+      <tbody>
+        <tr><td><b>Một biến</b></td><td><code>env[].valueFrom.configMapKeyRef</code> / <code>secretKeyRef</code></td><td>Phải restart Pod</td><td>App đọc vài biến</td></tr>
+        <tr><td><b>Mọi key thành biến</b></td><td><code>envFrom[].configMapRef</code> / <code>secretRef</code></td><td>Phải restart Pod</td><td>Nhiều biến, đặt tên sẵn</td></tr>
+        <tr><td><b>File trong volume</b></td><td><code>volumes[].configMap</code> / <code>secret</code></td><td>Tự cập nhật sau ít phút</td><td>File cấu hình, chứng chỉ</td></tr>
+        <tr><td><b>Một file bằng subPath</b></td><td><code>volumeMounts[].subPath</code></td><td>Không bao giờ cập nhật</td><td>Chèn 1 file vào thư mục có sẵn</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="panel">
+    <h3>Secret: những điều hay bị hỏi</h3>
+    <ul class="tight">
+      <li>Loại hay gặp: <code>Opaque</code> (generic), <code>kubernetes.io/tls</code>, <code>kubernetes.io/dockerconfigjson</code> (dùng trong <code>imagePullSecrets</code>), <code>kubernetes.io/service-account-token</code>.</li>
+      <li>Trong YAML, <code>data</code> phải là base64; <code>stringData</code> nhận chữ thường và API tự mã hóa base64.</li>
+      <li><code>immutable: true</code> khóa nội dung, giảm tải cho apiserver; muốn đổi thì xóa và tạo lại.</li>
+      <li>ConfigMap và Secret giới hạn 1 MiB mỗi object, và phải cùng namespace với Pod.</li>
+      <li>Ai đọc được Secret: người có quyền <code>get</code>/<code>list</code> secrets, và mọi ai tạo được Pod trong namespace đó. Xem đường đi của Secret từ etcd tới Pod ở bài <a href="#wire" data-go="wire">Giao tiếp &amp; mã hóa → Mã hóa lúc lưu</a>.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="view" data-view="workloads" hidden>
+  <header class="vh">
+    <p class="eyebrow">Workloads &amp; Scheduling · 15%</p>
+    <h2>Triển khai và cập nhật phiên bản</h2>
+    <p class="lead">Deployment thay Pod cũ bằng Pod mới thế nào, và bốn chiến lược đưa bản mới lên: rolling, recreate, blue/green, canary. Mô phỏng dùng đúng luật của Deployment controller.</p>
+  </header>
+  <div class="domap" data-dom="work" data-only="0"></div>
+
+  <div class="panel">
+    <h3>Rolling update: maxSurge và maxUnavailable</h3>
+    <div class="formrow" style="margin:6px 0 14px">
+      <label class="f" style="width:150px">replicas: <span id="ruNv">6</span><input type="range" id="ruN" min="2" max="10" value="6"></label>
+      <label class="f" style="width:150px">maxSurge: <span id="ruSv">1</span><input type="range" id="ruS" min="0" max="4" value="1"></label>
+      <label class="f" style="width:150px">maxUnavailable: <span id="ruUv">0</span><input type="range" id="ruU" min="0" max="4" value="0"></label>
+      <button class="btn primary" id="ruRun">▶ Rollout v1 → v2</button>
+      <button class="btn" id="ruReset">Đặt lại</button>
+    </div>
+    <div class="pods" id="ruPods"></div>
+    <div class="stats" style="margin:10px 0" id="ruStats"></div>
+    <div class="log" id="ruLog"></div>
+    <p class="small muted" style="margin-top:10px">Khung nét đứt = đang khởi động (chưa qua readinessProbe). <code>maxSurge=0</code> và <code>maxUnavailable=0</code> cùng lúc bị API từ chối vì rollout không thể tiến. Với dịch vụ cần không gián đoạn, đặt <code>maxUnavailable: 0</code> và có readinessProbe.</p>
+    <div class="codewrap"><pre class="code" data-hl>k set image deploy/web nginx=nginx:1.27   # kích hoạt rollout
+k rollout status deploy/web
+k rollout history deploy/web
+k rollout undo deploy/web --to-revision=2
+k annotate deploy/web kubernetes.io/change-cause="nâng nginx 1.27"</pre></div>
+  </div>
+
+  <div class="panel col ck-anim" id="lcStrategy"></div>
+
 </section>
 
 <!-- ============ PROBES ============ -->
@@ -1640,7 +1688,7 @@ k api-resources --api-group=cert-manager.io</pre></div>
     <p class="hint" style="margin:0">Chọn một lỗi: Pod đi qua từng chặng và dừng ở chặng hỏng. Xem <code>get pod -w</code> và Events như trên cluster thật, rồi bấm Áp dụng cách sửa.</p>
     <div id="tbSim" class="col" style="gap:14px"></div>
   </div>
-  <div class="domap" data-dom="trouble"></div>
+  <div class="domap" data-dom="trouble" data-only="0,1,4"></div>
   <div class="panel">
     <h3>Cây chẩn đoán</h3>
     <div class="crumbs" id="trCrumbs"></div>
@@ -1713,6 +1761,7 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
     <h2>Scale Pod, ước lượng node, đặt requests đúng</h2>
     <p class="lead">Xem HPA và Cluster Autoscaler phản ứng với tải, tính cần bao nhiêu node, và đặt requests theo số đo thật.</p>
   </header>
+  <div class="domap" data-dom="work" data-only="2"></div>
   <div class="seg" id="scTabs" role="group" aria-label="Chọn chủ đề"></div>
   <div id="scBody" class="col" style="gap:16px" aria-live="polite"></div>
 </section>
@@ -1770,6 +1819,24 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
     <p class="lead">Cùng hình thức: thi thực hành 2 giờ trên cluster thật. Khác nhau ở phạm vi: CKA vận hành cluster, CKAD viết và chạy ứng dụng.</p>
   </header>
   <div id="lcExam" class="col" style="gap:18px"></div>
+  <div class="panel">
+      <h3>Mẹo trong phòng thi (CKA)</h3>
+      <ul class="tight">
+        <li>Mỗi câu có lệnh <code>kubectl config use-context …</code>. Chạy nó trước tiên, sai context là mất trọn điểm câu đó.</li>
+        <li>Sinh YAML bằng lệnh imperative rồi sửa: <code>k create deploy web --image=nginx $do &gt; web.yaml</code>.</li>
+        <li><code>kubectl explain pod.spec.containers --recursive</code> nhanh hơn nhớ field.</li>
+        <li>Câu khó thì flag và đi tiếp. Một câu 7% làm dở vẫn có thể được điểm từng phần.</li>
+        <li>Câu trên node: <code>ssh node01</code>, <code>sudo -i</code>, xong nhớ <code>exit</code> về máy chính.</li>
+        <li>Sau khi sửa static pod manifest, chờ kubelet tạo lại pod (khoảng 20–60 giây) rồi mới kiểm tra.</li>
+      </ul>
+      <div class="codewrap" style="margin-top:14px"><pre class="code" data-hl>alias k=kubectl                       # thường đã có sẵn
+export do="--dry-run=client -o yaml"   # k run x --image=nginx $do
+export now="--force --grace-period 0"  # k delete po x $now
+source &lt;(kubectl completion bash); complete -o default -F __start_kubectl k
+# ~/.vimrc
+set expandtab tabstop=2 shiftwidth=2</pre></div>
+    </div>
+
 </section>
 
 <section class="view" data-view="multi" hidden>
@@ -1802,10 +1869,36 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
 <section class="view" data-view="ckadcur" hidden>
   <header class="vh">
     <p class="eyebrow">Ôn thi · CKAD v1.37 · curriculum CNCF</p>
-    <h2>Curriculum CKAD theo domain</h2>
-    <p class="lead">Mỗi năng lực trong đề CKAD: một câu giải thích, một lệnh, một bẫy, và chỗ học sâu hơn trong trang này.</p>
+    <h2>Đề cương CKA &amp; CKAD</h2>
+    <p class="lead">Mọi năng lực của hai đề thi, mỗi năng lực chỉ tới đúng một bài dạy nó và tới bài tập. Dùng trang này để biết còn thiếu gì trước ngày thi.</p>
   </header>
+  <div class="panel">
+    <h3>CKA: trọng số 5 domain và checklist năng lực</h3>
+    <p class="muted small">Bấm vào thanh để tới bài chính của domain. Tick từng năng lực khi bạn làm được mà không cần xem đáp án; tiến độ lưu trong trình duyệt này.</p>
+    <div class="wbar" id="wbar"></div>
+    <div class="domains" id="domains"></div>
+  </div>
   <div id="lcCur" class="col" style="gap:18px"></div>
+</section>
+
+<!-- ============ lỗi kết nối, observability (render từ learn-wire-ops.js) ============ -->
+<section class="view" data-view="connerr" hidden>
+  <header class="vh">
+    <p class="eyebrow">Troubleshooting</p>
+    <h2>Lỗi kết nối, TLS và chứng chỉ</h2>
+    <p class="lead">Dán thông báo lỗi vào ô tìm kiếm để biết kết nối nào hỏng, vì sao, kiểm tra và sửa bằng lệnh gì. Mỗi lỗi dẫn về kết nối tương ứng trong bài Giao tiếp &amp; mã hóa.</p>
+  </header>
+  <div id="ceBody" class="col" style="gap:16px"></div>
+</section>
+
+<section class="view" data-view="obs" hidden>
+  <header class="vh">
+    <p class="eyebrow">Observability</p>
+    <h2>Log, metric, event và cảnh báo</h2>
+    <p class="lead">Metric cho biết có vấn đề, log và event cho biết vì sao. Bài này chỉ chỗ xem của từng thành phần, lệnh xem nhanh không cần Prometheus và các cảnh báo nên có.</p>
+  </header>
+  <div class="domap" data-dom="trouble" data-only="2,3"></div>
+  <div id="obsBody" class="col" style="gap:16px"></div>
 </section>
 
 <!-- ============ CONCEPTS ============ -->
@@ -1826,6 +1919,7 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
   <div id="cxList"></div>
 </section>
 
+<div id="lfoot"></div>
 </main>
 </div>
 <script>
@@ -1940,32 +2034,48 @@ function addCopy(wrap, pre) {
 }
 
 /* ---------- modules / nav ---------- */
-const MODULES = [
-  { g: "Nền tảng" }, { id: "overview", n: "00", t: "Tổng quan" }, { id: "exam", n: "01", t: "Kỳ thi CKA & CKAD" }, { id: "arch", n: "02", t: "Kiến trúc cluster" }, { id: "flow", n: "03", t: "Một Pod ra đời" }, { id: "linux", n: "04", t: "Bên trong Linux" }, { id: "mech", n: "05", t: "Cơ chế động" }, { id: "wire", n: "06", t: "Giao tiếp & mã hóa" },
-  { g: "Workload & ứng dụng" }, { id: "kinds", n: "07", t: "Workload resources" }, { id: "multi", n: "08", t: "Pod nhiều container" }, { id: "jobs", n: "09", t: "Job & CronJob" }, { id: "workloads", n: "10", t: "Triển khai & scheduling" }, { id: "probes", n: "11", t: "Probes & tự phục hồi" }, { id: "image", n: "12", t: "Container image & API" },
-  { g: "Mạng · lưu trữ · bảo mật" }, { id: "network", n: "13", t: "Mạng & Service" }, { id: "storage", n: "14", t: "Storage" }, { id: "security", n: "15", t: "RBAC & bảo mật" },
-  { g: "Vận hành & tối ưu" }, { id: "ops", n: "16", t: "Vận hành cluster" }, { id: "trouble", n: "17", t: "Troubleshooting" }, { id: "perf", n: "18", t: "Hiệu năng & QoS" }, { id: "scale", n: "19", t: "Scaling & ước lượng node" }, { id: "best", n: "20", t: "Best practices, Helm & Kustomize" }, { id: "cases", n: "21", t: "Use case thực tế" },
-  { g: "Ôn thi" }, { id: "ckadcur", n: "22", t: "Curriculum CKAD" }, { id: "quiz", n: "23", t: "Quiz" },
-  { g: "Tra cứu" }, { id: "concepts", n: "24", t: "Thư viện khái niệm" }, { id: "commands", n: "25", t: "Lệnh & cheatsheet" }
+/* Trang lý thuyết = 9 chương + tra cứu. Mỗi chương gom một domain thi; mỗi bài là một section data-view.
+   ls: [id view, tên bài]. MODULES là danh sách phẳng các bài (giữ tên cũ cho code khác dùng). */
+const CHAPTERS = [
+  { id: "c0", n: "0", t: "Bắt đầu", d: "Hai kỳ thi, đề cương và cách học trang này.", ex: "CKA · CKAD", ls: [["overview", "Cách học & lộ trình"], ["exam", "Kỳ thi & mẹo làm bài"], ["ckadcur", "Đề cương CKA & CKAD"]] },
+  { id: "c1", n: "1", t: "Kiến trúc & cơ chế", d: "Cluster gồm gì, một Pod ra đời thế nào, Linux bên dưới, controller và các kết nối có mã hóa.", ex: "CKA Architecture 25% · nền cho mọi domain", ls: [["arch", "Kiến trúc cluster"], ["flow", "Một Pod ra đời"], ["linux", "Bên trong Linux"], ["mech", "Cơ chế controller"], ["wire", "Giao tiếp & mã hóa"]] },
+  { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
+  { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào, xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler & nơi Pod chạy"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
+  { id: "c4", n: "4", t: "Mạng", d: "Pod nói chuyện với nhau, Service, DNS, Ingress, Gateway API và NetworkPolicy.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["network", "Service, DNS, Ingress & NetworkPolicy"]] },
+  { id: "c5", n: "5", t: "Storage", d: "Volume, PV, PVC, StorageClass và dynamic provisioning.", ex: "CKA Storage 10% · CKAD Build", ls: [["storage", "Volume, PV, PVC & StorageClass"]] },
+  { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
+  { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
+  { id: "c8", n: "8", t: "Troubleshooting & observability", d: "Đọc trạng thái Pod, gỡ lỗi node và control plane, lỗi kết nối, log và metric.", ex: "CKA Troubleshooting 30% · CKAD Observability 15%", ls: [["trouble", "Lỗi Pod, node & control plane"], ["connerr", "Lỗi kết nối & chứng chỉ"], ["obs", "Log, metric & cảnh báo"]] },
+  { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Tra khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["quiz", "Quiz"]] }
 ];
+const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
+/* năng lực CKA (domain:index) → bài dạy chính */
+const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "network", "net:1": "network", "net:2": "network", "net:3": "network", "net:4": "network", "net:5": "network", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "storage", "stor:2": "storage" };
 const onShow = {};
 let current = "overview";
+let learned = store.get("learned", {});
 function buildRail() {
   const ol = $("#rail");
-  MODULES.forEach(m => {
-    const li = document.createElement("li");
-    if (m.g) { li.className = "grp"; li.textContent = m.g; }
-    else li.innerHTML = '<a href="#' + m.id + '" data-go="' + m.id + '"><span class="n">' + m.n + "</span><span>" + m.t + "</span></a>";
-    ol.appendChild(li);
-  });
+  ol.innerHTML = CHAPTERS.map(c => '<li class="ch" data-ch="' + c.id + '"><a href="#' + c.ls[0][0] + '" data-go="' + c.ls[0][0] + '" data-chgo="' + c.id + '"><span class="n">' + c.n + "</span><span>" + esc(c.t) + '</span><span class="cp" data-chp="' + c.id + '"></span></a><ol class="sub">' +
+    c.ls.map(([id, t], i) => '<li><a href="#' + id + '" data-go="' + id + '"><span class="n">' + c.n + "." + (i + 1) + "</span><span>" + esc(t) + "</span></a></li>").join("") + "</ol></li>").join("");
+  railProg();
+}
+function railProg() {
+  CHAPTERS.forEach(c => { const n = c.ls.filter(l => learned[l[0]]).length, e = $('[data-chp="' + c.id + '"]'); if (e) { e.textContent = n ? n + "/" + c.ls.length : ""; e.classList.toggle("full", n === c.ls.length); } });
+  $$(".rail .sub a").forEach(a => a.classList.toggle("ok", !!learned[a.dataset.go]));
 }
 function show(name) {
   const views = $$(".view");
   if (!views.some(v => v.dataset.view === name)) name = "overview";
   current = name;
+  const mod = MODULES.find(m => m.id === name), ch = mod ? mod.ch : CHAPTERS[0];
   views.forEach(v => v.hidden = v.dataset.view !== name);
-  $$(".rail a").forEach(a => a.setAttribute("aria-current", a.dataset.go === name ? "page" : "false"));
-  const act = $('.rail a[data-go="' + name + '"]');
+  $$(".rail li.ch").forEach(li => li.classList.toggle("open", li.dataset.ch === ch.id));
+  $$(".rail a").forEach(a => a.setAttribute("aria-current", (a.dataset.chgo ? a.dataset.chgo === ch.id : a.dataset.go === name) ? (a.dataset.chgo ? "true" : "page") : "false"));
+  $$(".rail a[data-chgo]").forEach(a => { const last = store.get("last:" + a.dataset.chgo, null); const c = CHAPTERS.find(x => x.id === a.dataset.chgo); a.dataset.go = a.dataset.chgo === ch.id ? name : (last && c.ls.some(l => l[0] === last) ? last : c.ls[0][0]); a.href = "#" + a.dataset.go; });
+  store.set("last:" + ch.id, name);
+  lessonFrame(name, ch);
+  const act = $('.rail a[data-chgo="' + ch.id + '"]');
   if (act && act.scrollIntoView && innerWidth < 1024) act.scrollIntoView({ block: "nearest", inline: "center" });
   try { history.replaceState(null, "", "#" + name); } catch (e) {}
   window.scrollTo(0, 0);
@@ -1997,8 +2107,8 @@ function renderOverview() {
   DOMAINS.forEach(d => {
     const c = document.createElement("div"); c.className = "dom";
     c.innerHTML = '<div class="dom-h"><span class="sw" style="background:' + d.color + '"></span><b>' + d.name + '</b><span class="pc" id="pc-' + d.key + '"></span></div><div class="bar"><i id="pb-' + d.key + '" style="background:' + d.color + '"></i></div>' +
-      d.items.map((it, i) => { const id = d.key + i; return '<div class="ckrow"><label class="check"><input type="checkbox" id="ck-' + id + '" data-ck="' + id + '"' + (checks[id] ? " checked" : "") + "> " + it + '</label><button type="button" class="linkbtn" data-lab="' + d.key + ":" + i + '">bài tập</button></div>'; }).join("") +
-      '<div class="links"><a href="#' + d.mod + '" data-go="' + d.mod + '">Học phần này →</a><button type="button" class="linkbtn" data-lab="' + d.key + '">Mọi bài tập của domain →</button></div>';
+      d.items.map((it, i) => { const id = d.key + i; return '<div class="ckrow"><label class="check"><input type="checkbox" id="ck-' + id + '" data-ck="' + id + '"' + (checks[id] ? " checked" : "") + "> " + it + '</label><span style="display:flex;gap:10px;flex-shrink:0"><a class="linkbtn" href="#' + CKA_COMP_LESSON[d.key + ":" + i] + '" data-go="' + CKA_COMP_LESSON[d.key + ":" + i] + '" title="Bài lý thuyết">học</a><button type="button" class="linkbtn" data-lab="' + d.key + ":" + i + '">bài tập</button></span></div>'; }).join("") +
+      '<div class="links"><a href="#' + d.mod + '" data-go="' + d.mod + '">Bài chính của domain →</a><button type="button" class="linkbtn" data-lab="' + d.key + '">Mọi bài tập của domain →</button></div>';
     box.appendChild(c);
   });
   box.addEventListener("change", e => { const k = e.target.dataset.ck; if (!k) return; checks[k] = e.target.checked; store.set("checks", checks); updateProgress(); });
