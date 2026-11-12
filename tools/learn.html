@@ -1054,13 +1054,462 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
 </section>
 
 <!-- ============ 04 NETWORK ============ -->
+<!-- ============ 4.1 Mạng Pod & CNI ============ -->
+<section class="view" data-view="podnet" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>Mạng Pod và CNI</h2>
+    <p class="lead">Kubernetes chỉ đặt luật chơi: mỗi Pod một IP, Pod gọi Pod ở bất kỳ node nào mà không qua NAT. Ai nối dây là việc của plugin CNI.</p>
+  </header>
+  <ul class="tldr"><li>Mỗi Pod có <b>một IP</b>, chung cho mọi container trong Pod. IP này thấy giống nhau từ mọi nơi trong cluster.</li><li>Khi tạo Pod, container runtime gọi plugin <b>CNI</b>: tạo cặp veth, cấp IP từ dải của node, thêm route.</li><li>Giữa các node, CNI chọn một trong hai cách: <b>overlay</b> (bọc gói trong VXLAN) hoặc <b>định tuyến thẳng</b> (BGP, route của cloud).</li></ul>
+  <div class="domap" data-dom="net" data-only="0"></div>
+  <div class="panel col ck-anim" id="pnAnim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Bốn luật của mô hình mạng</h3>
+      <ol class="tight">
+        <li>Pod gọi được mọi Pod khác, kể cả ở node khác, <b>không NAT</b>.</li>
+        <li>Agent trên node (kubelet, system daemon) gọi được mọi Pod trên node đó.</li>
+        <li>Các container trong cùng Pod dùng chung network namespace: gọi nhau qua <code>localhost</code>, không được trùng port.</li>
+        <li>Pod <code>hostNetwork: true</code> dùng thẳng mạng của node: có IP của node, mở port trên node.</li>
+      </ol>
+      <p class="small muted" style="margin:10px 0 0">Service là lớp phía trên: IP ảo ổn định trước một nhóm Pod (bài 4.2). Chặn bớt đường đi là NetworkPolicy (bài 4.6).</p>
+    </div>
+    <div class="panel">
+      <h3>CNI làm gì khi Pod được tạo</h3>
+      <ol class="tight">
+        <li>kubelet nhờ container runtime (containerd) tạo Pod sandbox; runtime tạo network namespace mới.</li>
+        <li>Runtime đọc cấu hình đầu tiên trong <code>/etc/cni/net.d/</code> và chạy binary tương ứng trong <code>/opt/cni/bin/</code> với lệnh <code>ADD</code>.</li>
+        <li>Plugin tạo cặp veth: một đầu thành <code>eth0</code> trong Pod, đầu kia nằm ở node (gắn vào bridge <code>cni0</code> hoặc có route riêng).</li>
+        <li>Phần IPAM cấp IP từ dải Pod của node, ghi route mặc định trong Pod.</li>
+        <li>Xóa Pod: runtime gọi <code>DEL</code> để thu hồi IP và veth.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Các cách nối giữa node</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Cách</th><th>Gói đi thế nào</th><th>Cần gì ở mạng bên dưới</th><th>Ví dụ</th></tr></thead>
+      <tbody>
+        <tr><td><b>Overlay VXLAN</b></td><td>Gói Pod được bọc trong UDP giữa hai node (port 4789; Flannel dùng 8472). Thêm khoảng 50 byte nên MTU của Pod nhỏ hơn node.</td><td>Chỉ cần node gọi được nhau bằng UDP</td><td>Flannel, Calico VXLAN, Cilium mặc định</td></tr>
+        <tr><td><b>Định tuyến thẳng</b></td><td>Không bọc. Mỗi node quảng bá dải Pod của mình bằng BGP hoặc route tĩnh.</td><td>Router hoặc node cùng L2 phải nhận route</td><td>Calico BGP, Cilium native routing</td></tr>
+        <tr><td><b>IP của cloud</b></td><td>Pod nhận IP thật của VPC, router cloud chuyển gói.</td><td>Hạn mức IP trên mỗi máy ảo</td><td>AWS VPC CNI, Azure CNI</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin-top:10px">Xem tận byte một gói VXLAN bắt trên cluster thật ở bài <a href="#wire" data-go="wire">1.5 Giao tiếp &amp; mã hóa → Mổ một gói tin</a>.</p>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Dải IP cần nhớ</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Dải</th><th>Đặt ở</th><th>kubeadm thường dùng</th></tr></thead>
+        <tbody>
+          <tr><td><b>Pod CIDR</b> của cluster</td><td><code>--pod-network-cidr</code> của kubeadm (thành <code>--cluster-cidr</code>); phải khớp cấu hình CNI</td><td>tùy CNI, ví dụ <code>10.244.0.0/16</code></td></tr>
+          <tr><td>Dải Pod của từng node</td><td><code>node.spec.podCIDR</code>, controller-manager chia ra (vài CNI như Calico dùng IPAM riêng)</td><td><code>10.244.1.0/24</code></td></tr>
+          <tr><td><b>Service CIDR</b></td><td><code>--service-cluster-ip-range</code> của apiserver</td><td><code>10.96.0.0/12</code></td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted" style="margin:10px 0 0">Ba dải này không được chồng lên nhau, cũng không được trùng mạng của node.</p>
+    </div>
+    <div class="panel">
+      <h3>Lệnh kiểm tra</h3>
+      <div class="codewrap"><pre class="code" data-hl>k get pod -o wide                          # IP và node của Pod
+k get node -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.podCIDR}{"\n"}{end}'
+ls /etc/cni/net.d/ ; ls /opt/cni/bin/       # trên node: CNI nào đang chạy
+k -n kube-system get pod -o wide | grep -Ei 'calico|cilium|flannel'
+# Pod khác node gọi nhau thẳng bằng IP, không qua Service
+k exec a -- wget -qO- -T2 http://10.244.2.7:8080
+# Pod mới đứng ContainerCreating, event "failed to setup network": CNI chưa cài hoặc lỗi
+k describe pod a | tail</pre></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4.3 DNS & CoreDNS ============ -->
+<section class="view" data-view="dns" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>DNS trong cluster và CoreDNS</h2>
+    <p class="lead">Pod gọi Service bằng tên. CoreDNS trả lời các tên trong <code>cluster.local</code>, chuyển phần còn lại ra DNS bên ngoài.</p>
+  </header>
+  <ul class="tldr"><li>Tên đầy đủ của Service: <code>&lt;svc&gt;.&lt;ns&gt;.svc.cluster.local</code>. Cùng namespace thì chỉ cần <code>&lt;svc&gt;</code>.</li><li>Pod tìm tên ngắn nhờ danh sách <b>search</b> và <code>ndots:5</code> trong <code>/etc/resolv.conf</code>.</li><li>Cấu hình CoreDNS là <b>Corefile</b> trong ConfigMap <code>coredns</code>, namespace <code>kube-system</code>.</li></ul>
+  <div class="domap" data-dom="net" data-only="5"></div>
+  <div class="panel col" id="dnsSim"></div>
+  <div class="panel">
+    <h3>Các bản ghi CoreDNS tạo ra</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Đối tượng</th><th>Tên</th><th>Trả về</th></tr></thead>
+      <tbody>
+        <tr><td><b>Service thường</b></td><td><code>web.shop.svc.cluster.local</code></td><td>A: ClusterIP</td></tr>
+        <tr><td><b>Headless Service</b></td><td><code>db.shop.svc.cluster.local</code></td><td>A: IP của từng Pod Ready</td></tr>
+        <tr><td>Pod của StatefulSet (qua headless)</td><td><code>db-0.db.shop.svc.cluster.local</code></td><td>A: IP của Pod db-0</td></tr>
+        <tr><td>Port có tên</td><td><code>_http._tcp.web.shop.svc.cluster.local</code></td><td>SRV: port và tên đích</td></tr>
+        <tr><td>Pod bất kỳ</td><td><code>10-244-1-5.shop.pod.cluster.local</code></td><td>A: 10.244.1.5</td></tr>
+        <tr><td><b>ExternalName</b></td><td><code>ext.shop.svc.cluster.local</code></td><td>CNAME tới tên ngoài</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>dnsPolicy của Pod</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Giá trị</th><th>Pod hỏi ai</th></tr></thead>
+        <tbody>
+          <tr><td><code>ClusterFirst</code> (mặc định)</td><td>CoreDNS; tên ngoài cluster thì CoreDNS chuyển tiếp</td></tr>
+          <tr><td><code>ClusterFirstWithHostNet</code></td><td>Như trên, dùng cho Pod <code>hostNetwork: true</code></td></tr>
+          <tr><td><code>Default</code></td><td>Lấy <code>resolv.conf</code> của node. Tên dễ nhầm: đây <b>không phải</b> mặc định</td></tr>
+          <tr><td><code>None</code></td><td>Tự khai hết trong <code>dnsConfig</code></td></tr>
+        </tbody>
+      </table></div>
+      <div class="codewrap"><pre class="code" data-hl>spec:
+  dnsPolicy: None
+  dnsConfig:
+    nameservers: ["10.96.0.10"]
+    searches: ["shop.svc.cluster.local", "svc.cluster.local"]
+    options:
+    - {name: ndots, value: "2"}   # giảm số lần hỏi thừa cho tên ngoài</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Corefile mặc định của kubeadm</h3>
+      <div class="codewrap"><pre class="code" data-hl>.:53 {
+    errors
+    health { lameduck 5s }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {   # trả lời tên trong cluster
+       pods insecure
+       fallthrough in-addr.arpa ip6.arpa
+       ttl 30
+    }
+    prometheus :9153
+    forward . /etc/resolv.conf { max_concurrent 1000 } # tên khác: hỏi DNS của node
+    cache 30
+    loop
+    reload          # tự nạp lại khi ConfigMap đổi
+    loadbalance
+}
+# thêm một zone riêng: tạo block mới, không lặp lại zone đã có
+corp.local:53 {
+    errors
+    cache 30
+    forward . 10.0.0.53
+}</pre></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Sửa và gỡ lỗi DNS</h3>
+    <div class="codewrap"><pre class="code" data-hl>k -n kube-system edit cm coredns            # sửa Corefile
+k -n kube-system rollout restart deploy coredns   # áp dụng ngay, khỏi chờ reload
+k -n kube-system logs -l k8s-app=kube-dns    # lỗi cú pháp, loop, zone trùng
+k -n kube-system get svc kube-dns            # ClusterIP phải khớp nameserver trong Pod
+k run t --image=busybox:1.36 --rm -it --restart=Never -- sh -c 'cat /etc/resolv.conf; nslookup web.shop'</pre></div>
+    <ul class="tight" style="margin-top:10px">
+      <li>Thêm cùng một zone hai lần làm CoreDNS crash, cả cluster mất DNS. Luôn lưu bản sao ConfigMap trước khi sửa.</li>
+      <li>Pod chặn egress bằng NetworkPolicy mà quên mở UDP và TCP 53 tới kube-dns thì mọi lần tra tên đều timeout (bài 4.6).</li>
+      <li>Cluster lớn hay dùng <b>NodeLocal DNSCache</b>: một DaemonSet cache DNS trên từng node, giảm tải CoreDNS và lỗi timeout do conntrack.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 4.4 Ingress ============ -->
+<section class="view" data-view="ingress" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>Ingress và IngressClass</h2>
+    <p class="lead">Ingress là bảng luật định tuyến HTTP theo host và path tới Service. Một Ingress controller đọc bảng đó và cấu hình proxy thật.</p>
+  </header>
+  <ul class="tldr"><li>Ingress resource <b>không tự làm gì</b>: phải có controller (ingress-nginx, Traefik, HAProxy…) đang chạy.</li><li><code>ingressClassName</code> chọn controller xử lý; không ghi thì dùng IngressClass có annotation mặc định.</li><li><code>pathType</code> <b>Exact</b> khớp đúng chuỗi; <b>Prefix</b> khớp theo từng đoạn giữa dấu <code>/</code>.</li></ul>
+  <div class="domap" data-dom="net" data-only="4"></div>
+  <div class="panel col" id="ingSim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Một Ingress đầy đủ</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts: ["shop.example.com"]
+    secretName: shop-tls        # Secret kiểu kubernetes.io/tls, cùng namespace
+  defaultBackend:               # không rule nào khớp
+    service: {name: notfound, port: {number: 80}}
+  rules:
+  - host: shop.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service: {name: api, port: {number: 8080}}
+      - path: /
+        pathType: Prefix
+        backend:
+          service: {name: web, port: {name: http}}</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Tạo nhanh bằng lệnh</h3>
+      <div class="codewrap"><pre class="code" data-hl># path kết thúc bằng * là Prefix, không có * là Exact
+k create ingress shop -n shop --class=nginx \
+  --rule="shop.example.com/api*=api:8080" \
+  --rule="shop.example.com/*=web:80,tls=shop-tls"
+k create secret tls shop-tls -n shop --cert=tls.crt --key=tls.key
+
+k get ingressclass                       # controller nào có, lớp nào mặc định
+k get ing -n shop                        # cột ADDRESS trống: controller chưa nhận
+k describe ing shop -n shop              # backend, event lỗi Service
+curl -H 'Host: shop.example.com' http://&lt;IP-controller&gt;/api/items
+curl --resolve shop.example.com:443:&lt;IP&gt; https://shop.example.com/ -k</pre></div>
+      <h3 style="margin-top:14px">IngressClass</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: nginx
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+spec:
+  controller: k8s.io/ingress-nginx</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Luật khớp host và path</h3>
+      <ul class="tight">
+        <li>Host <code>*.example.com</code> khớp đúng <b>một</b> nhãn: khớp <code>a.example.com</code>, không khớp <code>example.com</code> hay <code>a.b.example.com</code>.</li>
+        <li>Rule không có host khớp mọi host.</li>
+        <li>Prefix <code>/api</code> khớp <code>/api</code>, <code>/api/</code>, <code>/api/items</code>; <b>không</b> khớp <code>/apis</code>.</li>
+        <li>Nhiều path cùng khớp: path dài nhất thắng; dài bằng nhau thì Exact thắng Prefix.</li>
+        <li>Không rule nào khớp: đi tới <code>defaultBackend</code>; không có thì controller trả 404.</li>
+        <li><code>ImplementationSpecific</code>: tùy controller, ví dụ cho regex của ingress-nginx.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Lỗi hay gặp</h3>
+      <ul class="tight">
+        <li><b>404 từ controller</b>: sai host (curl thiếu header Host), path không khớp, hoặc Ingress gắn sai <code>ingressClassName</code>.</li>
+        <li><b>503</b>: Service không có endpoint (selector sai, Pod chưa Ready) hoặc sai port của Service.</li>
+        <li>Backend phải là Service <b>cùng namespace</b> với Ingress.</li>
+        <li>Đổi đường dẫn trước khi chuyển vào app (rewrite) không có trong spec: mỗi controller dùng annotation riêng, ví dụ <code>nginx.ingress.kubernetes.io/rewrite-target</code>.</li>
+        <li>Dự án ingress-nginx đã ngừng phát triển; hướng mới là Gateway API (bài 4.5). Đề CKA vẫn hỏi cả hai.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4.5 Gateway API ============ -->
+<section class="view" data-view="gateway" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>Gateway API</h2>
+    <p class="lead">Thế hệ sau của Ingress: tách vai trò, định tuyến mạnh hơn (header, chia tỉ lệ, redirect, rewrite) và không cần annotation riêng của từng controller.</p>
+  </header>
+  <ul class="tldr"><li><b>GatewayClass</b>: loại controller (cấp cluster). <b>Gateway</b>: cổng vào với listener, port, TLS (đội platform). <b>HTTPRoute</b>: luật định tuyến (đội ứng dụng).</li><li>Route gắn vào Gateway qua <code>parentRefs</code>; Gateway quyết định namespace nào được gắn qua <code>allowedRoutes</code>.</li><li>Trỏ sang namespace khác (Service, Secret) cần <b>ReferenceGrant</b> ở namespace đích.</li></ul>
+  <div class="domap" data-dom="net" data-only="3"></div>
+  <div class="panel col ck-anim" id="gwAnim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>GatewayClass và Gateway</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata: {name: nginx}
+spec:
+  controllerName: gateway.nginx.org/nginx-gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: public, namespace: infra}
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces: {from: All}        # Same (mặc định) | All | Selector
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: "*.example.com"
+    tls:
+      mode: Terminate
+      certificateRefs: [{name: wildcard-tls}]   # Secret trong infra
+    allowedRoutes:
+      namespaces:
+        from: Selector
+        selector: {matchLabels: {gateway: public}}</pre></div>
+    </div>
+    <div class="panel">
+      <h3>HTTPRoute: match, filter, chia tỉ lệ</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: shop, namespace: shop}
+spec:
+  parentRefs:
+  - {name: public, namespace: infra, sectionName: https}
+  hostnames: ["shop.example.com"]
+  rules:
+  - matches:
+    - path: {type: PathPrefix, value: /api}
+      headers: [{name: x-beta, value: "1"}]
+    backendRefs: [{name: api-beta, port: 8080}]
+  - matches:
+    - path: {type: PathPrefix, value: /api}
+    filters:
+    - type: URLRewrite
+      urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+    backendRefs:                     # canary 90/10
+    - {name: api, port: 8080, weight: 90}
+    - {name: api-canary, port: 8080, weight: 10}
+---
+# HTTP → HTTPS cho mọi host
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: to-https, namespace: shop}
+spec:
+  parentRefs: [{name: public, namespace: infra, sectionName: http}]
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect: {scheme: https, statusCode: 301}</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>ReferenceGrant: cho phép trỏ chéo namespace</h3>
+      <div class="codewrap"><pre class="code" data-hl># đặt ở namespace ĐÍCH (payments): cho HTTPRoute của shop trỏ tới Service ở đây
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata: {name: from-shop, namespace: payments}
+spec:
+  from:
+  - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: shop}
+  to:
+  - {group: "", kind: Service}</pre></div>
+      <p class="small muted" style="margin:10px 0 0">Thiếu ReferenceGrant thì route vẫn được tạo nhưng status báo <code>ResolvedRefs=False</code>, lý do <code>RefNotPermitted</code>. Gateway trỏ tới Secret chứng chỉ ở namespace khác cũng cần một ReferenceGrant tương tự.</p>
+    </div>
+    <div class="panel">
+      <h3>Đọc status để gỡ lỗi</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Đối tượng</th><th>Condition</th><th>False nghĩa là</th></tr></thead>
+        <tbody>
+          <tr><td>Gateway</td><td><code>Accepted</code></td><td>Sai gatewayClassName, listener xung đột</td></tr>
+          <tr><td>Gateway</td><td><code>Programmed</code></td><td>Controller chưa dựng xong proxy, chưa có địa chỉ</td></tr>
+          <tr><td>HTTPRoute</td><td><code>Accepted</code></td><td>Sai parentRefs hoặc sectionName, namespace không nằm trong allowedRoutes, hostname không khớp listener</td></tr>
+          <tr><td>HTTPRoute</td><td><code>ResolvedRefs</code></td><td>Service không tồn tại, sai port, thiếu ReferenceGrant</td></tr>
+        </tbody>
+      </table></div>
+      <div class="codewrap" style="margin-top:10px"><pre class="code" data-hl>k get gatewayclass,gateway -A
+k get httproute -A
+k describe httproute shop -n shop | sed -n '/Status/,$p'
+k get gateway public -n infra -o jsonpath='{.status.addresses[*].value}'</pre></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Từ Ingress sang Gateway API</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Ingress</th><th>Gateway API</th></tr></thead>
+      <tbody>
+        <tr><td>IngressClass</td><td>GatewayClass</td></tr>
+        <tr><td>Controller tự mở port 80/443</td><td>Gateway với <code>listeners</code> khai rõ port, protocol, hostname</td></tr>
+        <tr><td><code>spec.tls</code> trong từng Ingress</td><td><code>tls.certificateRefs</code> trên listener của Gateway</td></tr>
+        <tr><td><code>rules[].host</code>, <code>paths[]</code></td><td>HTTPRoute <code>hostnames</code>, <code>rules[].matches</code></td></tr>
+        <tr><td>Annotation rewrite, redirect, canary</td><td>Filter chuẩn: <code>URLRewrite</code>, <code>RequestRedirect</code>, <code>weight</code></td></tr>
+        <tr><td>Backend chỉ cùng namespace</td><td>Được chéo namespace nếu có ReferenceGrant</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin-top:10px">Công cụ <a href="https://github.com/kubernetes-sigs/ingress2gateway" target="_blank" rel="noopener">ingress2gateway</a> chuyển Ingress có sẵn sang Gateway và HTTPRoute. Ngoài HTTPRoute còn GRPCRoute; TLSRoute, TCPRoute, UDPRoute tùy phiên bản có thể vẫn ở kênh experimental.</p>
+  </div>
+</section>
+
+<!-- ============ 4.6 NetworkPolicy ============ -->
+<section class="view" data-view="netpol" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>NetworkPolicy</h2>
+    <p class="lead">Tường lửa cho Pod, viết bằng label. Không có luật chặn: chỉ có danh sách cho phép, và một Pod bị chọn thì mọi thứ không được cho phép đều bị chặn.</p>
+  </header>
+  <ul class="tldr"><li>Pod <b>không bị policy nào chọn</b> thì mở hết. Bị ít nhất một policy chọn theo chiều nào thì chiều đó chỉ còn những gì được cho phép.</li><li>Nhiều policy <b>cộng dồn</b> phần cho phép, không bao giờ trừ nhau. Kết nối cần được cho phép ở <b>cả hai đầu</b>: egress của nguồn và ingress của đích.</li><li>Policy có trạng thái: đã cho kết nối đi thì gói trả lời tự được về.</li></ul>
+  <div class="domap" data-dom="net" data-only="1"></div>
+  <div class="panel col" id="npSim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>AND hay OR: chỉ khác một dấu gạch</h3>
+      <div class="codewrap"><pre class="code" data-hl>ingress:
+- from:
+  - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+    podSelector: {matchLabels: {app: prometheus}}
+# MỘT mục: namespace monitoring VÀ Pod app=prometheus
+
+ingress:
+- from:
+  - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+  - podSelector: {matchLabels: {app: prometheus}}
+# HAI mục: cả namespace monitoring, HOẶC Pod app=prometheus trong namespace của policy</pre></div>
+      <p class="small muted" style="margin:10px 0 0">Mỗi namespace tự có label <code>kubernetes.io/metadata.name=&lt;tên&gt;</code>, dùng nó trong namespaceSelector khỏi phải tự gắn label.</p>
+    </div>
+    <div class="panel">
+      <h3>Egress, DNS và ipBlock</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: web-egress, namespace: shop}
+spec:
+  podSelector: {matchLabels: {app: web}}
+  policyTypes: ["Egress"]
+  egress:
+  - to:                              # DNS: thiếu là mọi lần tra tên timeout
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      podSelector: {matchLabels: {k8s-app: kube-dns}}
+    ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+  - to:
+    - podSelector: {matchLabels: {app: db}}
+    ports: [{protocol: TCP, port: 5432}]
+  - to:
+    - ipBlock: {cidr: 0.0.0.0/0, except: [10.0.0.0/8]}
+    ports: [{protocol: TCP, port: 443}]
+  - ports: [{protocol: TCP, port: 30000, endPort: 32767}]   # một dải port</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Mẫu hay dùng</h3>
+      <div class="codewrap"><pre class="code" data-hl># chặn mọi chiều cho cả namespace
+spec: {podSelector: {}, policyTypes: ["Ingress", "Egress"]}
+# cho mọi Pod trong cùng namespace gọi nhau
+spec:
+  podSelector: {}
+  ingress: [{from: [{podSelector: {}}]}]
+# mở hết ingress cho Pod app=web (ghi đè mọi deny vì cộng dồn)
+spec:
+  podSelector: {matchLabels: {app: web}}
+  ingress: [{}]</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Kiểm tra và bẫy</h3>
+      <div class="codewrap"><pre class="code" data-hl>k get netpol -n shop
+k describe netpol web-egress -n shop       # đọc lại luật bằng lời
+k get pod -n shop --show-labels            # label có đúng như selector?
+k exec -n shop frontend -- wget -qO- -T2 http://web:8080      # được
+k exec -n shop frontend -- wget -qO- -T2 http://db:5432       # phải timeout</pre></div>
+      <ul class="tight" style="margin-top:10px">
+        <li>Chỉ có tác dụng khi CNI hỗ trợ (Calico, Cilium…). Flannel một mình thì policy được tạo nhưng không chặn gì.</li>
+        <li>Không ghi <code>policyTypes</code> thì luôn có Ingress, chỉ có Egress khi có mục <code>egress</code>.</li>
+        <li>Policy chọn Pod theo label của <b>Pod</b>, không theo tên Service hay Deployment.</li>
+        <li><code>ipBlock</code> dùng cho địa chỉ ngoài cluster; IP của Pod đổi liên tục nên không dùng ipBlock để chọn Pod.</li>
+        <li>Cần chặn ở mức cluster hoặc theo tên miền: dùng policy riêng của CNI (CiliumNetworkPolicy, Calico GlobalNetworkPolicy).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4.2 Service ============ -->
 <section class="view" data-view="network" hidden>
   <header class="vh">
     <p class="eyebrow">Services &amp; Networking · 20%</p>
     <h2>Một request đi qua Service như thế nào</h2>
     <p class="lead">ClusterIP là địa chỉ ảo, không gắn vào interface nào (trừ chế độ IPVS). Nó chỉ tồn tại dưới dạng luật DNAT do kube-proxy (hoặc eBPF của CNI) cài trên mọi node. Chọn chế độ dataplane rồi chạy từng bước.</p>
   </header>
-  <div class="domap" data-dom="net"></div>
+  <div class="domap" data-dom="net" data-only="2"></div>
   <div class="controls"><span class="hint">Dataplane:</span><div class="seg" id="netMode"></div></div>
   <div class="stage"><svg id="netSvg" viewBox="0 0 1000 500" role="img" aria-label="Đường đi gói tin qua Service"></svg></div>
   <div class="controls">
@@ -1087,61 +1536,49 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
 
   <div class="split even">
     <div class="panel">
-      <h3>CoreDNS</h3>
-      <ul class="tight">
-        <li>Service: <code>web.shop.svc.cluster.local</code> → ClusterIP.</li>
-        <li>Pod của StatefulSet qua headless Service: <code>db-0.db.shop.svc.cluster.local</code>.</li>
-        <li>Pod đọc <code>/etc/resolv.conf</code>: nameserver là ClusterIP của Service <code>kube-dns</code> (thường <code>10.96.0.10</code>), có <code>search shop.svc.cluster.local svc.cluster.local cluster.local</code> và <code>options ndots:5</code>.</li>
-        <li>Cấu hình nằm trong ConfigMap <code>coredns</code> (Corefile) ở <code>kube-system</code>. Sửa xong: <code>k -n kube-system rollout restart deploy coredns</code>.</li>
-        <li>Kiểm tra: <code>k run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup web.shop</code></li>
-      </ul>
+      <h3>Ba con số port</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: v1
+kind: Service
+metadata: {name: web, namespace: shop}
+spec:
+  type: NodePort
+  selector: {app: web}          # chọn Pod theo label, không theo tên Deployment
+  ports:
+  - name: http                  # bắt buộc đặt tên khi có từ 2 port
+    port: 80                    # client gọi web:80 hoặc ClusterIP:80
+    targetPort: http            # port của container, ghi số hoặc tên containerPort
+    nodePort: 30080             # 30000-32767, bỏ trống thì tự cấp
+  sessionAffinity: ClientIP     # cùng client IP về cùng Pod (mặc định None)</pre></div>
+      <p class="small muted" style="margin:10px 0 0">Lỗi phổ biến nhất: <code>targetPort</code> khác port app đang nghe, hoặc app chỉ nghe <code>127.0.0.1</code>. Service vẫn có endpoint nhưng kết nối bị từ chối.</p>
     </div>
     <div class="panel">
-      <h3>Gateway API thay cho Ingress</h3>
-      <p class="small">Dự án ingress-nginx đã ngừng phát triển; Gateway API là hướng chính và có trong curriculum CKA. Vai trò được tách rõ: hạ tầng sở hữu <b>GatewayClass</b> và <b>Gateway</b>, đội ứng dụng sở hữu <b>HTTPRoute</b>.</p>
-      <div class="codewrap"><pre class="code" data-hl>apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: web
-  namespace: shop
-spec:
-  parentRefs:
-  - name: public          # Gateway do đội platform tạo
-    namespace: infra
-  hostnames: ["shop.example.com"]
-  rules:
-  - matches:
-    - path: {type: PathPrefix, value: /api}
-    backendRefs:          # canary 90/10
-    - {name: api, port: 8080, weight: 90}
-    - {name: api-canary, port: 8080, weight: 10}</pre></div>
+      <h3>Traffic policy, Service không selector, LoadBalancer on-prem</h3>
+      <ul class="tight">
+        <li><code>externalTrafficPolicy: Cluster</code> (mặc định): node nào cũng nhận rồi chuyển tiếp, có thể sang node khác; IP client bị đổi thành IP node.</li>
+        <li><code>externalTrafficPolicy: Local</code>: chỉ node có Pod mới nhận, <b>giữ IP client</b>, không có bước nhảy thứ hai; node không có Pod thì rớt gói.</li>
+        <li><code>internalTrafficPolicy: Local</code>: traffic trong cluster chỉ đi tới Pod trên cùng node (hợp với agent dạng DaemonSet).</li>
+        <li>Service <b>không có selector</b>: tự tạo EndpointSlice có label <code>kubernetes.io/service-name: &lt;svc&gt;</code> trỏ tới IP ngoài cluster, ví dụ DB cũ.</li>
+        <li><code>type: LoadBalancer</code> trên cloud do cloud-controller-manager cấp IP. Trên máy riêng cần MetalLB hoặc tương tự, không thì <code>EXTERNAL-IP</code> đứng <code>&lt;pending&gt;</code> mãi.</li>
+      </ul>
     </div>
   </div>
 
   <div class="panel">
-    <h3>NetworkPolicy: mặc định chặn, rồi mở từng đường</h3>
-    <p class="small muted">Policy chỉ có tác dụng khi CNI hỗ trợ (Calico, Cilium…; Flannel đơn thuần thì không). Nếu chặn cả Egress, nhớ mở UDP/TCP 53 tới kube-dns, không thì mọi DNS lookup sẽ timeout.</p>
-    <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: {name: default-deny-ingress, namespace: shop}
-spec:
-  podSelector: {}            # mọi Pod trong namespace
-  policyTypes: ["Ingress"]
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: {name: frontend-to-web, namespace: shop}
-spec:
-  podSelector:
-    matchLabels: {app: web}
-  policyTypes: ["Ingress"]
-  ingress:
-  - from:
-    - podSelector:
-        matchLabels: {app: frontend}
-    # thêm namespaceSelector cùng mục "-" này = AND; tách thành mục "-" mới = OR
-    ports:
-    - {protocol: TCP, port: 8080}</pre></div>
+    <h3>Gỡ lỗi Service theo thứ tự</h3>
+    <div class="codewrap"><pre class="code" data-hl># 1. Service có đúng port, đúng selector?
+k get svc web -n shop -o wide
+# 2. Có endpoint không? Trống = selector sai label hoặc Pod chưa Ready
+k get endpointslice -n shop -l kubernetes.io/service-name=web
+k get pod -n shop -l app=web -o wide          # dùng đúng selector của Service
+# 3. Gọi thẳng IP Pod, rồi ClusterIP, rồi tên: hỏng ở bước nào thì lỗi ở tầng đó
+k run t -n shop --image=busybox:1.36 --rm -it --restart=Never -- sh -c \
+  'wget -qO- -T2 10.244.2.7:8080; wget -qO- -T2 10.96.120.5:80; wget -qO- -T2 web:80'
+# 4. Không theo IP Pod được: NetworkPolicy (bài 4.6) hoặc CNI (bài 4.1)
+#    Theo IP Pod được mà ClusterIP không: kube-proxy
+k -n kube-system get pod -l k8s-app=kube-proxy ; k -n kube-system logs ds/kube-proxy | tail
+#    ClusterIP được mà tên không: DNS (bài 4.3)
+# Gọi thử từ máy bạn, không cần Ingress
+k port-forward -n shop svc/web 8080:80</pre></div>
   </div>
 </section>
 
@@ -2041,7 +2478,7 @@ const CHAPTERS = [
   { id: "c1", n: "1", t: "Kiến trúc & cơ chế", d: "Cluster gồm gì, một Pod ra đời thế nào, Linux bên dưới, controller và các kết nối có mã hóa.", ex: "CKA Architecture 25% · nền cho mọi domain", ls: [["arch", "Kiến trúc cluster"], ["flow", "Một Pod ra đời"], ["linux", "Bên trong Linux"], ["mech", "Cơ chế controller"], ["wire", "Giao tiếp & mã hóa"]] },
   { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
   { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào, xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler & nơi Pod chạy"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
-  { id: "c4", n: "4", t: "Mạng", d: "Pod nói chuyện với nhau, Service, DNS, Ingress, Gateway API và NetworkPolicy.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["network", "Service, DNS, Ingress & NetworkPolicy"]] },
+  { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
   { id: "c5", n: "5", t: "Storage", d: "Volume, PV, PVC, StorageClass và dynamic provisioning.", ex: "CKA Storage 10% · CKAD Build", ls: [["storage", "Volume, PV, PVC & StorageClass"]] },
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
@@ -2050,7 +2487,7 @@ const CHAPTERS = [
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
 /* năng lực CKA (domain:index) → bài dạy chính */
-const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "network", "net:1": "network", "net:2": "network", "net:3": "network", "net:4": "network", "net:5": "network", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "storage", "stor:2": "storage" };
+const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "podnet", "net:1": "netpol", "net:2": "network", "net:3": "gateway", "net:4": "ingress", "net:5": "dns", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "storage", "stor:2": "storage" };
 const onShow = {};
 let current = "overview";
 let learned = store.get("learned", {});
@@ -3807,7 +4244,7 @@ ARCH_INFO.etcd.go = ["arch-cp", "etcd và quorum"];
 ARCH_INFO.kubelet.go = ["arch-node", "Xem bên trong kubelet"];
 ARCH_INFO.cri.go = ["arch-node", "Xem bên trong containerd"];
 ARCH_INFO.proxy.go = ["network", "Animation đường đi qua Service"];
-ARCH_INFO.coredns.go = ["network", "Mạng & Service"];
+ARCH_INFO.coredns.go = ["dns", "DNS & CoreDNS"];
 ARCH_INFO.pod.go = ["mech", "Animation vòng đời Pod"];
 
 const ARCH = [

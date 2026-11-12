@@ -7,7 +7,7 @@ const LC_COL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)
 /* năng lực CKAD có module riêng trong trang này: "domain:index" → view */
 const LC_HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "storage", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
   "obs:0": "image", "obs:1": "probes", "obs:2": "obs", "obs:3": "obs", "obs:4": "trouble", "env:0": "ops", "env:1": "security", "env:2": "scale", "env:3": "perf", "env:4": "config", "env:5": "config",
-  "env:6": "security", "env:7": "security", "net:0": "network", "net:1": "network", "net:2": "network" };
+  "env:6": "security", "env:7": "security", "net:0": "netpol", "net:1": "network", "net:2": "ingress" };
 const lcEa = s => esc(s).replace(/"/g, "&quot;");
 const lcCode = t => '<div class="codewrap"><pre class="code" data-hl>' + esc(String(t).replace(/\n$/, "")) + "</pre></div>";
 const lcTl = items => '<ul class="tldr">' + items.map(x => "<li>" + x + "</li>").join("") + "</ul>";
@@ -78,8 +78,8 @@ row("Thi lại", "1 lần, miễn phí", "1 lần, miễn phí") + row("Thi th�
     '<div class="panel col"><h4>CKAD · 5 domain</h4><p class="hint" style="margin:0">Bấm để xem các năng lực của domain trong Curriculum CKAD.</p>' + bars(ckad, d => 'data-lccur="' + d.id + '"') + "</div></div>" +
     '<div class="panel col"><h4>Hai đề chồng lên nhau ở đâu</h4><div class="ck-cmp">' +
     '<div class="a"><b>Chỉ CKAD hỏi sâu</b><ul>' + [["image", "Build, tag, lưu container image"], ["multi", "Init, sidecar, adapter, ambassador"], ["workloads", "Blue/green, canary bằng primitive có sẵn"], ["image", "API bị gỡ và cách sửa manifest"], ["jobs", "Job, CronJob đủ các trường"], ["security", "SecurityContext, capabilities"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
-    '<div class="b"><b>Chung</b><ul>' + [["workloads", "Deployment, rolling update"], ["probes", "Probe"], ["network", "Service, Ingress, NetworkPolicy"], ["security", "RBAC, ServiceAccount"], ["scale", "requests, limits, quota"], ["best", "Helm, Kustomize"], ["trouble", "Đọc log, gỡ lỗi Pod"], ["kinds", "Chọn đúng workload"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
-    '<div class="c"><b>Chỉ CKA</b><ul>' + [["ops", "Cài và nâng cấp cluster bằng kubeadm"], ["ops", "Sao lưu, khôi phục etcd"], ["trouble", "Gỡ lỗi node, control plane"], ["linux", "CNI, CSI, CRI"], ["network", "Gateway API"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div></div></div>" +
+    '<div class="b"><b>Chung</b><ul>' + [["workloads", "Deployment, rolling update"], ["probes", "Probe"], ["network", "Service"], ["ingress", "Ingress"], ["netpol", "NetworkPolicy"], ["security", "RBAC, ServiceAccount"], ["scale", "requests, limits, quota"], ["best", "Helm, Kustomize"], ["trouble", "Đọc log, gỡ lỗi Pod"], ["kinds", "Chọn đúng workload"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
+    '<div class="c"><b>Chỉ CKA</b><ul>' + [["ops", "Cài và nâng cấp cluster bằng kubeadm"], ["ops", "Sao lưu, khôi phục etcd"], ["trouble", "Gỡ lỗi node, control plane"], ["linux", "CNI, CSI, CRI"], ["gateway", "Gateway API"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div></div></div>" +
     '<div class="panel col"><h4>30 giây đầu giờ</h4>' + lcCode(`# máy thi đã có alias k và tự hoàn thành lệnh
 export do="--dry-run=client -o yaml"     # k run web --image=nginx:1.27 $do > web.yaml
 export now="--force --grace-period=0"    # k delete pod web $now

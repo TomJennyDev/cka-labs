@@ -38,9 +38,9 @@ const DCOL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)",
 /* năng lực → module lý thuyết trong learn.html */
 const HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "storage", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
   "obs:0": "image", "obs:1": "probes", "obs:2": "obs", "obs:3": "obs", "obs:4": "trouble", "env:0": "ops", "env:1": "security", "env:2": "scale", "env:3": "perf", "env:4": "config", "env:5": "config",
-  "env:6": "security", "env:7": "security", "net:0": "network", "net:1": "network", "net:2": "network" };
+  "env:6": "security", "env:7": "security", "net:0": "netpol", "net:1": "network", "net:2": "ingress" };
 const LEARN_NAME = { image: "2.1 Container image & API", kinds: "2.2 Chọn loại workload", multi: "2.3 Pod nhiều container", jobs: "2.4 Job & CronJob", config: "2.5 ConfigMap & Secret", probes: "2.6 Probe & tự phục hồi", workloads: "2.7 Triển khai & cập nhật",
-  perf: "3.2 Requests, limits & QoS", scale: "3.3 Scaling, quota & ước lượng node", network: "4.1 Service, DNS, Ingress & NetworkPolicy", storage: "5.1 Volume, PV, PVC & StorageClass", security: "6.1 RBAC, ServiceAccount & securityContext",
+  perf: "3.2 Requests, limits & QoS", scale: "3.3 Scaling, quota & ước lượng node", network: "4.2 Service & EndpointSlice", netpol: "4.6 NetworkPolicy", ingress: "4.4 Ingress & IngressClass", storage: "5.1 Volume, PV, PVC & StorageClass", security: "6.1 RBAC, ServiceAccount & securityContext",
   ops: "7.1 kubeadm, nâng cấp, etcd & HA", best: "7.2 Helm, Kustomize & best practice", trouble: "8.1 Lỗi Pod, node & control plane", obs: "8.3 Log, metric & cảnh báo" };
 const theoryOf = (d, i) => HOME[d + ":" + i] || "ckadcur";
 const theoryLink = (d, i) => { const m = theoryOf(d, i); return '<a class="ck-src" href="learn.html#' + m + '">Lý thuyết: ' + esc(LEARN_NAME[m] || m) + " ↗</a>"; };

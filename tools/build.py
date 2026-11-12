@@ -315,7 +315,7 @@ def main():
     js += "const CKAD = " + json.dumps({"domains": ck["domains"], "sources": ck["sources"], "cheat": ck["cheat"],
                                         "ex": [{"id": e["id"], "d": e["d"], "tp": e["tp"], "title": e["title"]} for e in ck["exercises"]]}, ensure_ascii=False) + ";\n"
     js += "const CKA_BANK = " + json.dumps([{"d": b["d"], "c": b["c"]} for b in bank]) + ";\n"
-    for part in ("learn-kinds.js", "learn-best.js", "learn-wire-anim.js", "learn-wire-ops.js", "learn-wire.js", "learn-trouble.js", "learn-scale.js", "learn-ckad.js", "learn-path.js"):
+    for part in ("learn-kinds.js", "learn-best.js", "learn-wire-anim.js", "learn-wire-ops.js", "learn-wire.js", "learn-trouble.js", "learn-scale.js", "learn-ckad.js", "learn-net.js", "learn-path.js"):
         with open(os.path.join(ROOT, "tools", part), encoding="utf-8") as f:
             js += f.read() + "\n"
     learn += "\n<script>\n\"use strict\";\n" + js.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT") + "\n</script>\n"

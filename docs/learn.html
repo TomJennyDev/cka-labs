@@ -1063,13 +1063,462 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
 </section>
 
 <!-- ============ 04 NETWORK ============ -->
+<!-- ============ 4.1 Mạng Pod & CNI ============ -->
+<section class="view" data-view="podnet" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>Mạng Pod và CNI</h2>
+    <p class="lead">Kubernetes chỉ đặt luật chơi: mỗi Pod một IP, Pod gọi Pod ở bất kỳ node nào mà không qua NAT. Ai nối dây là việc của plugin CNI.</p>
+  </header>
+  <ul class="tldr"><li>Mỗi Pod có <b>một IP</b>, chung cho mọi container trong Pod. IP này thấy giống nhau từ mọi nơi trong cluster.</li><li>Khi tạo Pod, container runtime gọi plugin <b>CNI</b>: tạo cặp veth, cấp IP từ dải của node, thêm route.</li><li>Giữa các node, CNI chọn một trong hai cách: <b>overlay</b> (bọc gói trong VXLAN) hoặc <b>định tuyến thẳng</b> (BGP, route của cloud).</li></ul>
+  <div class="domap" data-dom="net" data-only="0"></div>
+  <div class="panel col ck-anim" id="pnAnim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Bốn luật của mô hình mạng</h3>
+      <ol class="tight">
+        <li>Pod gọi được mọi Pod khác, kể cả ở node khác, <b>không NAT</b>.</li>
+        <li>Agent trên node (kubelet, system daemon) gọi được mọi Pod trên node đó.</li>
+        <li>Các container trong cùng Pod dùng chung network namespace: gọi nhau qua <code>localhost</code>, không được trùng port.</li>
+        <li>Pod <code>hostNetwork: true</code> dùng thẳng mạng của node: có IP của node, mở port trên node.</li>
+      </ol>
+      <p class="small muted" style="margin:10px 0 0">Service là lớp phía trên: IP ảo ổn định trước một nhóm Pod (bài 4.2). Chặn bớt đường đi là NetworkPolicy (bài 4.6).</p>
+    </div>
+    <div class="panel">
+      <h3>CNI làm gì khi Pod được tạo</h3>
+      <ol class="tight">
+        <li>kubelet nhờ container runtime (containerd) tạo Pod sandbox; runtime tạo network namespace mới.</li>
+        <li>Runtime đọc cấu hình đầu tiên trong <code>/etc/cni/net.d/</code> và chạy binary tương ứng trong <code>/opt/cni/bin/</code> với lệnh <code>ADD</code>.</li>
+        <li>Plugin tạo cặp veth: một đầu thành <code>eth0</code> trong Pod, đầu kia nằm ở node (gắn vào bridge <code>cni0</code> hoặc có route riêng).</li>
+        <li>Phần IPAM cấp IP từ dải Pod của node, ghi route mặc định trong Pod.</li>
+        <li>Xóa Pod: runtime gọi <code>DEL</code> để thu hồi IP và veth.</li>
+      </ol>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Các cách nối giữa node</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Cách</th><th>Gói đi thế nào</th><th>Cần gì ở mạng bên dưới</th><th>Ví dụ</th></tr></thead>
+      <tbody>
+        <tr><td><b>Overlay VXLAN</b></td><td>Gói Pod được bọc trong UDP giữa hai node (port 4789; Flannel dùng 8472). Thêm khoảng 50 byte nên MTU của Pod nhỏ hơn node.</td><td>Chỉ cần node gọi được nhau bằng UDP</td><td>Flannel, Calico VXLAN, Cilium mặc định</td></tr>
+        <tr><td><b>Định tuyến thẳng</b></td><td>Không bọc. Mỗi node quảng bá dải Pod của mình bằng BGP hoặc route tĩnh.</td><td>Router hoặc node cùng L2 phải nhận route</td><td>Calico BGP, Cilium native routing</td></tr>
+        <tr><td><b>IP của cloud</b></td><td>Pod nhận IP thật của VPC, router cloud chuyển gói.</td><td>Hạn mức IP trên mỗi máy ảo</td><td>AWS VPC CNI, Azure CNI</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin-top:10px">Xem tận byte một gói VXLAN bắt trên cluster thật ở bài <a href="#wire" data-go="wire">1.5 Giao tiếp &amp; mã hóa → Mổ một gói tin</a>.</p>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Dải IP cần nhớ</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Dải</th><th>Đặt ở</th><th>kubeadm thường dùng</th></tr></thead>
+        <tbody>
+          <tr><td><b>Pod CIDR</b> của cluster</td><td><code>--pod-network-cidr</code> của kubeadm (thành <code>--cluster-cidr</code>); phải khớp cấu hình CNI</td><td>tùy CNI, ví dụ <code>10.244.0.0/16</code></td></tr>
+          <tr><td>Dải Pod của từng node</td><td><code>node.spec.podCIDR</code>, controller-manager chia ra (vài CNI như Calico dùng IPAM riêng)</td><td><code>10.244.1.0/24</code></td></tr>
+          <tr><td><b>Service CIDR</b></td><td><code>--service-cluster-ip-range</code> của apiserver</td><td><code>10.96.0.0/12</code></td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted" style="margin:10px 0 0">Ba dải này không được chồng lên nhau, cũng không được trùng mạng của node.</p>
+    </div>
+    <div class="panel">
+      <h3>Lệnh kiểm tra</h3>
+      <div class="codewrap"><pre class="code" data-hl>k get pod -o wide                          # IP và node của Pod
+k get node -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.spec.podCIDR}{"\n"}{end}'
+ls /etc/cni/net.d/ ; ls /opt/cni/bin/       # trên node: CNI nào đang chạy
+k -n kube-system get pod -o wide | grep -Ei 'calico|cilium|flannel'
+# Pod khác node gọi nhau thẳng bằng IP, không qua Service
+k exec a -- wget -qO- -T2 http://10.244.2.7:8080
+# Pod mới đứng ContainerCreating, event "failed to setup network": CNI chưa cài hoặc lỗi
+k describe pod a | tail</pre></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4.3 DNS & CoreDNS ============ -->
+<section class="view" data-view="dns" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>DNS trong cluster và CoreDNS</h2>
+    <p class="lead">Pod gọi Service bằng tên. CoreDNS trả lời các tên trong <code>cluster.local</code>, chuyển phần còn lại ra DNS bên ngoài.</p>
+  </header>
+  <ul class="tldr"><li>Tên đầy đủ của Service: <code>&lt;svc&gt;.&lt;ns&gt;.svc.cluster.local</code>. Cùng namespace thì chỉ cần <code>&lt;svc&gt;</code>.</li><li>Pod tìm tên ngắn nhờ danh sách <b>search</b> và <code>ndots:5</code> trong <code>/etc/resolv.conf</code>.</li><li>Cấu hình CoreDNS là <b>Corefile</b> trong ConfigMap <code>coredns</code>, namespace <code>kube-system</code>.</li></ul>
+  <div class="domap" data-dom="net" data-only="5"></div>
+  <div class="panel col" id="dnsSim"></div>
+  <div class="panel">
+    <h3>Các bản ghi CoreDNS tạo ra</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Đối tượng</th><th>Tên</th><th>Trả về</th></tr></thead>
+      <tbody>
+        <tr><td><b>Service thường</b></td><td><code>web.shop.svc.cluster.local</code></td><td>A: ClusterIP</td></tr>
+        <tr><td><b>Headless Service</b></td><td><code>db.shop.svc.cluster.local</code></td><td>A: IP của từng Pod Ready</td></tr>
+        <tr><td>Pod của StatefulSet (qua headless)</td><td><code>db-0.db.shop.svc.cluster.local</code></td><td>A: IP của Pod db-0</td></tr>
+        <tr><td>Port có tên</td><td><code>_http._tcp.web.shop.svc.cluster.local</code></td><td>SRV: port và tên đích</td></tr>
+        <tr><td>Pod bất kỳ</td><td><code>10-244-1-5.shop.pod.cluster.local</code></td><td>A: 10.244.1.5</td></tr>
+        <tr><td><b>ExternalName</b></td><td><code>ext.shop.svc.cluster.local</code></td><td>CNAME tới tên ngoài</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>dnsPolicy của Pod</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Giá trị</th><th>Pod hỏi ai</th></tr></thead>
+        <tbody>
+          <tr><td><code>ClusterFirst</code> (mặc định)</td><td>CoreDNS; tên ngoài cluster thì CoreDNS chuyển tiếp</td></tr>
+          <tr><td><code>ClusterFirstWithHostNet</code></td><td>Như trên, dùng cho Pod <code>hostNetwork: true</code></td></tr>
+          <tr><td><code>Default</code></td><td>Lấy <code>resolv.conf</code> của node. Tên dễ nhầm: đây <b>không phải</b> mặc định</td></tr>
+          <tr><td><code>None</code></td><td>Tự khai hết trong <code>dnsConfig</code></td></tr>
+        </tbody>
+      </table></div>
+      <div class="codewrap"><pre class="code" data-hl>spec:
+  dnsPolicy: None
+  dnsConfig:
+    nameservers: ["10.96.0.10"]
+    searches: ["shop.svc.cluster.local", "svc.cluster.local"]
+    options:
+    - {name: ndots, value: "2"}   # giảm số lần hỏi thừa cho tên ngoài</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Corefile mặc định của kubeadm</h3>
+      <div class="codewrap"><pre class="code" data-hl>.:53 {
+    errors
+    health { lameduck 5s }
+    ready
+    kubernetes cluster.local in-addr.arpa ip6.arpa {   # trả lời tên trong cluster
+       pods insecure
+       fallthrough in-addr.arpa ip6.arpa
+       ttl 30
+    }
+    prometheus :9153
+    forward . /etc/resolv.conf { max_concurrent 1000 } # tên khác: hỏi DNS của node
+    cache 30
+    loop
+    reload          # tự nạp lại khi ConfigMap đổi
+    loadbalance
+}
+# thêm một zone riêng: tạo block mới, không lặp lại zone đã có
+corp.local:53 {
+    errors
+    cache 30
+    forward . 10.0.0.53
+}</pre></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Sửa và gỡ lỗi DNS</h3>
+    <div class="codewrap"><pre class="code" data-hl>k -n kube-system edit cm coredns            # sửa Corefile
+k -n kube-system rollout restart deploy coredns   # áp dụng ngay, khỏi chờ reload
+k -n kube-system logs -l k8s-app=kube-dns    # lỗi cú pháp, loop, zone trùng
+k -n kube-system get svc kube-dns            # ClusterIP phải khớp nameserver trong Pod
+k run t --image=busybox:1.36 --rm -it --restart=Never -- sh -c 'cat /etc/resolv.conf; nslookup web.shop'</pre></div>
+    <ul class="tight" style="margin-top:10px">
+      <li>Thêm cùng một zone hai lần làm CoreDNS crash, cả cluster mất DNS. Luôn lưu bản sao ConfigMap trước khi sửa.</li>
+      <li>Pod chặn egress bằng NetworkPolicy mà quên mở UDP và TCP 53 tới kube-dns thì mọi lần tra tên đều timeout (bài 4.6).</li>
+      <li>Cluster lớn hay dùng <b>NodeLocal DNSCache</b>: một DaemonSet cache DNS trên từng node, giảm tải CoreDNS và lỗi timeout do conntrack.</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 4.4 Ingress ============ -->
+<section class="view" data-view="ingress" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>Ingress và IngressClass</h2>
+    <p class="lead">Ingress là bảng luật định tuyến HTTP theo host và path tới Service. Một Ingress controller đọc bảng đó và cấu hình proxy thật.</p>
+  </header>
+  <ul class="tldr"><li>Ingress resource <b>không tự làm gì</b>: phải có controller (ingress-nginx, Traefik, HAProxy…) đang chạy.</li><li><code>ingressClassName</code> chọn controller xử lý; không ghi thì dùng IngressClass có annotation mặc định.</li><li><code>pathType</code> <b>Exact</b> khớp đúng chuỗi; <b>Prefix</b> khớp theo từng đoạn giữa dấu <code>/</code>.</li></ul>
+  <div class="domap" data-dom="net" data-only="4"></div>
+  <div class="panel col" id="ingSim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Một Ingress đầy đủ</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: shop
+  namespace: shop
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts: ["shop.example.com"]
+    secretName: shop-tls        # Secret kiểu kubernetes.io/tls, cùng namespace
+  defaultBackend:               # không rule nào khớp
+    service: {name: notfound, port: {number: 80}}
+  rules:
+  - host: shop.example.com
+    http:
+      paths:
+      - path: /api
+        pathType: Prefix
+        backend:
+          service: {name: api, port: {number: 8080}}
+      - path: /
+        pathType: Prefix
+        backend:
+          service: {name: web, port: {name: http}}</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Tạo nhanh bằng lệnh</h3>
+      <div class="codewrap"><pre class="code" data-hl># path kết thúc bằng * là Prefix, không có * là Exact
+k create ingress shop -n shop --class=nginx \
+  --rule="shop.example.com/api*=api:8080" \
+  --rule="shop.example.com/*=web:80,tls=shop-tls"
+k create secret tls shop-tls -n shop --cert=tls.crt --key=tls.key
+
+k get ingressclass                       # controller nào có, lớp nào mặc định
+k get ing -n shop                        # cột ADDRESS trống: controller chưa nhận
+k describe ing shop -n shop              # backend, event lỗi Service
+curl -H 'Host: shop.example.com' http://&lt;IP-controller&gt;/api/items
+curl --resolve shop.example.com:443:&lt;IP&gt; https://shop.example.com/ -k</pre></div>
+      <h3 style="margin-top:14px">IngressClass</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: nginx
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+spec:
+  controller: k8s.io/ingress-nginx</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Luật khớp host và path</h3>
+      <ul class="tight">
+        <li>Host <code>*.example.com</code> khớp đúng <b>một</b> nhãn: khớp <code>a.example.com</code>, không khớp <code>example.com</code> hay <code>a.b.example.com</code>.</li>
+        <li>Rule không có host khớp mọi host.</li>
+        <li>Prefix <code>/api</code> khớp <code>/api</code>, <code>/api/</code>, <code>/api/items</code>; <b>không</b> khớp <code>/apis</code>.</li>
+        <li>Nhiều path cùng khớp: path dài nhất thắng; dài bằng nhau thì Exact thắng Prefix.</li>
+        <li>Không rule nào khớp: đi tới <code>defaultBackend</code>; không có thì controller trả 404.</li>
+        <li><code>ImplementationSpecific</code>: tùy controller, ví dụ cho regex của ingress-nginx.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Lỗi hay gặp</h3>
+      <ul class="tight">
+        <li><b>404 từ controller</b>: sai host (curl thiếu header Host), path không khớp, hoặc Ingress gắn sai <code>ingressClassName</code>.</li>
+        <li><b>503</b>: Service không có endpoint (selector sai, Pod chưa Ready) hoặc sai port của Service.</li>
+        <li>Backend phải là Service <b>cùng namespace</b> với Ingress.</li>
+        <li>Đổi đường dẫn trước khi chuyển vào app (rewrite) không có trong spec: mỗi controller dùng annotation riêng, ví dụ <code>nginx.ingress.kubernetes.io/rewrite-target</code>.</li>
+        <li>Dự án ingress-nginx đã ngừng phát triển; hướng mới là Gateway API (bài 4.5). Đề CKA vẫn hỏi cả hai.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4.5 Gateway API ============ -->
+<section class="view" data-view="gateway" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>Gateway API</h2>
+    <p class="lead">Thế hệ sau của Ingress: tách vai trò, định tuyến mạnh hơn (header, chia tỉ lệ, redirect, rewrite) và không cần annotation riêng của từng controller.</p>
+  </header>
+  <ul class="tldr"><li><b>GatewayClass</b>: loại controller (cấp cluster). <b>Gateway</b>: cổng vào với listener, port, TLS (đội platform). <b>HTTPRoute</b>: luật định tuyến (đội ứng dụng).</li><li>Route gắn vào Gateway qua <code>parentRefs</code>; Gateway quyết định namespace nào được gắn qua <code>allowedRoutes</code>.</li><li>Trỏ sang namespace khác (Service, Secret) cần <b>ReferenceGrant</b> ở namespace đích.</li></ul>
+  <div class="domap" data-dom="net" data-only="3"></div>
+  <div class="panel col ck-anim" id="gwAnim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>GatewayClass và Gateway</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata: {name: nginx}
+spec:
+  controllerName: gateway.nginx.org/nginx-gateway-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata: {name: public, namespace: infra}
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      namespaces: {from: All}        # Same (mặc định) | All | Selector
+  - name: https
+    protocol: HTTPS
+    port: 443
+    hostname: "*.example.com"
+    tls:
+      mode: Terminate
+      certificateRefs: [{name: wildcard-tls}]   # Secret trong infra
+    allowedRoutes:
+      namespaces:
+        from: Selector
+        selector: {matchLabels: {gateway: public}}</pre></div>
+    </div>
+    <div class="panel">
+      <h3>HTTPRoute: match, filter, chia tỉ lệ</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: shop, namespace: shop}
+spec:
+  parentRefs:
+  - {name: public, namespace: infra, sectionName: https}
+  hostnames: ["shop.example.com"]
+  rules:
+  - matches:
+    - path: {type: PathPrefix, value: /api}
+      headers: [{name: x-beta, value: "1"}]
+    backendRefs: [{name: api-beta, port: 8080}]
+  - matches:
+    - path: {type: PathPrefix, value: /api}
+    filters:
+    - type: URLRewrite
+      urlRewrite: {path: {type: ReplacePrefixMatch, replacePrefixMatch: /}}
+    backendRefs:                     # canary 90/10
+    - {name: api, port: 8080, weight: 90}
+    - {name: api-canary, port: 8080, weight: 10}
+---
+# HTTP → HTTPS cho mọi host
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata: {name: to-https, namespace: shop}
+spec:
+  parentRefs: [{name: public, namespace: infra, sectionName: http}]
+  rules:
+  - filters:
+    - type: RequestRedirect
+      requestRedirect: {scheme: https, statusCode: 301}</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>ReferenceGrant: cho phép trỏ chéo namespace</h3>
+      <div class="codewrap"><pre class="code" data-hl># đặt ở namespace ĐÍCH (payments): cho HTTPRoute của shop trỏ tới Service ở đây
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata: {name: from-shop, namespace: payments}
+spec:
+  from:
+  - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: shop}
+  to:
+  - {group: "", kind: Service}</pre></div>
+      <p class="small muted" style="margin:10px 0 0">Thiếu ReferenceGrant thì route vẫn được tạo nhưng status báo <code>ResolvedRefs=False</code>, lý do <code>RefNotPermitted</code>. Gateway trỏ tới Secret chứng chỉ ở namespace khác cũng cần một ReferenceGrant tương tự.</p>
+    </div>
+    <div class="panel">
+      <h3>Đọc status để gỡ lỗi</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Đối tượng</th><th>Condition</th><th>False nghĩa là</th></tr></thead>
+        <tbody>
+          <tr><td>Gateway</td><td><code>Accepted</code></td><td>Sai gatewayClassName, listener xung đột</td></tr>
+          <tr><td>Gateway</td><td><code>Programmed</code></td><td>Controller chưa dựng xong proxy, chưa có địa chỉ</td></tr>
+          <tr><td>HTTPRoute</td><td><code>Accepted</code></td><td>Sai parentRefs hoặc sectionName, namespace không nằm trong allowedRoutes, hostname không khớp listener</td></tr>
+          <tr><td>HTTPRoute</td><td><code>ResolvedRefs</code></td><td>Service không tồn tại, sai port, thiếu ReferenceGrant</td></tr>
+        </tbody>
+      </table></div>
+      <div class="codewrap" style="margin-top:10px"><pre class="code" data-hl>k get gatewayclass,gateway -A
+k get httproute -A
+k describe httproute shop -n shop | sed -n '/Status/,$p'
+k get gateway public -n infra -o jsonpath='{.status.addresses[*].value}'</pre></div>
+    </div>
+  </div>
+  <div class="panel">
+    <h3>Từ Ingress sang Gateway API</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Ingress</th><th>Gateway API</th></tr></thead>
+      <tbody>
+        <tr><td>IngressClass</td><td>GatewayClass</td></tr>
+        <tr><td>Controller tự mở port 80/443</td><td>Gateway với <code>listeners</code> khai rõ port, protocol, hostname</td></tr>
+        <tr><td><code>spec.tls</code> trong từng Ingress</td><td><code>tls.certificateRefs</code> trên listener của Gateway</td></tr>
+        <tr><td><code>rules[].host</code>, <code>paths[]</code></td><td>HTTPRoute <code>hostnames</code>, <code>rules[].matches</code></td></tr>
+        <tr><td>Annotation rewrite, redirect, canary</td><td>Filter chuẩn: <code>URLRewrite</code>, <code>RequestRedirect</code>, <code>weight</code></td></tr>
+        <tr><td>Backend chỉ cùng namespace</td><td>Được chéo namespace nếu có ReferenceGrant</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin-top:10px">Công cụ <a href="https://github.com/kubernetes-sigs/ingress2gateway" target="_blank" rel="noopener">ingress2gateway</a> chuyển Ingress có sẵn sang Gateway và HTTPRoute. Ngoài HTTPRoute còn GRPCRoute; TLSRoute, TCPRoute, UDPRoute tùy phiên bản có thể vẫn ở kênh experimental.</p>
+  </div>
+</section>
+
+<!-- ============ 4.6 NetworkPolicy ============ -->
+<section class="view" data-view="netpol" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng</p>
+    <h2>NetworkPolicy</h2>
+    <p class="lead">Tường lửa cho Pod, viết bằng label. Không có luật chặn: chỉ có danh sách cho phép, và một Pod bị chọn thì mọi thứ không được cho phép đều bị chặn.</p>
+  </header>
+  <ul class="tldr"><li>Pod <b>không bị policy nào chọn</b> thì mở hết. Bị ít nhất một policy chọn theo chiều nào thì chiều đó chỉ còn những gì được cho phép.</li><li>Nhiều policy <b>cộng dồn</b> phần cho phép, không bao giờ trừ nhau. Kết nối cần được cho phép ở <b>cả hai đầu</b>: egress của nguồn và ingress của đích.</li><li>Policy có trạng thái: đã cho kết nối đi thì gói trả lời tự được về.</li></ul>
+  <div class="domap" data-dom="net" data-only="1"></div>
+  <div class="panel col" id="npSim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>AND hay OR: chỉ khác một dấu gạch</h3>
+      <div class="codewrap"><pre class="code" data-hl>ingress:
+- from:
+  - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+    podSelector: {matchLabels: {app: prometheus}}
+# MỘT mục: namespace monitoring VÀ Pod app=prometheus
+
+ingress:
+- from:
+  - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+  - podSelector: {matchLabels: {app: prometheus}}
+# HAI mục: cả namespace monitoring, HOẶC Pod app=prometheus trong namespace của policy</pre></div>
+      <p class="small muted" style="margin:10px 0 0">Mỗi namespace tự có label <code>kubernetes.io/metadata.name=&lt;tên&gt;</code>, dùng nó trong namespaceSelector khỏi phải tự gắn label.</p>
+    </div>
+    <div class="panel">
+      <h3>Egress, DNS và ipBlock</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: web-egress, namespace: shop}
+spec:
+  podSelector: {matchLabels: {app: web}}
+  policyTypes: ["Egress"]
+  egress:
+  - to:                              # DNS: thiếu là mọi lần tra tên timeout
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      podSelector: {matchLabels: {k8s-app: kube-dns}}
+    ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+  - to:
+    - podSelector: {matchLabels: {app: db}}
+    ports: [{protocol: TCP, port: 5432}]
+  - to:
+    - ipBlock: {cidr: 0.0.0.0/0, except: [10.0.0.0/8]}
+    ports: [{protocol: TCP, port: 443}]
+  - ports: [{protocol: TCP, port: 30000, endPort: 32767}]   # một dải port</pre></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Mẫu hay dùng</h3>
+      <div class="codewrap"><pre class="code" data-hl># chặn mọi chiều cho cả namespace
+spec: {podSelector: {}, policyTypes: ["Ingress", "Egress"]}
+# cho mọi Pod trong cùng namespace gọi nhau
+spec:
+  podSelector: {}
+  ingress: [{from: [{podSelector: {}}]}]
+# mở hết ingress cho Pod app=web (ghi đè mọi deny vì cộng dồn)
+spec:
+  podSelector: {matchLabels: {app: web}}
+  ingress: [{}]</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Kiểm tra và bẫy</h3>
+      <div class="codewrap"><pre class="code" data-hl>k get netpol -n shop
+k describe netpol web-egress -n shop       # đọc lại luật bằng lời
+k get pod -n shop --show-labels            # label có đúng như selector?
+k exec -n shop frontend -- wget -qO- -T2 http://web:8080      # được
+k exec -n shop frontend -- wget -qO- -T2 http://db:5432       # phải timeout</pre></div>
+      <ul class="tight" style="margin-top:10px">
+        <li>Chỉ có tác dụng khi CNI hỗ trợ (Calico, Cilium…). Flannel một mình thì policy được tạo nhưng không chặn gì.</li>
+        <li>Không ghi <code>policyTypes</code> thì luôn có Ingress, chỉ có Egress khi có mục <code>egress</code>.</li>
+        <li>Policy chọn Pod theo label của <b>Pod</b>, không theo tên Service hay Deployment.</li>
+        <li><code>ipBlock</code> dùng cho địa chỉ ngoài cluster; IP của Pod đổi liên tục nên không dùng ipBlock để chọn Pod.</li>
+        <li>Cần chặn ở mức cluster hoặc theo tên miền: dùng policy riêng của CNI (CiliumNetworkPolicy, Calico GlobalNetworkPolicy).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4.2 Service ============ -->
 <section class="view" data-view="network" hidden>
   <header class="vh">
     <p class="eyebrow">Services &amp; Networking · 20%</p>
     <h2>Một request đi qua Service như thế nào</h2>
     <p class="lead">ClusterIP là địa chỉ ảo, không gắn vào interface nào (trừ chế độ IPVS). Nó chỉ tồn tại dưới dạng luật DNAT do kube-proxy (hoặc eBPF của CNI) cài trên mọi node. Chọn chế độ dataplane rồi chạy từng bước.</p>
   </header>
-  <div class="domap" data-dom="net"></div>
+  <div class="domap" data-dom="net" data-only="2"></div>
   <div class="controls"><span class="hint">Dataplane:</span><div class="seg" id="netMode"></div></div>
   <div class="stage"><svg id="netSvg" viewBox="0 0 1000 500" role="img" aria-label="Đường đi gói tin qua Service"></svg></div>
   <div class="controls">
@@ -1096,61 +1545,49 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
 
   <div class="split even">
     <div class="panel">
-      <h3>CoreDNS</h3>
-      <ul class="tight">
-        <li>Service: <code>web.shop.svc.cluster.local</code> → ClusterIP.</li>
-        <li>Pod của StatefulSet qua headless Service: <code>db-0.db.shop.svc.cluster.local</code>.</li>
-        <li>Pod đọc <code>/etc/resolv.conf</code>: nameserver là ClusterIP của Service <code>kube-dns</code> (thường <code>10.96.0.10</code>), có <code>search shop.svc.cluster.local svc.cluster.local cluster.local</code> và <code>options ndots:5</code>.</li>
-        <li>Cấu hình nằm trong ConfigMap <code>coredns</code> (Corefile) ở <code>kube-system</code>. Sửa xong: <code>k -n kube-system rollout restart deploy coredns</code>.</li>
-        <li>Kiểm tra: <code>k run t --image=busybox:1.36 --rm -it --restart=Never -- nslookup web.shop</code></li>
-      </ul>
+      <h3>Ba con số port</h3>
+      <div class="codewrap"><pre class="code" data-hl>apiVersion: v1
+kind: Service
+metadata: {name: web, namespace: shop}
+spec:
+  type: NodePort
+  selector: {app: web}          # chọn Pod theo label, không theo tên Deployment
+  ports:
+  - name: http                  # bắt buộc đặt tên khi có từ 2 port
+    port: 80                    # client gọi web:80 hoặc ClusterIP:80
+    targetPort: http            # port của container, ghi số hoặc tên containerPort
+    nodePort: 30080             # 30000-32767, bỏ trống thì tự cấp
+  sessionAffinity: ClientIP     # cùng client IP về cùng Pod (mặc định None)</pre></div>
+      <p class="small muted" style="margin:10px 0 0">Lỗi phổ biến nhất: <code>targetPort</code> khác port app đang nghe, hoặc app chỉ nghe <code>127.0.0.1</code>. Service vẫn có endpoint nhưng kết nối bị từ chối.</p>
     </div>
     <div class="panel">
-      <h3>Gateway API thay cho Ingress</h3>
-      <p class="small">Dự án ingress-nginx đã ngừng phát triển; Gateway API là hướng chính và có trong curriculum CKA. Vai trò được tách rõ: hạ tầng sở hữu <b>GatewayClass</b> và <b>Gateway</b>, đội ứng dụng sở hữu <b>HTTPRoute</b>.</p>
-      <div class="codewrap"><pre class="code" data-hl>apiVersion: gateway.networking.k8s.io/v1
-kind: HTTPRoute
-metadata:
-  name: web
-  namespace: shop
-spec:
-  parentRefs:
-  - name: public          # Gateway do đội platform tạo
-    namespace: infra
-  hostnames: ["shop.example.com"]
-  rules:
-  - matches:
-    - path: {type: PathPrefix, value: /api}
-    backendRefs:          # canary 90/10
-    - {name: api, port: 8080, weight: 90}
-    - {name: api-canary, port: 8080, weight: 10}</pre></div>
+      <h3>Traffic policy, Service không selector, LoadBalancer on-prem</h3>
+      <ul class="tight">
+        <li><code>externalTrafficPolicy: Cluster</code> (mặc định): node nào cũng nhận rồi chuyển tiếp, có thể sang node khác; IP client bị đổi thành IP node.</li>
+        <li><code>externalTrafficPolicy: Local</code>: chỉ node có Pod mới nhận, <b>giữ IP client</b>, không có bước nhảy thứ hai; node không có Pod thì rớt gói.</li>
+        <li><code>internalTrafficPolicy: Local</code>: traffic trong cluster chỉ đi tới Pod trên cùng node (hợp với agent dạng DaemonSet).</li>
+        <li>Service <b>không có selector</b>: tự tạo EndpointSlice có label <code>kubernetes.io/service-name: &lt;svc&gt;</code> trỏ tới IP ngoài cluster, ví dụ DB cũ.</li>
+        <li><code>type: LoadBalancer</code> trên cloud do cloud-controller-manager cấp IP. Trên máy riêng cần MetalLB hoặc tương tự, không thì <code>EXTERNAL-IP</code> đứng <code>&lt;pending&gt;</code> mãi.</li>
+      </ul>
     </div>
   </div>
 
   <div class="panel">
-    <h3>NetworkPolicy: mặc định chặn, rồi mở từng đường</h3>
-    <p class="small muted">Policy chỉ có tác dụng khi CNI hỗ trợ (Calico, Cilium…; Flannel đơn thuần thì không). Nếu chặn cả Egress, nhớ mở UDP/TCP 53 tới kube-dns, không thì mọi DNS lookup sẽ timeout.</p>
-    <div class="codewrap"><pre class="code" data-hl>apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: {name: default-deny-ingress, namespace: shop}
-spec:
-  podSelector: {}            # mọi Pod trong namespace
-  policyTypes: ["Ingress"]
----
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata: {name: frontend-to-web, namespace: shop}
-spec:
-  podSelector:
-    matchLabels: {app: web}
-  policyTypes: ["Ingress"]
-  ingress:
-  - from:
-    - podSelector:
-        matchLabels: {app: frontend}
-    # thêm namespaceSelector cùng mục "-" này = AND; tách thành mục "-" mới = OR
-    ports:
-    - {protocol: TCP, port: 8080}</pre></div>
+    <h3>Gỡ lỗi Service theo thứ tự</h3>
+    <div class="codewrap"><pre class="code" data-hl># 1. Service có đúng port, đúng selector?
+k get svc web -n shop -o wide
+# 2. Có endpoint không? Trống = selector sai label hoặc Pod chưa Ready
+k get endpointslice -n shop -l kubernetes.io/service-name=web
+k get pod -n shop -l app=web -o wide          # dùng đúng selector của Service
+# 3. Gọi thẳng IP Pod, rồi ClusterIP, rồi tên: hỏng ở bước nào thì lỗi ở tầng đó
+k run t -n shop --image=busybox:1.36 --rm -it --restart=Never -- sh -c \
+  'wget -qO- -T2 10.244.2.7:8080; wget -qO- -T2 10.96.120.5:80; wget -qO- -T2 web:80'
+# 4. Không theo IP Pod được: NetworkPolicy (bài 4.6) hoặc CNI (bài 4.1)
+#    Theo IP Pod được mà ClusterIP không: kube-proxy
+k -n kube-system get pod -l k8s-app=kube-proxy ; k -n kube-system logs ds/kube-proxy | tail
+#    ClusterIP được mà tên không: DNS (bài 4.3)
+# Gọi thử từ máy bạn, không cần Ingress
+k port-forward -n shop svc/web 8080:80</pre></div>
   </div>
 </section>
 
@@ -2050,7 +2487,7 @@ const CHAPTERS = [
   { id: "c1", n: "1", t: "Kiến trúc & cơ chế", d: "Cluster gồm gì, một Pod ra đời thế nào, Linux bên dưới, controller và các kết nối có mã hóa.", ex: "CKA Architecture 25% · nền cho mọi domain", ls: [["arch", "Kiến trúc cluster"], ["flow", "Một Pod ra đời"], ["linux", "Bên trong Linux"], ["mech", "Cơ chế controller"], ["wire", "Giao tiếp & mã hóa"]] },
   { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
   { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào, xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler & nơi Pod chạy"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
-  { id: "c4", n: "4", t: "Mạng", d: "Pod nói chuyện với nhau, Service, DNS, Ingress, Gateway API và NetworkPolicy.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["network", "Service, DNS, Ingress & NetworkPolicy"]] },
+  { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
   { id: "c5", n: "5", t: "Storage", d: "Volume, PV, PVC, StorageClass và dynamic provisioning.", ex: "CKA Storage 10% · CKAD Build", ls: [["storage", "Volume, PV, PVC & StorageClass"]] },
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
@@ -2059,7 +2496,7 @@ const CHAPTERS = [
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
 /* năng lực CKA (domain:index) → bài dạy chính */
-const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "network", "net:1": "network", "net:2": "network", "net:3": "network", "net:4": "network", "net:5": "network", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "storage", "stor:2": "storage" };
+const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "podnet", "net:1": "netpol", "net:2": "network", "net:3": "gateway", "net:4": "ingress", "net:5": "dns", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "storage", "stor:2": "storage" };
 const onShow = {};
 let current = "overview";
 let learned = store.get("learned", {});
@@ -3816,7 +4253,7 @@ ARCH_INFO.etcd.go = ["arch-cp", "etcd và quorum"];
 ARCH_INFO.kubelet.go = ["arch-node", "Xem bên trong kubelet"];
 ARCH_INFO.cri.go = ["arch-node", "Xem bên trong containerd"];
 ARCH_INFO.proxy.go = ["network", "Animation đường đi qua Service"];
-ARCH_INFO.coredns.go = ["network", "Mạng & Service"];
+ARCH_INFO.coredns.go = ["dns", "DNS & CoreDNS"];
 ARCH_INFO.pod.go = ["mech", "Animation vòng đời Pod"];
 
 const ARCH = [
@@ -7385,7 +7822,7 @@ const LC_COL = { build: "var(--accent)", deploy: "var(--node)", obs: "var(--pkt)
 /* năng lực CKAD có module riêng trong trang này: "domain:index" → view */
 const LC_HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "build:3": "storage", "deploy:0": "workloads", "deploy:1": "workloads", "deploy:2": "best", "deploy:3": "best",
   "obs:0": "image", "obs:1": "probes", "obs:2": "obs", "obs:3": "obs", "obs:4": "trouble", "env:0": "ops", "env:1": "security", "env:2": "scale", "env:3": "perf", "env:4": "config", "env:5": "config",
-  "env:6": "security", "env:7": "security", "net:0": "network", "net:1": "network", "net:2": "network" };
+  "env:6": "security", "env:7": "security", "net:0": "netpol", "net:1": "network", "net:2": "ingress" };
 const lcEa = s => esc(s).replace(/"/g, "&quot;");
 const lcCode = t => '<div class="codewrap"><pre class="code" data-hl>' + esc(String(t).replace(/\n$/, "")) + "</pre></div>";
 const lcTl = items => '<ul class="tldr">' + items.map(x => "<li>" + x + "</li>").join("") + "</ul>";
@@ -7456,8 +7893,8 @@ row("Thi lại", "1 lần, miễn phí", "1 lần, miễn phí") + row("Thi th�
     '<div class="panel col"><h4>CKAD · 5 domain</h4><p class="hint" style="margin:0">Bấm để xem các năng lực của domain trong Curriculum CKAD.</p>' + bars(ckad, d => 'data-lccur="' + d.id + '"') + "</div></div>" +
     '<div class="panel col"><h4>Hai đề chồng lên nhau ở đâu</h4><div class="ck-cmp">' +
     '<div class="a"><b>Chỉ CKAD hỏi sâu</b><ul>' + [["image", "Build, tag, lưu container image"], ["multi", "Init, sidecar, adapter, ambassador"], ["workloads", "Blue/green, canary bằng primitive có sẵn"], ["image", "API bị gỡ và cách sửa manifest"], ["jobs", "Job, CronJob đủ các trường"], ["security", "SecurityContext, capabilities"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
-    '<div class="b"><b>Chung</b><ul>' + [["workloads", "Deployment, rolling update"], ["probes", "Probe"], ["network", "Service, Ingress, NetworkPolicy"], ["security", "RBAC, ServiceAccount"], ["scale", "requests, limits, quota"], ["best", "Helm, Kustomize"], ["trouble", "Đọc log, gỡ lỗi Pod"], ["kinds", "Chọn đúng workload"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
-    '<div class="c"><b>Chỉ CKA</b><ul>' + [["ops", "Cài và nâng cấp cluster bằng kubeadm"], ["ops", "Sao lưu, khôi phục etcd"], ["trouble", "Gỡ lỗi node, control plane"], ["linux", "CNI, CSI, CRI"], ["network", "Gateway API"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div></div></div>" +
+    '<div class="b"><b>Chung</b><ul>' + [["workloads", "Deployment, rolling update"], ["probes", "Probe"], ["network", "Service"], ["ingress", "Ingress"], ["netpol", "NetworkPolicy"], ["security", "RBAC, ServiceAccount"], ["scale", "requests, limits, quota"], ["best", "Helm, Kustomize"], ["trouble", "Đọc log, gỡ lỗi Pod"], ["kinds", "Chọn đúng workload"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
+    '<div class="c"><b>Chỉ CKA</b><ul>' + [["ops", "Cài và nâng cấp cluster bằng kubeadm"], ["ops", "Sao lưu, khôi phục etcd"], ["trouble", "Gỡ lỗi node, control plane"], ["linux", "CNI, CSI, CRI"], ["gateway", "Gateway API"]].map(x => '<li><a href="#' + x[0] + '" data-go="' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div></div></div>" +
     '<div class="panel col"><h4>30 giây đầu giờ</h4>' + lcCode(`# máy thi đã có alias k và tự hoàn thành lệnh
 export do="--dry-run=client -o yaml"     # k run web --image=nginx:1.27 $do > web.yaml
 export now="--force --grace-period=0"    # k delete pod web $now
@@ -7868,6 +8305,255 @@ lcOnce("ckadcur", () => {
   lcCurRender();
 });
 LC_REPLAY.ckadcur = lcCurRender;
+
+/* ---------- chương 4 Mạng: mô phỏng cho 4.1, 4.3, 4.4, 4.5, 4.6 ----------
+   Dùng helper của learn.html ($, $$, el, txt, esc, sleep) và learn-ckad.js (lcPkt, lcBox, lcCode, lcEnhance, lcOnce). Tên toàn cục có tiền tố pn/dn/ig/gw/np. */
+const netSeg = (opts, cur, attr) => '<div class="seg" role="group">' + opts.map(([k, v]) => '<button type="button" ' + attr + '="' + k + '" aria-pressed="' + (k === cur) + '">' + v + "</button>").join("") + "</div>";
+const netPress = (root, attr, val) => $$("[" + attr + "]", root).forEach(b => b.setAttribute("aria-pressed", b.getAttribute(attr) === val ? "true" : "false"));
+
+/* ---------- 4.1 gói tin giữa hai Pod ---------- */
+const PN_MODES = {
+  same: { n: "Cùng node", dst: "B", steps: [
+    ["Pod A gửi tới 10.244.1.6", "Đích cùng dải Pod của worker-1. Gói rời eth0 của Pod A, đó là một đầu của cặp veth.", [[105, 106], [105, 150]], "src 10.244.1.5 → dst 10.244.1.6"],
+    ["Qua bridge cni0 trên node", "Đầu kia của veth gắn vào bridge cni0 (hoặc có route riêng với CNI kiểu routed). Bridge chuyển gói sang veth của Pod B. Không NAT, không rời node.", [[105, 168], [275, 168]], "src 10.244.1.5 → dst 10.244.1.6"],
+    ["Tới Pod B", "Pod B thấy đúng IP nguồn 10.244.1.5. Đây là luật “không NAT” của mô hình mạng.", [[275, 150], [275, 106]], "src 10.244.1.5 → dst 10.244.1.6"]] },
+  vxlan: { n: "Khác node · VXLAN", dst: "C", steps: [
+    ["Pod A gửi tới 10.244.2.7", "Đích thuộc dải 10.244.2.0/24 của worker-2. Route trên worker-1 chỉ dải đó qua thiết bị VXLAN (VTEP).", [[105, 106], [105, 150]], "src 10.244.1.5 → dst 10.244.2.7"],
+    ["Bọc gói (encapsulation)", "VTEP bọc nguyên gói Pod trong UDP 4789 (Flannel: 8472) với IP ngoài là IP hai node. Thêm khoảng 50 byte, nên MTU trong Pod nhỏ hơn.", [[105, 186], [190, 228]], "[ngoài 192.168.1.11 → 192.168.1.12 · UDP 4789] [trong 10.244.1.5 → 10.244.2.7]"],
+    ["Qua mạng của node", "Router giữa hai node chỉ thấy gói UDP giữa hai IP node. Nó không cần biết gì về dải Pod.", [[340, 228], [440, 228]], "[ngoài 192.168.1.11 → 192.168.1.12 · UDP 4789] [trong 10.244.1.5 → 10.244.2.7]"],
+    ["Mở gói và giao cho Pod C", "VTEP của worker-2 bỏ lớp ngoài, đưa gói gốc vào cni0 rồi veth của Pod C. Pod C thấy nguồn 10.244.1.5.", [[580, 228], [580, 168], [505, 168], [505, 106]], "src 10.244.1.5 → dst 10.244.2.7"]] },
+  routed: { n: "Khác node · định tuyến", dst: "C", steps: [
+    ["Pod A gửi tới 10.244.2.7", "Không có lớp bọc. Worker-1 có route: 10.244.2.0/24 qua 192.168.1.12, học được bằng BGP (Calico) hoặc do cloud cài.", [[105, 106], [105, 150]], "src 10.244.1.5 → dst 10.244.2.7"],
+    ["Đi thẳng qua mạng node", "Gói giữ nguyên IP Pod. Router ở giữa phải biết route tới dải Pod, nên mạng bên dưới phải hợp tác (cùng L2 hoặc nhận BGP).", [[105, 186], [190, 228], [440, 228]], "src 10.244.1.5 → dst 10.244.2.7 (không bọc)"],
+    ["Tới Pod C", "Worker-2 nhận gói có đích thuộc dải Pod của mình, chuyển vào veth của Pod C. Không tốn 50 byte VXLAN, dễ đọc bằng tcpdump.", [[580, 228], [580, 168], [505, 168], [505, 106]], "src 10.244.1.5 → dst 10.244.2.7"]] }
+};
+function pnInit() {
+  const p = $("#pnAnim"); let mode = "vxlan", run = 0;
+  p.innerHTML = "<h3>Gói tin đi từ Pod A</h3>" + netSeg(Object.entries(PN_MODES).map(([k, v]) => [k, v.n]), mode, "data-pn") +
+    '<div class="stage sm"><svg viewBox="0 0 760 300"></svg></div><div class="controls"><button class="btn primary" type="button" data-pnplay>▶ Chạy</button><span class="hint cap" aria-live="polite"></span></div>';
+  const svg = $("svg", p), cap = $(".cap", p);
+  const draw = () => {
+    svg.innerHTML = "";
+    [[20, "worker-1 · 192.168.1.11 · podCIDR 10.244.1.0/24"], [400, "worker-2 · 192.168.1.12 · podCIDR 10.244.2.0/24"]].forEach(([x, t]) => { el("rect", { x, y: 18, width: 340, height: 240, rx: 12, class: "an-pod" }, svg); txt(svg, x + 12, 38, t, "sv-s"); });
+    lcBox(svg, 40, 50, 130, 56, "an-c run", "Pod A", "10.244.1.5");
+    lcBox(svg, 210, 50, 130, 56, "an-c" + (PN_MODES[mode].dst === "B" ? " v2" : ""), "Pod B", "10.244.1.6");
+    lcBox(svg, 440, 50, 130, 56, "an-c" + (PN_MODES[mode].dst === "C" ? " v2" : ""), "Pod C", "10.244.2.7");
+    lcBox(svg, 40, 150, 300, 36, "an-vol", "cni0 · veth của từng Pod", "");
+    lcBox(svg, 440, 150, 280, 36, "an-vol", "cni0 · veth của từng Pod", "");
+    lcBox(svg, 40, 210, 300, 36, "an-ext", mode === "vxlan" ? "eth0 node + VTEP flannel.1" : "eth0 192.168.1.11", "");
+    lcBox(svg, 440, 210, 280, 36, "an-ext", mode === "vxlan" ? "eth0 node + VTEP flannel.1" : "eth0 192.168.1.12", "");
+    el("path", { d: "M340 228 H440", class: "an-l on" }, svg); txt(svg, 390, 268, "mạng node", "sv-s", "middle");
+    txt(svg, 20, 284, "", "sv-tb").setAttribute("id", "pnHdr");
+  };
+  const play = async () => {
+    const tok = ++run; draw();
+    for (const [h, d, pts, hdr] of PN_MODES[mode].steps) {
+      if (tok !== run || !lcVisible(svg)) return;
+      cap.innerHTML = "<b>" + esc(h) + ".</b> " + esc(d); $("#pnHdr", svg).textContent = hdr;
+      await lcPkt(svg, pts, { cls: hdr.startsWith("[") ? "fmt" : "v1", dur: 1100 }); await sleep(1500);
+    }
+  };
+  p.addEventListener("click", e => {
+    const b = e.target.closest("[data-pn]"); if (b) { mode = b.dataset.pn; netPress(p, "data-pn", mode); run++; draw(); cap.textContent = "Bấm Chạy để xem từng chặng."; return; }
+    if (e.target.closest("[data-pnplay]")) play();
+  });
+  draw(); cap.textContent = "Bấm Chạy để xem từng chặng.";
+}
+lcOnce("podnet", pnInit);
+
+/* ---------- 4.3 Pod tra một cái tên thế nào ---------- */
+const DN_SVC = { "web.shop": "A 10.96.120.5", "api.payments": "A 10.96.40.2", "kubernetes.default": "A 10.96.0.1", "db.shop": "A 10.244.1.9, 10.244.2.4 (headless: IP từng Pod)", "kube-dns.kube-system": "A 10.96.0.10" };
+const DN_POD = { "db-0.db.shop": "A 10.244.1.9", "db-1.db.shop": "A 10.244.2.4" };
+const DN_EXT = { "api.example.com": "A 203.0.113.20 (DNS ngoài trả lời)", "registry.k8s.io": "A 34.96.108.209 (DNS ngoài trả lời)" };
+function dnResolve(q) {
+  const n = q.replace(/\.$/, "");
+  if (n.endsWith(".svc.cluster.local")) { const k = n.slice(0, -".svc.cluster.local".length); return DN_SVC[k] || DN_POD[k] || null; }
+  if (n.endsWith(".cluster.local")) return null;
+  return DN_EXT[n] || null;
+}
+function dnInit() {
+  const box = $("#dnsSim"); let ns = "shop";
+  box.innerHTML = "<h3>Pod tra một cái tên thế nào</h3>" +
+    '<p class="hint" style="margin:0">Cluster mẫu: Service <code>web</code> và headless <code>db</code> (Pod db-0, db-1) ở <code>shop</code>, Service <code>api</code> ở <code>payments</code>. Gõ tên như app vẫn gọi.</p>' +
+    '<div class="formrow"><label class="f">Pod đang ở namespace' + netSeg([["shop", "shop"], ["payments", "payments"]], ns, "data-dns") + '</label><input type="text" id="dnQ" value="web" style="flex:1;min-width:200px;font-family:var(--f-mono)" aria-label="Tên cần tra"></div>' +
+    '<div class="chips">' + ["web", "api.payments", "db-0.db", "kubernetes.default", "api.example.com", "api.example.com.", "web.shop.svc.cluster.local"].map(x => '<button type="button" data-dq="' + x + '">' + x + "</button>").join("") + "</div>" +
+    '<div class="codewrap"><pre class="code" id="dnConf"></pre></div><div id="dnOut"></div>';
+  const show = () => {
+    const name = $("#dnQ").value.trim(), search = [ns + ".svc.cluster.local", "svc.cluster.local", "cluster.local"];
+    $("#dnConf").textContent = "# /etc/resolv.conf của Pod trong namespace " + ns + "\nnameserver 10.96.0.10\nsearch " + search.join(" ") + "\noptions ndots:5";
+    if (!name) { $("#dnOut").innerHTML = ""; return; }
+    const abs = name.endsWith("."), dots = (name.replace(/\.$/, "").match(/\./g) || []).length;
+    const cands = abs ? [name] : dots >= 5 ? [name + ".", ...search.map(s => name + "." + s + ".")] : [...search.map(s => name + "." + s + "."), name + "."];
+    let hit = -1; const rows = cands.map((c, i) => { const r = hit < 0 ? dnResolve(c) : undefined; if (r && hit < 0) hit = i; return [c, r, i]; });
+    const why = abs ? "Tên kết thúc bằng dấu chấm là tên tuyệt đối: hỏi đúng một lần." : dots >= 5 ? "Tên có từ 5 dấu chấm trở lên: hỏi nguyên tên trước." : "Tên có " + dots + " dấu chấm, ít hơn ndots 5: thử ghép từng search domain trước, nguyên tên sau cùng.";
+    $("#dnOut").innerHTML = '<p class="small" style="margin:6px 0">' + esc(why) + '</p><div class="tbl"><table><thead><tr><th>#</th><th>Câu hỏi gửi CoreDNS</th><th>Kết quả</th></tr></thead><tbody>' +
+      rows.map(([c, r, i]) => "<tr" + (i === hit ? ' style="background:var(--node-soft)"' : i > hit && hit >= 0 ? ' style="opacity:.4"' : "") + "><td>" + (i + 1) + "</td><td><code>" + esc(c) + "</code></td><td>" + (i > hit && hit >= 0 ? "không hỏi nữa" : r ? "<b>" + esc(r) + "</b>" : "NXDOMAIN") + "</td></tr>").join("") + "</tbody></table></div>" +
+      '<p class="small muted" style="margin:6px 0 0">' + (hit < 0 ? "Không tên nào trả lời: app báo lỗi không phân giải được tên." : hit === 0 ? "Trúng ngay lần đầu." : "Mất " + hit + " câu hỏi thừa trước khi trúng" + (hit >= 3 ? ", nhân đôi nếu app hỏi cả A và AAAA. Tên ngoài dùng nhiều thì thêm dấu chấm cuối hoặc hạ ndots." : ".")) + "</p>";
+  };
+  box.addEventListener("click", e => {
+    const b = e.target.closest("[data-dns]"); if (b) { ns = b.dataset.dns; netPress(box, "data-dns", ns); show(); return; }
+    const q = e.target.closest("[data-dq]"); if (q) { $("#dnQ").value = q.dataset.dq; show(); }
+  });
+  box.addEventListener("input", show); show();
+}
+lcOnce("dns", dnInit);
+
+/* ---------- 4.4 Ingress khớp rule nào ---------- */
+const IG_RULES = [
+  { host: "shop.example.com", path: "/api", type: "Prefix", be: "api:8080" },
+  { host: "shop.example.com", path: "/api/v1/health", type: "Exact", be: "health:80" },
+  { host: "shop.example.com", path: "/", type: "Prefix", be: "web:80" },
+  { host: "*.example.com", path: "/", type: "Prefix", be: "wildcard:80" },
+  { host: "", path: "/docs", type: "Prefix", be: "docs:80" }
+];
+const igSplit = p => p.split("/").filter(Boolean);
+function igPathOk(r, path) {
+  if (r.type === "Exact") return path === r.path;
+  const a = igSplit(r.path), b = igSplit(path);
+  return a.length <= b.length && a.every((x, i) => x === b[i]);
+}
+function igHostOk(r, host) { if (!r.host) return "any"; if (r.host === host) return "exact"; if (r.host.startsWith("*.")) { const rest = r.host.slice(1); return host.endsWith(rest) && !host.slice(0, -rest.length).includes(".") && host.length > rest.length ? "wild" : false; } return false; }
+function igInit() {
+  const box = $("#ingSim");
+  box.innerHTML = "<h3>Request này đi vào Service nào?</h3>" +
+    '<div class="formrow"><label class="f">Host <input type="text" id="igH" value="shop.example.com" style="font-family:var(--f-mono)"></label><label class="f" style="flex:1">Path <input type="text" id="igP" value="/api/items" style="font-family:var(--f-mono);width:100%"></label></div>' +
+    '<div class="chips">' + [["shop.example.com", "/api/items"], ["shop.example.com", "/apis"], ["shop.example.com", "/api/v1/health"], ["shop.example.com", "/api/v1/health/"], ["blog.example.com", "/"], ["a.b.example.com", "/docs/intro"], ["example.com", "/docs"], ["other.org", "/x"]].map(([h, p]) => '<button type="button" data-ig="' + h + "|" + p + '">' + h + p + "</button>").join("") + '</div><div id="igOut"></div>' +
+    '<p class="small muted" style="margin:0">Chọn nhóm host theo cách của ingress-nginx: host chính xác trước, rồi wildcard, rồi rule không có host. Controller khác có thể khác ở bước này; luật khớp path là chuẩn của Kubernetes.</p>';
+  const show = () => {
+    const host = $("#igH").value.trim().toLowerCase(), path = $("#igP").value.trim() || "/";
+    const hm = IG_RULES.map(r => igHostOk(r, host));
+    const group = hm.includes("exact") ? "exact" : hm.includes("wild") ? "wild" : "any";
+    let win = -1, best = null;
+    IG_RULES.forEach((r, i) => { if (hm[i] !== group || !igPathOk(r, path)) return; if (!best || r.path.length > best.path.length || (r.path.length === best.path.length && r.type === "Exact")) { best = r; win = i; } });
+    const note = (r, i) => !hm[i] ? "host không khớp" : hm[i] !== group ? "host khớp nhưng có nhóm host cụ thể hơn" : !igPathOk(r, path) ? (r.type === "Exact" ? "Exact: chuỗi path phải giống hệt" : "Prefix: các đoạn đầu không khớp") : i === win ? "<b>thắng</b>" + (IG_RULES.some((x, k) => k !== i && hm[k] === group && igPathOk(x, path)) ? ": path dài nhất" : "") : "khớp nhưng path ngắn hơn";
+    $("#igOut").innerHTML = '<div class="tbl"><table><thead><tr><th>host</th><th>path</th><th>pathType</th><th>backend</th><th>Với request này</th></tr></thead><tbody>' +
+      IG_RULES.map((r, i) => "<tr" + (i === win ? ' style="background:var(--node-soft)"' : "") + "><td><code>" + esc(r.host || "(mọi host)") + "</code></td><td><code>" + esc(r.path) + "</code></td><td>" + r.type + "</td><td><code>" + r.be + "</code></td><td>" + note(r, i) + "</td></tr>").join("") +
+      '<tr' + (win < 0 ? ' style="background:var(--pkt-soft)"' : "") + '><td colspan="3"><i>defaultBackend</i></td><td><code>notfound:80</code></td><td>' + (win < 0 ? "<b>không rule nào khớp → defaultBackend</b>" : "") + "</td></tr></tbody></table></div>";
+  };
+  box.addEventListener("click", e => { const b = e.target.closest("[data-ig]"); if (b) { const [h, p] = b.dataset.ig.split("|"); $("#igH").value = h; $("#igP").value = p; show(); } });
+  box.addEventListener("input", show); show();
+}
+lcOnce("ingress", igInit);
+
+/* ---------- 4.5 request đi qua Gateway ---------- */
+const GW_REQ = [
+  ["http", "shop.example.com", "/api/items", "", "HTTP tới shop"], ["https", "shop.example.com", "/api/items", "", "HTTPS /api"], ["https", "shop.example.com", "/api/items", "x-beta: 1", "HTTPS /api + header beta"],
+  ["https", "shop.example.com", "/", "", "HTTPS trang chủ"], ["https", "pay.example.com", "/", "", "pay: Service ở namespace khác"], ["https", "other.org", "/", "", "host lạ"]
+];
+function gwRoute(r, grant) {
+  const [scheme, host, path, hdr] = r;
+  if (scheme === "http") return { lis: "http :80", route: "shop/to-https", rule: "RequestRedirect", be: null, redirect: true, cap: "Listener http nhận mọi host. Route to-https chỉ có filter RequestRedirect: Gateway trả 301 về https://" + host + path + ", không chạm tới Service nào." };
+  if (!/\.example\.com$/.test(host)) return { lis: null, cap: "Listener https chỉ nhận hostname *.example.com. Không listener nào khớp " + host + ": Gateway trả 404 (hoặc từ chối bắt tay TLS vì không có chứng chỉ khớp)." };
+  if (host === "pay.example.com") return grant ? { lis: "https :443", route: "payments/pay", rule: "PathPrefix /", be: "finance/ledger:8080", cap: "Route pay ở namespace payments trỏ tới Service ledger ở namespace finance. Có ReferenceGrant ở finance nên ResolvedRefs=True, request đi qua." }
+    : { lis: "https :443", route: "payments/pay", rule: "PathPrefix /", be: null, err: true, cap: "Route được nhận nhưng backend ở namespace finance không có ReferenceGrant: ResolvedRefs=False, lý do RefNotPermitted. Gateway trả 500 cho request này." };
+  if (path.startsWith("/api") && hdr) return { lis: "https :443", route: "shop/shop", rule: "/api + header x-beta=1", be: "api-beta:8080", cap: "Hai rule cùng khớp /api; rule có thêm điều kiện header cụ thể hơn nên thắng. Người dùng beta vào api-beta." };
+  if (path.startsWith("/api")) { const c = Math.random() < .1; return { lis: "https :443", route: "shop/shop", rule: "/api · URLRewrite", be: c ? "api-canary:8080" : "api:8080", cap: "Khớp /api, filter URLRewrite đổi /api/items thành /items trước khi gửi. Chia 90/10 theo weight: lần này vào " + (c ? "api-canary" : "api") + ". Bấm lại vài lần để thấy tỉ lệ." }; }
+  return { lis: "https :443", route: "shop/shop", rule: "PathPrefix /", be: "web:80", cap: "Không khớp /api, rơi vào rule PathPrefix / của route shop: vào Service web." };
+}
+function gwInit() {
+  const p = $("#gwAnim"); let grant = false, cur = 1;
+  p.innerHTML = "<h3>Một request đi qua Gateway</h3>" + '<div class="chips">' + GW_REQ.map((r, i) => '<button type="button" data-gw="' + i + '" aria-pressed="' + (i === cur) + '">' + esc(r[4]) + "</button>").join("") + '</div><label class="check"><input type="checkbox" id="gwGrant"> Có ReferenceGrant ở namespace finance</label>' +
+    '<div class="stage sm"><svg viewBox="0 0 760 230"></svg></div><p class="hint cap" aria-live="polite"></p>';
+  const svg = $("svg", p), cap = $(".cap", p); let tok = 0;
+  const go = async () => {
+    const t = ++tok, r = GW_REQ[cur], o = gwRoute(r, grant);
+    svg.innerHTML = "";
+    const col = (x, title, val, on, bad) => { lcBox(svg, x, 70, 160, 64, "an-c" + (bad ? " term" : on ? " run" : ""), title, val || "—"); };
+    txt(svg, 20, 30, r[0] + "://" + r[1] + r[2] + (r[3] ? "   [" + r[3] + "]" : ""), "sv-tb");
+    col(20, "Client", r[0].toUpperCase(), true);
+    col(205, "Gateway infra/public", o.lis ? "listener " + o.lis : "không listener khớp", !!o.lis, !o.lis);
+    col(390, "HTTPRoute", o.route ? o.route : "—", !!o.route);
+    col(575, "Service", o.be || (o.redirect ? "301 → https" : o.err ? "500 RefNotPermitted" : "—"), !!o.be, o.err);
+    if (o.rule) txt(svg, 470, 160, "rule: " + o.rule, "sv-s", "middle");
+    cap.textContent = "";
+    const hops = [[180, 102], [205, 102]]; if (o.lis) hops.push([365, 102], [390, 102]); if (o.be) hops.push([550, 102], [575, 102]);
+    await lcPkt(svg, hops, { cls: o.be ? "v2" : "raw", dur: 1300 });
+    if (t !== tok) return;
+    if (o.redirect) await lcPkt(svg, [[365, 120], [180, 120]], { cls: "fmt", dur: 700 });
+    cap.textContent = o.cap;
+  };
+  p.addEventListener("click", e => { const b = e.target.closest("[data-gw]"); if (b) { cur = +b.dataset.gw; netPress(p, "data-gw", String(cur)); go(); } });
+  p.addEventListener("change", e => { if (e.target.id === "gwGrant") { grant = e.target.checked; go(); } });
+  LC_REPLAY.gateway = go; go();
+}
+lcOnce("gateway", gwInit);
+
+/* ---------- 4.6 NetworkPolicy: kết nối nào qua được ---------- */
+const NP_PODS = {
+  frontend: { ns: "shop", l: { app: "frontend" }, x: 40, y: 60 }, web: { ns: "shop", l: { app: "web" }, x: 175, y: 175 }, db: { ns: "shop", l: { app: "db" }, x: 330, y: 60 },
+  prom: { ns: "monitoring", l: { app: "prometheus" }, x: 512, y: 62 }, grafana: { ns: "monitoring", l: { app: "grafana" }, x: 628, y: 62 },
+  dns: { ns: "kube-system", l: { "k8s-app": "kube-dns" }, x: 570, y: 170 }, ext: { ext: "1.1.1.1", x: 570, y: 262 }
+};
+const NP_FLOWS = [["frontend", "web", 8080, "TCP"], ["frontend", "db", 5432, "TCP"], ["web", "db", 5432, "TCP"], ["prom", "web", 9090, "TCP"], ["grafana", "web", 9090, "TCP"], ["web", "dns", 53, "UDP"], ["web", "ext", 443, "TCP"]];
+const NP_POL = {
+  p1: { n: "default-deny-ingress", sel: {}, types: ["Ingress"], ingress: [] },
+  p2: { n: "web-from-frontend", sel: { app: "web" }, types: ["Ingress"], ingress: [{ peers: [{ pod: { app: "frontend" } }], ports: [[8080, "TCP"]] }] },
+  p3: { n: "db-from-web", sel: { app: "db" }, types: ["Ingress"], ingress: [{ peers: [{ pod: { app: "web" } }], ports: [[5432, "TCP"]] }] },
+  and: { n: "web-from-prometheus", sel: { app: "web" }, types: ["Ingress"], ingress: [{ peers: [{ ns: "monitoring", pod: { app: "prometheus" } }], ports: [[9090, "TCP"]] }] },
+  or: { n: "web-from-monitoring", sel: { app: "web" }, types: ["Ingress"], ingress: [{ peers: [{ ns: "monitoring" }, { pod: { app: "prometheus" } }], ports: [[9090, "TCP"]] }] },
+  p5: { n: "default-deny-egress", sel: {}, types: ["Egress"], egress: [] },
+  p6: { n: "allow-dns", sel: {}, types: ["Egress"], egress: [{ peers: [{ ns: "kube-system", pod: { "k8s-app": "kube-dns" } }], ports: [[53, "UDP"], [53, "TCP"]] }] },
+  p7: { n: "web-egress", sel: { app: "web" }, types: ["Egress"], egress: [{ peers: [{ pod: { app: "db" } }], ports: [[5432, "TCP"]] }, { peers: [{ ip: "0.0.0.0/0", except: "10.0.0.0/8" }], ports: [[443, "TCP"]] }] }
+};
+const npLab = (l, sel) => Object.entries(sel).every(([k, v]) => l && l[k] === v);
+function npPeer(peer, other) {
+  const o = NP_PODS[other];
+  if (peer.ip) return !!o.ext;
+  if (o.ext) return false;
+  if (peer.ns && o.ns !== peer.ns) return false;
+  if (!peer.ns && o.ns !== "shop") return false;
+  return !peer.pod || npLab(o.l, peer.pod);
+}
+const npRuleOk = (rule, other, port, proto) => (!rule.peers || rule.peers.some(p => npPeer(p, other))) && (!rule.ports || rule.ports.some(([pt, pr]) => pt === port && pr === proto));
+function npSide(on, pod, dir, other, port, proto) {
+  const P = NP_PODS[pod]; if (P.ext || P.ns !== "shop") return { ok: true, txt: (P.ext ? "Internet" : P.ns + "/" + pod) + ": không có policy ở namespace này → mở" };
+  const pols = on.filter(k => NP_POL[k].types.includes(dir) && npLab(P.l, NP_POL[k].sel));
+  if (!pols.length) return { ok: true, txt: "không policy " + dir + " nào chọn shop/" + pod + " → mở" };
+  const allow = pols.filter(k => (NP_POL[k][dir.toLowerCase()] || []).some(r => npRuleOk(r, other, port, proto)));
+  return { ok: allow.length > 0, txt: "shop/" + pod + " bị chọn bởi " + pols.map(k => NP_POL[k].n).join(", ") + (allow.length ? " → " + allow.map(k => NP_POL[k].n).join(", ") + " cho phép" : " → không policy nào cho phép, chặn") };
+}
+function npYaml(k) {
+  const p = NP_POL[k], sel = o => Object.keys(o).length ? "{matchLabels: {" + Object.entries(o).map(([a, b]) => a + ": " + b).join(", ") + "}}" : "{}";
+  const peer = x => x.ip ? "    - ipBlock: {cidr: " + x.ip + (x.except ? ", except: [" + x.except + "]" : "") + "}"
+    : (x.ns ? "    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: " + x.ns + "}}" + (x.pod ? "\n      podSelector: " + sel(x.pod) : "") : "    - podSelector: " + sel(x.pod));
+  const rules = (dir, list) => list.length ? "  " + dir + ":\n" + list.map(r => "  - " + (dir === "ingress" ? "from" : "to") + ":\n" + r.peers.map(peer).join("\n") + "\n    ports: [" + r.ports.map(([a, b]) => "{protocol: " + b + ", port: " + a + "}").join(", ") + "]").join("\n") : "";
+  return "apiVersion: networking.k8s.io/v1\nkind: NetworkPolicy\nmetadata: {name: " + p.n + ", namespace: shop}\nspec:\n  podSelector: " + sel(p.sel) + "\n  policyTypes: [" + p.types.join(", ") + "]" + (p.ingress ? "\n" + rules("ingress", p.ingress) : "") + (p.egress ? "\n" + rules("egress", p.egress) : "");
+}
+function npInit() {
+  const box = $("#npSim"); const st = { p1: true, p2: true, p3: true, mon: "and", p5: false, p6: false, p7: false }; let selF = 0;
+  const chk = (k, t) => '<label class="check"><input type="checkbox" data-np="' + k + '"' + (st[k] ? " checked" : "") + "> " + t + "</label>";
+  box.innerHTML = "<h3>Bật tắt policy, xem kết nối nào qua được</h3>" +
+    '<div class="formrow" style="align-items:flex-start"><div class="col" style="gap:4px"><b class="small">Ingress</b>' + chk("p1", "default-deny-ingress (cả namespace shop)") + chk("p2", "web-from-frontend :8080") + chk("p3", "db-from-web :5432") +
+    '<span class="small">Monitoring vào web :9090 ' + netSeg([["none", "không"], ["and", "AND"], ["or", "OR"]], st.mon, "data-npm") + "</span></div>" +
+    '<div class="col" style="gap:4px"><b class="small">Egress</b>' + chk("p5", "default-deny-egress (cả namespace shop)") + chk("p6", "allow-dns tới kube-dns :53") + chk("p7", "web-egress: db :5432, Internet :443") + "</div></div>" +
+    '<div class="stage sm"><svg viewBox="0 0 760 320"></svg></div><div id="npWhy" class="panel" style="padding:12px"></div><div class="tbl" id="npTbl"></div><details class="bp more"><summary>YAML của các policy đang bật</summary><div class="body" id="npYaml"></div></details>';
+  const svg = $("svg", box);
+  const render = () => {
+    const on = ["p1", "p2", "p3"].filter(k => st[k]).concat(st.mon !== "none" ? [st.mon] : [], ["p5", "p6", "p7"].filter(k => st[k]));
+    const res = NP_FLOWS.map(([s, d, port, proto]) => { const eg = npSide(on, s, "Egress", d, port, proto), ig = npSide(on, d, "Ingress", s, port, proto); return { eg, ig, ok: eg.ok && ig.ok }; });
+    svg.innerHTML = "";
+    [["shop", 20, 30, 460, 275], ["monitoring", 500, 30, 240, 100], ["kube-system", 500, 145, 240, 80], ["Internet", 500, 240, 240, 65]].forEach(([t, x, y, w, h]) => { el("rect", { x, y, width: w, height: h, rx: 10, class: "an-pod" }, svg); txt(svg, x + 10, y + 16, t, "sv-s"); });
+    const W = 108, H = 44, c = id => [NP_PODS[id].x + W / 2, NP_PODS[id].y + H / 2];
+    NP_FLOWS.forEach(([s, d], i) => {
+      const [x1, y1] = c(s), [x2, y2] = c(d), mx = (x1 + x2) / 2 + (i === 4 ? 0 : i === 3 ? -14 : 0), my = (y1 + y2) / 2 + (i === 3 ? -12 : i === 4 ? 12 : 0);
+      el("path", { d: "M" + x1 + " " + y1 + " Q" + mx + " " + my + " " + x2 + " " + y2, fill: "none", stroke: res[i].ok ? "var(--node)" : "var(--bad)", "stroke-width": i === selF ? 4 : 2.2, "stroke-dasharray": res[i].ok ? "" : "6 5", opacity: i === selF ? 1 : .75 }, svg);
+      const g = el("g", { style: "cursor:pointer", "data-npf": i }, svg); const lx = (x1 + 2 * mx + x2) / 4, ly = (y1 + 2 * my + y2) / 4;
+      el("circle", { cx: lx, cy: ly, r: 11, fill: res[i].ok ? "var(--node)" : "var(--bad)" }, g); txt(g, lx, ly + 4, String(i + 1), "sv-s", "middle").setAttribute("style", "fill:#fff;font-weight:700");
+    });
+    Object.entries(NP_PODS).forEach(([id, p]) => lcBox(svg, p.x, p.y, W, H, p.ext ? "an-ext" : "an-c", p.ext ? "1.1.1.1" : id, p.ext ? "ngoài cluster" : Object.entries(p.l).map(([a, b]) => a + "=" + b).join("")));
+    const f = NP_FLOWS[selF], r = res[selF], nm = id => NP_PODS[id].ext ? "Internet " + NP_PODS[id].ext : NP_PODS[id].ns + "/" + id;
+    $("#npWhy").innerHTML = "<b>" + (selF + 1) + ". " + esc(nm(f[0])) + " → " + esc(nm(f[1])) + " :" + f[2] + "/" + f[3] + " · " + (r.ok ? '<span style="color:var(--node)">qua được</span>' : '<span style="color:var(--bad)">bị chặn</span>') + '</b><ul class="tight" style="margin-top:6px"><li>Chiều đi (egress của nguồn): ' + esc(r.eg.txt) + "</li><li>Chiều đến (ingress của đích): " + esc(r.ig.txt) + "</li></ul>";
+    $("#npTbl").innerHTML = "<table><thead><tr><th>#</th><th>Kết nối</th><th>Kết quả</th></tr></thead><tbody>" + NP_FLOWS.map((f, i) => '<tr data-npf="' + i + '" style="cursor:pointer' + (i === selF ? ";background:var(--paper-2)" : "") + '"><td>' + (i + 1) + "</td><td><code>" + esc(nm(f[0]) + " → " + nm(f[1]) + " :" + f[2] + "/" + f[3]) + "</code></td><td>" + (res[i].ok ? "✓ qua" : "✕ chặn" + (!res[i].eg.ok ? " (egress)" : "") + (!res[i].ig.ok ? " (ingress)" : "")) + "</td></tr>").join("") + "</tbody></table>";
+    const y = $("#npYaml"); y.innerHTML = on.length ? on.map(k => lcCode(npYaml(k))).join("") : '<p class="small muted">Chưa bật policy nào: mọi kết nối đều mở.</p>'; lcEnhance(y);
+  };
+  box.addEventListener("change", e => { const c = e.target.closest("[data-np]"); if (c) { st[c.dataset.np] = c.checked; render(); } });
+  box.addEventListener("click", e => {
+    const m = e.target.closest("[data-npm]"); if (m) { st.mon = m.dataset.npm; netPress(box, "data-npm", st.mon); render(); return; }
+    const f = e.target.closest("[data-npf]"); if (f) { selF = +f.dataset.npf; render(); }
+  });
+  render();
+}
+lcOnce("netpol", npInit);
 
 /* ---------- khung chương / bài của trang Lý thuyết ----------
    lessonFrame(): đầu bài (chương + tab các bài) và cuối bài (ôn thi: năng lực CKA, thẻ CKAD, bài tập; đã học; bài trước/sau).
