@@ -1,0 +1,161 @@
+# Cheatsheet CKAD: [lệnh, ghi chú]. k = kubectl, $do = --dry-run=client -o yaml, $now = --force --grace-period=0.
+# tools/check_ckad.py --cheat chạy thử các lệnh "k create/run …" bằng --dry-run=client để bắt sai cờ.
+- t: Thiết lập đầu giờ
+  rows:
+    - ["export do=\"--dry-run=client -o yaml\"", "k run web --image=nginx:1.27 $do > web.yaml"]
+    - ["export now=\"--force --grace-period=0\"", "k delete pod web $now: xóa ngay"]
+    - ["echo 'set expandtab tabstop=2 shiftwidth=2' >> ~/.vimrc", "vim thụt 2 dấu cách khi sửa YAML"]
+    - ["k config get-contexts", "liệt kê context"]
+    - ["k config use-context <context>", "đổi cluster theo đề (task nào cũng ghi)"]
+    - ["k config set-context --current --namespace=dev", "đặt namespace mặc định"]
+    - ["k config view --minify -o jsonpath='{..namespace}'", "namespace đang dùng"]
+    - ["k explain cronjob.spec.jobTemplate --recursive", "tra trường YAML không cần mở web"]
+    - ["k api-resources --namespaced=true -o wide", "tên ngắn, apiVersion, verb của mọi resource"]
+- t: Pod
+  rows:
+    - ["k run web --image=nginx:1.27 --port=80 -l app=web,tier=fe $do > pod.yaml", "sinh YAML Pod có label và port"]
+    - ["k run t --image=busybox:1.36 $do -- sh -c 'echo hi; sleep 3600'", "phần sau -- là args"]
+    - ["k run t --image=busybox:1.36 --command $do -- sleep 3600", "--command: phần sau -- thành command"]
+    - ["k run web --image=nginx:1.27 --env=MODE=dev --env=LEVEL=info $do", "biến môi trường"]
+    - ["k run tmp --rm -it --restart=Never --image=busybox:1.36 -- sh", "Pod tạm có shell, tự xóa khi thoát"]
+    - ["k get pod web -o yaml > web.yaml && k replace --force -f web.yaml", "sửa Pod đang chạy (phần lớn spec bất biến)"]
+    - ["k label pod web env=prod --overwrite", "thêm hoặc đổi label"]
+    - ["k label pod web env-", "xóa label env"]
+    - ["k annotate pod web owner=team-a", "annotation"]
+    - ["k get pod -L app,env --show-labels", "hiện label thành cột"]
+    - ["k get pod -l 'env in (dev,qa),tier!=db'", "selector dạng tập hợp"]
+- t: Deployment và rollout
+  rows:
+    - ["k create deploy web --image=nginx:1.27 --replicas=3 --port=80 $do", "sinh YAML Deployment"]
+    - ["k scale deploy web --replicas=5", "đổi số replicas"]
+    - ["k set image deploy/web nginx=nginx:1.28", "trước dấu = là TÊN CONTAINER"]
+    - ["k set env deploy/web MODE=prod", "thêm env"]
+    - ["k set env deploy/web --from=configmap/app-cfg", "nạp cả ConfigMap làm env"]
+    - ["k set env deploy/web --list", "xem env hiện có"]
+    - ["k set resources deploy/web -c nginx --requests=cpu=100m,memory=128Mi --limits=memory=256Mi", "requests, limits"]
+    - ["k set serviceaccount deploy/web app-sa", "đổi ServiceAccount (tạo Pod mới)"]
+    - ["k annotate deploy/web kubernetes.io/change-cause='upgrade to 1.28'", "ghi lý do vào rollout history"]
+    - ["k rollout status deploy/web", "chờ rollout xong"]
+    - ["k rollout history deploy/web --revision=2", "xem chi tiết một revision"]
+    - ["k rollout undo deploy/web --to-revision=1", "quay lại revision cũ"]
+    - ["k rollout pause deploy/web && k rollout resume deploy/web", "gom nhiều thay đổi vào một lần rollout"]
+    - ["k rollout restart deploy/web", "tạo lại Pod (sau khi đổi ConfigMap dùng qua env)"]
+    - ["k autoscale deploy web --min=2 --max=6 --cpu=70%", "HPA (cần requests.cpu)"]
+- t: Job và CronJob
+  rows:
+    - ["k create job calc --image=busybox:1.36 $do -- sh -c 'echo $((6*7))'", "sinh YAML Job, thêm completions/parallelism bằng vim"]
+    - ["k create cronjob rpt --image=busybox:1.36 --schedule='*/5 * * * *' $do -- date", "schedule luôn để trong nháy đơn"]
+    - ["k create job rpt-now --from=cronjob/rpt", "chạy CronJob ngay một lần"]
+    - ["k get cj,job", "LAST SCHEDULE, ACTIVE, COMPLETIONS"]
+    - ["k get pod -l job-name=calc", "Pod của Job"]
+    - ["k logs job/calc", "log một Pod của Job"]
+    - ["k wait --for=condition=complete job/calc --timeout=120s", "chờ Job xong"]
+    - ["k patch cj rpt -p '{\"spec\":{\"suspend\":true}}'", "tạm dừng CronJob"]
+    - ["k patch cj rpt --type=merge -p '{\"spec\":{\"concurrencyPolicy\":\"Forbid\",\"successfulJobsHistoryLimit\":2}}'", "các trường không có cờ"]
+    - ["k delete job calc", "xóa Job xóa luôn Pod của nó"]
+- t: ConfigMap và Secret
+  rows:
+    - ["k create cm app-cfg --from-literal=MODE=dev --from-file=app.conf", "từ chữ và từ file (key = tên file)"]
+    - ["k create cm app-env --from-env-file=app.env", "mỗi dòng KEY=VALUE thành một key"]
+    - ["k create secret generic db --from-literal=user=admin --from-literal=pass=s3cr3t", "Secret thường"]
+    - ["k create secret tls web-tls --cert=tls.crt --key=tls.key", "Secret TLS"]
+    - ["k create secret docker-registry regcred --docker-server=reg.lab --docker-username=u --docker-password=p", "kéo image private"]
+    - ["k get secret db -o jsonpath='{.data.pass}' | base64 -d", "đọc giá trị Secret"]
+    - ["echo -n 's3cr3t' | base64", "viết YAML dùng data: (hoặc dùng stringData: khỏi mã hóa)"]
+    - ["k get cm app-cfg -o yaml", "xem nội dung ConfigMap"]
+- t: Bảo mật, ServiceAccount, RBAC
+  rows:
+    - ["k create sa app", "ServiceAccount"]
+    - ["k create token app --duration=1h", "token có hạn"]
+    - ["k create role pod-reader --verb=get,list,watch --resource=pods,pods/log", "Role trong namespace"]
+    - ["k create rolebinding rb --role=pod-reader --serviceaccount=dev:app", "--serviceaccount nhận <ns>:<tên>"]
+    - ["k create clusterrole node-view --verb=get,list --resource=nodes", "ClusterRole"]
+    - ["k auth can-i list pods -n dev --as=system:serviceaccount:dev:app", "kiểm quyền"]
+    - ["k auth can-i --list -n dev --as=system:serviceaccount:dev:app", "mọi quyền đang có"]
+    - ["k exec secure -- id", "kiểm runAsUser, runAsGroup, fsGroup"]
+    - ["k label ns dev pod-security.kubernetes.io/enforce=restricted", "bật Pod Security"]
+    - ["k run t --image=busybox:1.36 -n dev --dry-run=server -- sleep 1", "xem admission có chặn không (báo đủ trường thiếu)"]
+- t: Tài nguyên và quota
+  rows:
+    - ["k create quota q --hard=pods=10,requests.cpu=2,requests.memory=2Gi,limits.memory=4Gi", "ResourceQuota"]
+    - ["k describe quota -n dev", "Used / Hard"]
+    - ["k describe limitrange -n dev", "giá trị mặc định, min, max"]
+    - ["k get pod web -o jsonpath='{.status.qosClass}'", "Guaranteed, Burstable, BestEffort"]
+    - ["k top pod -A --sort-by=memory", "Pod dùng nhiều RAM nhất (cần metrics-server)"]
+    - ["k top pod web --containers", "theo từng container"]
+- t: Service, Ingress, NetworkPolicy
+  rows:
+    - ["k expose deploy web --port=80 --target-port=8080 --name=web-svc", "ClusterIP"]
+    - ["k expose deploy web --type=NodePort --port=80 --name=web-np", "NodePort (cổng tự cấp)"]
+    - ["k create svc nodeport web --tcp=80:8080 --node-port=30080 $do", "NodePort cổng cố định, sửa selector trong YAML"]
+    - ["k get endpointslices -l kubernetes.io/service-name=web", "Service có Pod nào phía sau"]
+    - ["k run tmp --rm -it --restart=Never --image=busybox:1.36 -- wget -qO- -T 3 http://web.dev", "gọi thử Service khác namespace"]
+    - ["k run tmp --rm -it --restart=Never --image=busybox:1.36 -- nslookup web.dev.svc.cluster.local", "thử DNS"]
+    - ["k create ingress web --class=nginx --rule='web.lab/*=web:80' --rule='web.lab/api*=api:8080' $do", "* cuối path = Prefix"]
+    - ["k create ingress web --class=nginx --rule='web.lab/*=web:80,tls=web-tls' $do", "Ingress có TLS"]
+    - ["k get netpol -n dev && k describe netpol db-allow -n dev", "đọc NetworkPolicy"]
+    - ["k port-forward svc/web 8080:80", "mở tạm cổng về máy mình"]
+- t: Quan sát và gỡ lỗi
+  rows:
+    - ["k describe pod web | sed -n '/Events/,$p'", "chỉ đọc phần Events"]
+    - ["k events -n dev --for pod/web", "event của một object"]
+    - ["k get events -A --sort-by=.lastTimestamp | tail", "event mới nhất"]
+    - ["k logs web -c app --previous --tail=50", "log lần chạy trước của một container"]
+    - ["k logs -l app=web --all-containers --prefix --since=10m", "log nhiều Pod theo label"]
+    - ["k logs -f deploy/web", "theo dõi log liên tục"]
+    - ["k exec -it web -c app -- sh", "vào container"]
+    - ["k debug -it web --image=busybox:1.36 --target=app", "container tạm cho image không có shell"]
+    - ["k debug node/node01 -it --image=busybox:1.36", "shell trên node (filesystem node ở /host)"]
+    - ["k get pod -A --field-selector=status.phase!=Running", "Pod không chạy"]
+    - ["k get pod --sort-by=.status.containerStatuses[0].restartCount", "Pod restart nhiều nhất ở cuối"]
+- t: API, CRD, deprecation
+  rows:
+    - ["k api-versions | grep autoscaling", "version còn được phục vụ"]
+    - ["k api-resources | grep -i horizontal", "apiVersion hiện tại của một kind"]
+    - ["k explain hpa --api-version=autoscaling/v2", "trường của đúng version"]
+    - ["k convert -f old.yaml --output-version autoscaling/v2", "plugin kubectl-convert, có thể không có sẵn"]
+    - ["k get crd", "CRD đã cài"]
+    - ["k api-resources --api-group=stable.example.com", "kind của một CRD"]
+    - ["k explain backup.spec", "trường của custom resource"]
+- t: Output và jsonpath
+  rows:
+    - ["k get pod web -o jsonpath='{.spec.containers[*].image}'", "một trường"]
+    - ["k get pod -o jsonpath='{range .items[*]}{.metadata.name}{\"\\t\"}{.status.podIP}{\"\\n\"}{end}'", "nhiều dòng"]
+    - ["k get pod -o custom-columns=NAME:.metadata.name,NODE:.spec.nodeName,IP:.status.podIP", "bảng tự chọn cột"]
+    - ["k get deploy web -o yaml | grep -A6 strategy", "đọc nhanh một khối YAML"]
+    - ["k get all -n dev", "Pod, Service, Deployment, ReplicaSet, Job…"]
+    - ["k get pod -o name | head", "chỉ tên, để đưa vào lệnh khác"]
+- t: Sửa và xóa nhanh
+  rows:
+    - ["k edit deploy web", "sửa trực tiếp (Pod sẽ được tạo lại nếu đổi template)"]
+    - ["k patch deploy web -p '{\"spec\":{\"replicas\":2}}'", "patch merge"]
+    - ["k patch svc web --type=json -p '[{\"op\":\"replace\",\"path\":\"/spec/ports/0/targetPort\",\"value\":8080}]'", "patch JSON theo đường dẫn"]
+    - ["k delete pod web $now", "xóa ngay, không chờ"]
+    - ["k delete pod -l app=web", "xóa theo label"]
+    - ["k apply -f . --dry-run=server", "kiểm cả thư mục với API thật trước khi áp"]
+- t: Helm
+  rows:
+    - ["helm repo add podinfo https://stefanprodan.github.io/podinfo && helm repo update", "thêm repo"]
+    - ["helm search repo podinfo --versions | head", "các version chart"]
+    - ["helm show values podinfo/podinfo > values.yaml", "giá trị mặc định"]
+    - ["helm install web podinfo/podinfo -n web --create-namespace -f values.yaml --set replicaCount=2", "cài"]
+    - ["helm upgrade --install web podinfo/podinfo -n web --version 6.15.0", "nâng cấp hoặc cài nếu chưa có"]
+    - ["helm list -A --all", "mọi release, kể cả pending, failed"]
+    - ["helm history web -n web && helm rollback web 1 -n web", "lịch sử và quay lại"]
+    - ["helm get values web -n web --all", "giá trị đang dùng"]
+    - ["helm template web podinfo/podinfo -n web > out.yaml", "render YAML không cài"]
+    - ["helm uninstall web -n web", "gỡ"]
+- t: Kustomize
+  rows:
+    - ["k kustomize overlays/prod", "xem YAML cuối cùng"]
+    - ["k apply -k overlays/prod", "áp (nhận thư mục)"]
+    - ["k delete -k overlays/prod", "xóa đúng những gì overlay tạo"]
+    - ["k diff -k overlays/prod", "so với cluster trước khi áp"]
+- t: Container image (podman)
+  rows:
+    - ["podman build -t web:1.0 .", "build từ Dockerfile/Containerfile ở thư mục hiện tại"]
+    - ["podman images && podman image history web:1.0", "danh sách image, các layer"]
+    - ["podman tag web:1.0 reg.lab:5000/web:1.0", "thêm tag"]
+    - ["podman push reg.lab:5000/web:1.0", "đẩy lên registry"]
+    - ["podman save -o web.tar web:1.0 && podman load -i web.tar", "lưu ra file và nạp lại"]
+    - ["podman run -d --name w -p 8080:80 web:1.0 && curl localhost:8080", "chạy thử image"]

@@ -77,7 +77,7 @@ const domPill = id => '<span class="ck-dom dom-' + id + '">' + esc(DM[id].vi) + 
 /* ---------- điều hướng ---------- */
 const MODS = [{ g: "CKAD" }, { id: "overview", n: "00", t: "Tổng quan" }];
 D.forEach((d, i) => MODS.push({ id: d.id, n: "0" + (i + 1), t: d.vi + " · " + d.w + "%" }));
-MODS.push({ g: "Luyện" }, { id: "ex", n: "06", t: "Bài tập (" + EX.length + ")" }, { id: "mock", n: "07", t: "Thi thử 2 giờ" }, { g: "Tra cứu" }, { id: "tips", n: "08", t: "Mẹo làm bài" }, { id: "src", n: "09", t: "Nguồn tham khảo" });
+MODS.push({ g: "Khái niệm" }, { id: "jobs", n: "06", t: "Job & CronJob" }, { g: "Luyện" }, { id: "ex", n: "07", t: "Bài tập (" + EX.length + ")" }, { id: "mock", n: "08", t: "Thi thử 2 giờ" }, { g: "Tra cứu" }, { id: "cheat", n: "09", t: "Cheatsheet lệnh" }, { id: "tips", n: "10", t: "Mẹo làm bài" }, { id: "src", n: "11", t: "Nguồn tham khảo" });
 let current = "overview";
 const built = {};
 function buildRail() {
@@ -113,7 +113,7 @@ RENDER.overview = () => {
     '<div class="a"><b>Trọng tâm CKAD</b><ul><li>Build và lưu container image</li><li>Mẫu nhiều container: init, sidecar, adapter, ambassador</li><li>Blue/green, canary bằng primitive có sẵn</li><li>API bị gỡ và cách sửa manifest</li><li>SecurityContext, capabilities</li><li>Job, CronJob chi tiết</li></ul></div>' +
     '<div class="b"><b>Chung với CKA</b> <span class="small muted">(đã có lý thuyết bên CKA)</span><ul>' + [["workloads", "Deployment, rolling update"], ["probes", "Probe"], ["network", "Service, Ingress, NetworkPolicy"], ["security", "RBAC, ServiceAccount"], ["scale", "requests, limits, quota"], ["best", "Helm, Kustomize"], ["trouble", "Đọc log, gỡ lỗi Pod"], ["kinds", "Chọn đúng workload"]].map(x => '<li><a href="learn.html#' + x[0] + '">' + esc(x[1]) + "</a></li>").join("") + "</ul></div>" +
     '<div class="c"><b>Chỉ có ở CKA</b><ul><li>Cài và nâng cấp cluster bằng kubeadm</li><li>Sao lưu, khôi phục etcd</li><li>Gỡ lỗi node, control plane</li><li>CNI, CSI, CRI</li><li>Gateway API</li></ul></div></div></div>' +
-    '<div class="panel col"><h4>Học theo thứ tự</h4><ol class="tight"><li>Đọc từng domain: mỗi mục một câu, một lệnh, một bẫy.</li><li>Làm <a href="#ex" data-go="ex">' + EX.length + " bài tập</a>, mỗi bài có lời giải và lệnh tự kiểm tra.</li><li>Làm <a href=\"#mock\" data-go=\"mock\">đề thi thử 2 giờ</a> chọn ngẫu nhiên theo tỉ trọng.</li><li>Xem lại <a href=\"#tips\" data-go=\"tips\">mẹo làm bài</a> trước ngày thi.</li></ol></div>";
+    '<div class="panel col"><h4>Học theo thứ tự</h4><ol class="tight"><li>Đọc từng domain: mỗi mục một câu, một lệnh, một bẫy.</li><li>Làm <a href="#ex" data-go="ex">' + EX.length + " bài tập</a>, mỗi bài có lời giải và lệnh tự kiểm tra.</li><li>Làm <a href=\"#mock\" data-go=\"mock\">đề thi thử 2 giờ</a> chọn ngẫu nhiên theo tỉ trọng.</li><li>Xem lại <a href=\"#cheat\" data-go=\"cheat\">cheatsheet lệnh</a> và <a href=\"#tips\" data-go=\"tips\">mẹo làm bài</a> trước ngày thi.</li></ol></div>";
 };
 AFTER.overview = ON.overview = sec => { $$("#ckBars i", sec).forEach(i => { i.style.width = "0"; requestAnimationFrame(() => requestAnimationFrame(() => { i.style.width = (+i.dataset.w * 4) + "%"; })); }); };
 
@@ -128,7 +128,7 @@ function domainHTML(id) {
       return '<article class="ck-topic"><span class="en">' + esc(t.t) + '</span><span class="vi">' + esc(t.vi) + "</span>" + code(t.cmd) +
         (t.yaml ? det("Mẫu", code(t.yaml)) : "") + '<div class="trap"><b>Bẫy:</b> ' + esc(t.trap) + "</div>" +
         '<div class="ck-links"><a class="ck-src" href="' + esc(t.docs) + '" target="_blank" rel="noopener">' + (t.docs.includes("helm.sh") ? "helm.sh/docs" : "kubernetes.io") + " ↗</a>" +
-        (t.learn ? '<a class="ck-src" href="learn.html#' + t.learn + '">Lý thuyết: ' + esc(LEARN[t.learn] || t.learn) + "</a>" : "") + (t.src || []).map(srcChip).join("") + "</div>" +
+        (t.learn ? '<a class="ck-src" href="learn.html#' + t.learn + '">Lý thuyết: ' + esc(LEARN[t.learn] || t.learn) + "</a>" : "") + (/CronJob/.test(t.t) ? '<a class="ck-src" href="#jobs" data-go="jobs">Khái niệm: Job &amp; CronJob</a>' : "") + (t.src || []).map(srcChip).join("") + "</div>" +
         (tex.length ? '<div class="ck-links">' + tex.map(e => '<button type="button" class="pill cp" data-exgo="' + e.id + '">Bài: ' + esc(e.title) + "</button>").join("") + "</div>" : "") + "</article>";
     }).join("") + "</div>";
 }
@@ -378,6 +378,258 @@ RENDER.src = () => {
   return '<header class="vh"><p class="eyebrow">Tra cứu</p><h2>Nguồn tham khảo</h2><p class="lead">Chỉ dùng repo chính thức hoặc được cộng đồng dùng rộng rãi. Bài tập được viết lại bằng tiếng Việt, không chép nguyên văn.</p></header>' +
     '<div class="panel col">' + tl(["<b>Danh sách domain và tỉ trọng</b> lấy từ curriculum chính thức của CNCF.", "<b>Lời giải</b> được chạy thử tự động trên cluster k3s v1.34 bằng <code>tools/check_ckad.py</code>, trừ bài cần podman hoặc Helm.", "Mỗi mục và mỗi bài ghi rõ repo đã gợi ý chủ đề đó."]) + "</div>" +
     '<div class="ck-topics">' + Object.entries(SRC).map(([k, s]) => '<article class="ck-topic"><a href="' + esc(s.url) + '" target="_blank" rel="noopener" class="vi">' + esc(s.name) + " ↗</a><span>" + esc(s.note) + '</span><div class="ck-links"><span class="ck-badge no">' + esc(s.license) + "</span>" + (cnt(k) ? '<span class="ck-badge ok">dẫn ở ' + cnt(k) + " chỗ</span>" : "") + "</div></article>").join("") + "</div>";
+};
+
+/* ---------- Job & CronJob ---------- */
+RENDER.jobs = () => '<header class="vh"><p class="eyebrow">Khái niệm · Application Design and Build</p><h2>Job &amp; CronJob</h2><p class="lead">Job chạy Pod tới khi xong. CronJob tạo Job theo lịch.</p></header>' +
+  '<div class="panel col">' + tl(["<b>Job</b> cần đủ <code>completions</code> lần thành công, chạy tối đa <code>parallelism</code> Pod cùng lúc, lỗi quá <code>backoffLimit</code> thì Failed.", "<b>CronJob</b> mỗi lần tới giờ tạo một Job; <code>concurrencyPolicy</code> quyết định khi lần trước chưa xong.", "Pod của Job phải có <code>restartPolicy</code> Never hoặc OnFailure, không được Always."]) + "</div>" +
+  '<div class="panel col ck-anim" id="jobSim"><h4>Mô phỏng Job</h4><div class="formrow">' +
+  '<label class="f">completions <b id="jcV">4</b><input type="range" id="jc" min="1" max="8" value="4"></label>' +
+  '<label class="f">parallelism <b id="jpV">2</b><input type="range" id="jp" min="1" max="4" value="2"></label>' +
+  '<label class="f">backoffLimit <b id="jbV">2</b><input type="range" id="jb" min="0" max="4" value="2"></label></div>' +
+  '<div class="formrow"><div class="seg" role="group" id="jMode"><button type="button" data-jm="ok" aria-pressed="true">Mọi Pod thành công</button><button type="button" data-jm="one" aria-pressed="false">Một lần lỗi</button><button type="button" data-jm="all" aria-pressed="false">Lỗi liên tục</button></div>' +
+  '<div class="seg" role="group" id="jRp"><button type="button" data-jr="Never" aria-pressed="true">restartPolicy: Never</button><button type="button" data-jr="OnFailure" aria-pressed="false">OnFailure</button></div></div>' +
+  '<div class="stage sm"><svg id="jSvg" viewBox="0 0 760 230"></svg></div><div class="controls"><button class="btn primary" type="button" id="jPlay">▶ Chạy Job</button><span class="hint cap" id="jCap" aria-live="polite"></span></div>' + code("") + "</div>" +
+  '<div class="panel col ck-anim" id="cjSim"><h4>Mô phỏng CronJob trong 60 phút</h4><div class="formrow">' +
+  '<div class="seg" role="group" id="cjSch"><button type="button" data-cs="10" aria-pressed="true">*/10 * * * *</button><button type="button" data-cs="15" aria-pressed="false">*/15 * * * *</button><button type="button" data-cs="20" aria-pressed="false">*/20 * * * *</button></div>' +
+  '<label class="f">Thời gian chạy mỗi Job (phút) <b id="cdV">14</b><input type="range" id="cd" min="3" max="35" value="14"></label></div>' +
+  '<div class="formrow"><div class="seg" role="group" id="cjPol"><button type="button" data-cp="Allow" aria-pressed="true">Allow</button><button type="button" data-cp="Forbid" aria-pressed="false">Forbid</button><button type="button" data-cp="Replace" aria-pressed="false">Replace</button></div>' +
+  '<label class="check"><input type="checkbox" id="cjSusp"> suspend từ phút 30</label><span class="small muted">successfulJobsHistoryLimit: 3</span></div>' +
+  '<div class="stage sm"><svg id="cjSvg" viewBox="0 0 760 260"></svg></div><div class="controls"><button class="btn primary" type="button" id="cjPlay">▶ Chạy 60 phút</button><span class="hint cap" id="cjCap" aria-live="polite"></span></div></div>' +
+  '<div class="panel col"><h4>Đọc lịch cron</h4><p class="hint" style="margin:0">phút · giờ · ngày trong tháng · tháng · thứ (0 hoặc 7 là Chủ nhật). Hỗ trợ <code>*</code> <code>*/n</code> <code>a-b</code> <code>a,b</code> và @hourly, @daily, @weekly, @monthly.</p>' +
+  '<div class="formrow"><input type="text" id="cronIn" value="0 9 * * 1-5" style="flex:1;min-width:200px;font-family:var(--f-mono)" aria-label="Lịch cron"><div class="chips" id="cronEx">' + ["*/5 * * * *", "0 2 * * *", "0 9 * * 1-5", "30 8 1 * *", "0 */6 * * *", "@weekly"].map(x => '<button type="button" data-cron="' + x + '">' + x + "</button>").join("") + '</div></div><div id="cronOut"></div>' +
+  '<p class="small muted" style="margin:0">CronJob tính giờ theo múi giờ của kube-controller-manager (thường UTC) nếu không đặt <code>spec.timeZone</code>, ví dụ <code>timeZone: Asia/Ho_Chi_Minh</code>. Bảng trên dùng giờ máy bạn.</p></div>' +
+  '<div class="ck-topics"><article class="ck-topic"><span class="vi">Trường của Job</span><div class="tbl"><table><tbody>' + [
+    ["completions", "số lần thành công cần có (mặc định 1)"], ["parallelism", "số Pod chạy cùng lúc (mặc định 1)"], ["backoffLimit", "số lần lỗi cho phép trước khi Failed (mặc định 6)"], ["activeDeadlineSeconds", "giới hạn thời gian cả Job, quá là Failed: DeadlineExceeded"],
+    ["ttlSecondsAfterFinished", "tự xóa Job và Pod sau khi xong"], ["completionMode: Indexed", "mỗi Pod một chỉ số, biến JOB_COMPLETION_INDEX"], ["template.spec.restartPolicy", "Never: lỗi thì tạo Pod mới; OnFailure: restart container tại chỗ"]
+  ].map(r => "<tr><td><code>" + r[0] + "</code></td><td>" + esc(r[1]) + "</td></tr>").join("") + "</tbody></table></div></article>" +
+  '<article class="ck-topic"><span class="vi">Trường của CronJob</span><div class="tbl"><table><tbody>' + [
+    ["schedule", "lịch cron, luôn để trong nháy"], ["timeZone", "múi giờ IANA, ví dụ Asia/Ho_Chi_Minh"], ["concurrencyPolicy", "Allow (mặc định), Forbid, Replace"], ["startingDeadlineSeconds", "lỡ giờ quá số giây này thì bỏ lần đó"],
+    ["successfulJobsHistoryLimit", "giữ bao nhiêu Job thành công (mặc định 3)"], ["failedJobsHistoryLimit", "giữ bao nhiêu Job lỗi (mặc định 1)"], ["suspend", "true: ngừng tạo Job mới, Job đang chạy vẫn chạy"], ["jobTemplate", "spec của Job sẽ được tạo"]
+  ].map(r => "<tr><td><code>" + r[0] + "</code></td><td>" + esc(r[1]) + "</td></tr>").join("") + "</tbody></table></div></article>" +
+  '<article class="ck-topic"><span class="vi">Mẫu đầy đủ</span>' + code(`apiVersion: batch/v1
+kind: CronJob
+metadata: {name: backup}
+spec:
+  schedule: "0 2 * * *"
+  timeZone: Asia/Ho_Chi_Minh
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 600
+      ttlSecondsAfterFinished: 3600
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: backup
+              image: busybox:1.36
+              command: ["sh", "-c", "date; echo backup done"]`) + "</article>" +
+  '<article class="ck-topic"><span class="vi">Bẫy hay gặp</span><ul class="tight"><li>Không có cờ cho completions, parallelism, concurrencyPolicy: sinh YAML rồi sửa, hoặc <code>k patch</code>.</li><li>Template của Job bất biến: muốn chạy lại thì xóa Job và tạo lại.</li><li>Tạo CronJob xong không chạy ngay: thử bằng <code>k create job x --from=cronjob/…</code>.</li><li>OnFailure: restart tại chỗ vẫn tính vào backoffLimit; Pod lỗi không còn để đọc log như Never.</li><li>Schedule không để trong nháy thì shell bung dấu <code>*</code> thành tên file.</li></ul>' +
+  '<div class="ck-links"><a class="ck-src" href="learn.html#kinds">Lý thuyết: Workload resources (sơ đồ, sequence)</a><button type="button" class="pill cp" data-exgo="b-job">Bài: Job</button><button type="button" class="pill cp" data-exgo="b-cron">Bài: CronJob</button><a class="ck-src" href="https://kubernetes.io/docs/concepts/workloads/controllers/job/" target="_blank" rel="noopener">Job ↗</a><a class="ck-src" href="https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/" target="_blank" rel="noopener">CronJob ↗</a></div></article></div>';
+
+let jMode = "ok", jRp = "Never", jRun = 0, cjEvery = 10, cjPol = "Allow", cjRun = 0;
+function jYaml() {
+  const c = +$("#jc").value, p = +$("#jp").value, b = +$("#jb").value;
+  const pre = $("#jobSim pre.code"); if (pre) pre.innerHTML = hl(`apiVersion: batch/v1
+kind: Job
+metadata: {name: calc}
+spec:
+  completions: ${c}
+  parallelism: ${p}
+  backoffLimit: ${b}
+  template:
+    spec:
+      restartPolicy: ${jRp}
+      containers:
+        - {name: calc, image: busybox:1.36, command: ["sh", "-c", "echo $((6*7))"]}`);
+}
+function jPlan(C, P, B) {
+  /* sự kiện: mỗi lần chạy [lane, start, end, ok, podIdx, restart] ; t tính bằng giây giả lập */
+  const runs = [], lanes = Array(P).fill(0); let succ = 0, fail = 0, attempt = 0, started = 0, nextAllowed = 0, t = 0, status = "", pods = 0;
+  const DUR_OK = 8, DUR_FAIL = 5;
+  const pending = [];
+  while (succ < C && t < 400) {
+    for (let l = 0; l < P; l++) {
+      if (lanes[l] <= t && started < C + fail && t >= nextAllowed && succ + runs.filter(r => r.end > t).length < C) {
+        attempt++;
+        const willFail = jMode === "all" || (jMode === "one" && attempt === 2);
+        const reuse = jRp === "OnFailure" && pending.length;
+        const pod = reuse ? pending.shift() : ++pods;
+        const d = willFail ? DUR_FAIL : DUR_OK;
+        runs.push({ lane: l, start: t, end: t + d, ok: !willFail, pod, restart: reuse });
+        lanes[l] = t + d; started++;
+      }
+    }
+    t++;
+    runs.filter(r => r.end === t).forEach(r => {
+      if (r.ok) succ++; else { fail++; nextAllowed = t + Math.min(10 * Math.pow(2, fail - 1), 60); if (jRp === "OnFailure") pending.push(r.pod); }
+    });
+    if (fail > B) { status = "Failed"; runs.filter(r => r.end > t).forEach(r => { r.end = t; r.killed = 1; }); break; }
+  }
+  if (!status) status = succ >= C ? "Complete" : "Running";
+  return { runs, succ, fail, status, T: Math.max(t, 20), pods };
+}
+async function jPlay() {
+  const tok = ++jRun, svg = $("#jSvg"), cap = $("#jCap");
+  const C = +$("#jc").value, P = +$("#jp").value, B = +$("#jb").value, plan = jPlan(C, P, B);
+  const X = s => 90 + s / plan.T * 640, LH = Math.min(40, 150 / P);
+  svg.innerHTML = "";
+  for (let l = 0; l < P; l++) txt(svg, 10, 40 + l * (LH + 8) + LH / 2 + 4, "luồng " + (l + 1), "sv-s");
+  const axisY = 40 + P * (LH + 8) + 6;
+  el("line", { x1: 90, x2: 730, y1: axisY, y2: axisY, class: "an-l" }, svg);
+  const stp = plan.T > 80 ? 20 : 10;
+  for (let s = 0; s <= plan.T; s += stp) txt(svg, X(s), axisY + 16, s + "s", "sv-s", "middle");
+  const head = el("line", { x1: 90, x2: 90, y1: 30, y2: axisY, stroke: "var(--ink)", "stroke-width": 1, opacity: .4 }, svg);
+  const stat = txt(svg, 90, 22, "", "sv-tb");
+  const t0 = performance.now(), dur = RM ? 50 : Math.min(9000, plan.T * 110);
+  const drawn = new Set();
+  await new Promise(res => {
+    const f = now => {
+      if (tok !== jRun || !svg.isConnected) return res();
+      const p = Math.min(1, (now - t0) / dur), t = p * plan.T;
+      head.setAttribute("x1", X(t)); head.setAttribute("x2", X(t));
+      plan.runs.forEach((r, i) => {
+        if (t < r.start) return;
+        let g = svg.querySelector("#jr" + i);
+        if (!g) { g = el("g", { id: "jr" + i }, svg); el("rect", { x: X(r.start), y: 40 + r.lane * (LH + 8), height: LH, width: 1, rx: 4, class: "an-c start" }, g); txt(g, X(r.start) + 6, 40 + r.lane * (LH + 8) + LH / 2 + 4, (r.restart ? "↻ " : "") + "Pod " + r.pod, "sv-s"); }
+        const rect = g.querySelector("rect"), e = Math.min(t, r.end);
+        rect.setAttribute("width", Math.max(1, X(e) - X(r.start)));
+        if (t >= r.end && !drawn.has(i)) { drawn.add(i); rect.setAttribute("class", "an-c " + (r.ok ? "run" : "term")); }
+      });
+      const s = plan.runs.filter(r => r.end <= t && r.ok).length, fl = plan.runs.filter(r => r.end <= t && !r.ok && !r.killed).length;
+      stat.textContent = "Succeeded " + s + "/" + C + " · Failed " + fl + " (backoffLimit " + B + ")";
+      if (p < 1) requestAnimationFrame(f); else res();
+    };
+    requestAnimationFrame(f);
+  });
+  if (tok !== jRun) return;
+  stat.textContent = (plan.status === "Complete" ? "Complete ✓ " : "Failed ✕ ") + "· Succeeded " + plan.succ + "/" + C + " · Failed " + plan.fail;
+  stat.setAttribute("fill", plan.status === "Complete" ? "var(--node)" : "var(--bad)");
+  cap.innerHTML = plan.status === "Complete"
+    ? "Đủ " + C + " lần thành công nên Job <b>Complete</b>. " + (plan.fail ? "Lần lỗi được thử lại sau thời gian chờ (10s, 20s, 40s…). " : "") + (jRp === "OnFailure" && plan.fail ? "OnFailure: container restart trong cùng Pod (↻)." : jRp === "Never" && plan.fail ? "Never: lỗi thì tạo Pod mới, Pod lỗi còn lại để đọc log." : "")
+    : "Lỗi " + plan.fail + " lần, vượt backoffLimit " + B + ": Job <b>Failed</b> với lý do <code>BackoffLimitExceeded</code>, Pod đang chạy bị dừng.";
+}
+async function cjPlay() {
+  const tok = ++cjRun, svg = $("#cjSvg"), cap = $("#cjCap"), D = +$("#cd").value, susp = $("#cjSusp").checked;
+  const X = m => 70 + m / 60 * 660;
+  const jobs = []; let row = 0;
+  svg.innerHTML = "";
+  for (let m = 0; m <= 60; m += 10) { el("line", { x1: X(m), x2: X(m), y1: 20, y2: 225, class: "an-l" }, svg); txt(svg, X(m), 245, m + "′", "sv-s", "middle"); }
+  const head = el("line", { x1: X(0), x2: X(0), y1: 20, y2: 228, stroke: "var(--ink)", "stroke-width": 1.4 }, svg);
+  const notes = el("g", null, svg);
+  const t0 = performance.now(), dur = RM ? 50 : 12000; let lastTick = -1;
+  await new Promise(res => {
+    const f = now => {
+      if (tok !== cjRun || !svg.isConnected) return res();
+      const p = Math.min(1, (now - t0) / dur), m = p * 60;
+      head.setAttribute("x1", X(m)); head.setAttribute("x2", X(m));
+      const tick = Math.floor(m / cjEvery) * cjEvery;
+      if (tick !== lastTick && tick < 60) {
+        lastTick = tick;
+        const active = jobs.filter(j => !j.end || j.end > tick).filter(j => j.start + D > tick && !j.killed);
+        if (susp && tick >= 30) txt(notes, X(tick) + 3, 34, "suspend", "sv-s");
+        else if (active.length && cjPol === "Forbid") txt(notes, X(tick) + 3, 34, "✕ bỏ qua", "sv-s").setAttribute("fill", "var(--bad)");
+        else {
+          if (active.length && cjPol === "Replace") active.forEach(j => { j.killed = tick; });
+          jobs.push({ start: tick, row: row++ % 5, id: "rpt-" + (29000000 + tick) });
+        }
+      }
+      jobs.forEach((j, i) => {
+        const endM = j.killed !== undefined ? j.killed : j.start + D;
+        let g = svg.querySelector("#cj" + i);
+        if (!g) { g = el("g", { id: "cj" + i }, svg); el("rect", { x: X(j.start), y: 46 + j.row * 34, height: 26, width: 1, rx: 4, class: "an-c start" }, g); txt(g, X(j.start) + 6, 46 + j.row * 34 + 17, "Job " + (i + 1), "sv-s"); }
+        const r = g.querySelector("rect"); r.setAttribute("width", Math.max(1, X(Math.min(m, endM)) - X(j.start)));
+        if (m >= endM) r.setAttribute("class", "an-c " + (j.killed !== undefined ? "term" : "run"));
+        const doneOk = jobs.filter(x => x.killed === undefined && x.start + D <= m);
+        if (doneOk.length > 3 && doneOk.indexOf(j) > -1 && doneOk.indexOf(j) < doneOk.length - 3) g.setAttribute("opacity", .25);
+      });
+      if (p < 1) requestAnimationFrame(f); else res();
+    };
+    requestAnimationFrame(f);
+  });
+  if (tok !== cjRun) return;
+  const overlap = D > cjEvery;
+  cap.innerHTML = (!overlap ? "Job xong trước lần chạy sau nên ba chính sách giống nhau. Kéo thời gian chạy dài hơn " + cjEvery + " phút để thấy khác biệt. "
+    : cjPol === "Allow" ? "<b>Allow</b>: Job mới chạy chồng lên Job cũ: tốn tài nguyên gấp đôi, dữ liệu có thể bị ghi đè. "
+    : cjPol === "Forbid" ? "<b>Forbid</b>: tới giờ mà Job trước chưa xong thì bỏ qua lần đó (✕). "
+    : "<b>Replace</b>: Job cũ bị dừng (đỏ) để chạy Job mới. ") + "Job mờ là Job thành công cũ bị xóa vì vượt successfulJobsHistoryLimit 3." + (susp ? " Từ phút 30 suspend: không tạo Job mới." : "");
+}
+let cronBase = new Date();
+function cronNext(expr, n) {
+  const mac = { "@hourly": "0 * * * *", "@daily": "0 0 * * *", "@midnight": "0 0 * * *", "@weekly": "0 0 * * 0", "@monthly": "0 0 1 * *", "@yearly": "0 0 1 1 *", "@annually": "0 0 1 1 *" };
+  const f = (mac[expr.trim()] || expr).trim().split(/\s+/);
+  if (f.length !== 5) throw new Error("Cần đúng 5 trường");
+  const R = [[0, 59], [0, 23], [1, 31], [1, 12], [0, 7]];
+  const parse = (s, [lo, hi]) => {
+    const set = new Set();
+    s.split(",").forEach(part => {
+      let [rng, step] = part.split("/"); step = step ? +step : 1;
+      if (!(step > 0)) throw new Error("Bước sai: " + part);
+      let a = lo, b = hi;
+      if (rng !== "*") { [a, b] = rng.includes("-") ? rng.split("-").map(Number) : [+rng, step > 1 ? hi : +rng]; }
+      if ([a, b].some(v => isNaN(v) || v < lo || v > hi) || a > b) throw new Error("Giá trị ngoài khoảng: " + part);
+      for (let v = a; v <= b; v += step) set.add(v);
+    });
+    return set;
+  };
+  const [mi, ho, dm, mo, dw] = f.map((s, i) => parse(s, R[i]));
+  if (dw.has(7)) dw.add(0);
+  const domStar = f[2] === "*", dowStar = f[4] === "*";
+  const out = [], d = new Date(cronBase); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() + 1);
+  for (let i = 0; i < 600000 && out.length < n; i++) {
+    const dayOk = domStar && dowStar ? true : domStar ? dw.has(d.getDay()) : dowStar ? dm.has(d.getDate()) : dm.has(d.getDate()) || dw.has(d.getDay());
+    if (mo.has(d.getMonth() + 1) && dayOk && ho.has(d.getHours()) && mi.has(d.getMinutes())) out.push(new Date(d));
+    d.setMinutes(d.getMinutes() + 1);
+  }
+  return out;
+}
+function cronShow() {
+  const v = $("#cronIn").value, box = $("#cronOut");
+  try {
+    const ts = cronNext(v, 5);
+    const fmt = new Intl.DateTimeFormat("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    box.innerHTML = '<div class="facts4">' + ts.map((t, i) => '<div class="ft' + (i ? "" : " ok") + '"><span>lần ' + (i + 1) + "</span><b>" + esc(fmt.format(t)) + "</b></div>").join("") + "</div>";
+  } catch (e) { box.innerHTML = '<p class="small" style="color:var(--bad);margin:0">' + esc(e.message) + "</p>"; }
+}
+AFTER.jobs = sec => {
+  const upd = () => { ["jc", "jp", "jb"].forEach(id => $("#" + id + "V").textContent = $("#" + id).value); $("#cdV").textContent = $("#cd").value; jYaml(); };
+  sec.addEventListener("input", e => { if (e.target.id === "cronIn") cronShow(); else upd(); });
+  sec.addEventListener("click", e => {
+    const seg = (sel, attr, set) => { const b = e.target.closest("[" + attr + "]"); if (!b) return false; $$(sel + " button").forEach(x => x.setAttribute("aria-pressed", x === b ? "true" : "false")); set(b.getAttribute(attr)); return true; };
+    if (seg("#jMode", "data-jm", v => jMode = v) || seg("#jRp", "data-jr", v => { jRp = v; jYaml(); })) return;
+    if (seg("#cjSch", "data-cs", v => cjEvery = +v) || seg("#cjPol", "data-cp", v => cjPol = v)) return;
+    const c = e.target.closest("[data-cron]"); if (c) { $("#cronIn").value = c.dataset.cron; cronShow(); return; }
+    if (e.target.closest("#jPlay")) jPlay();
+    if (e.target.closest("#cjPlay")) cjPlay();
+    const x = e.target.closest("[data-exgo]"); if (x) { exOpen = x.dataset.exgo; exDom = "all"; exQ = ""; show("ex"); }
+  });
+  upd(); cronShow(); jPlay(); cjPlay();
+};
+
+/* ---------- cheatsheet ---------- */
+let chQ = "";
+RENDER.cheat = () => '<header class="vh"><p class="eyebrow">Tra cứu · ' + CKAD.cheat.reduce((a, g) => a + g.rows.length, 0) + ' lệnh</p><h2>Cheatsheet lệnh CKAD</h2><p class="lead"><code>k</code> = kubectl, <code>$do</code> = <code>--dry-run=client -o yaml</code>, <code>$now</code> = <code>--force --grace-period=0</code>.</p></header>' +
+  '<div class="panel col"><div class="formrow"><input type="search" id="chQ" placeholder="Tìm: secret, rollout, jsonpath, cronjob…" style="flex:1;min-width:220px" aria-label="Tìm lệnh"></div><div class="chips" id="chJump">' + CKAD.cheat.map((g, i) => '<button type="button" data-chg="' + i + '">' + esc(g.t) + "</button>").join("") + '</div><p class="small muted" style="margin:0">Lệnh tạo object (create, run) đã chạy thử bằng <code>--dry-run=client</code> với kubectl v1.34. Bấm một dòng để chép.</p></div>' +
+  '<div class="cheat ck-cheatgrid" id="chBox"></div>';
+function chRender() {
+  const q = chQ.trim().toLowerCase();
+  $("#chBox").innerHTML = CKAD.cheat.map((g, i) => {
+    const rows = g.rows.filter(r => !q || (r[0] + " " + r[1] + " " + g.t).toLowerCase().includes(q));
+    if (!rows.length) return "";
+    return '<div class="panel" id="chg' + i + '"><h4>' + esc(g.t) + "</h4>" + rows.map(r => '<button type="button" class="ch-row" data-cp="' + esc(r[0]) + '"><code>' + esc(r[0]) + "</code><span>" + esc(r[1]) + "</span></button>").join("") + "</div>";
+  }).join("") || '<p class="muted">Không có lệnh khớp.</p>';
+}
+AFTER.cheat = sec => {
+  sec.addEventListener("input", e => { if (e.target.id === "chQ") { chQ = e.target.value; chRender(); } });
+  sec.addEventListener("click", async e => {
+    const g = e.target.closest("[data-chg]"); if (g) { const t = $("#chg" + g.dataset.chg); if (t) t.scrollIntoView({ block: "start", behavior: RM ? "auto" : "smooth" }); return; }
+    const r = e.target.closest(".ch-row"); if (r) { try { await navigator.clipboard.writeText(r.dataset.cp); } catch (x) {} r.classList.add("copied"); setTimeout(() => r.classList.remove("copied"), 900); }
+  });
+  chRender();
 };
 
 /* ---------- khởi động ---------- */

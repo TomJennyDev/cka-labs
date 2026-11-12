@@ -317,6 +317,8 @@ def main():
         ck = yaml.safe_load(f)
     with open(os.path.join(ROOT, "src", "ckad", "exercises.yaml"), encoding="utf-8") as f:
         ck["exercises"] = yaml.safe_load(f)
+    with open(os.path.join(ROOT, "src", "ckad", "cheat.yaml"), encoding="utf-8") as f:
+        ck["cheat"] = yaml.safe_load(f)
     with open(os.path.join(ROOT, "tools", "ckad.html"), encoding="utf-8") as f:
         ckad = f.read()
     with open(os.path.join(ROOT, "tools", "ckad.js"), encoding="utf-8") as f:

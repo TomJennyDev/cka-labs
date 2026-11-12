@@ -4,7 +4,7 @@ Bộ **46 bài lab thực hành** để thi Certified Kubernetes Administrator (
 
 **Trang hướng dẫn:** [`docs/index.html`](docs/index.html) (bật GitHub Pages với thư mục `/docs` để xem online) gồm hai phần liên kết với nhau: **Lý thuyết** ([`docs/learn.html`](docs/learn.html): kiến trúc, luồng từ kubectl tới kernel, animation cơ chế, terminal mô phỏng, quiz) và **Lab thực hành** (lộ trình, từng bài, đồng hồ thi thử, lưu tiến độ trong trình duyệt). Mỗi bài lab có link tới phần lý thuyết liên quan.
 
-**CKAD:** [`docs/ckad.html`](docs/ckad.html) bám curriculum CKAD v1.37: 5 domain có animation (build image, mẫu nhiều container, rolling/blue-green/canary), 42 bài tập có lời giải và lệnh kiểm tra, đề thi thử 2 giờ chọn ngẫu nhiên theo tỉ trọng, mẹo làm bài. Nguồn: [cncf/curriculum](https://github.com/cncf/curriculum), [kubernetes/website](https://github.com/kubernetes/website), [dgkanatsios/CKAD-exercises](https://github.com/dgkanatsios/CKAD-exercises), [bmuschko/ckad-crash-course](https://github.com/bmuschko/ckad-crash-course), [bmuschko/ckad-study-guide](https://github.com/bmuschko/ckad-study-guide). Bài tập viết lại, không chép nguyên văn; chạy lời giải trên cluster: `python3 tools/check_ckad.py`.
+**CKAD:** [`docs/ckad.html`](docs/ckad.html) bám curriculum CKAD v1.37: 5 domain có animation (build image, mẫu nhiều container, rolling/blue-green/canary), 42 bài tập có lời giải và lệnh kiểm tra, mô phỏng Job và CronJob, cheatsheet 129 lệnh, đề thi thử 2 giờ chọn ngẫu nhiên theo tỉ trọng, mẹo làm bài. Nguồn: [cncf/curriculum](https://github.com/cncf/curriculum), [kubernetes/website](https://github.com/kubernetes/website), [dgkanatsios/CKAD-exercises](https://github.com/dgkanatsios/CKAD-exercises), [bmuschko/ckad-crash-course](https://github.com/bmuschko/ckad-crash-course), [bmuschko/ckad-study-guide](https://github.com/bmuschko/ckad-study-guide). Bài tập viết lại, không chép nguyên văn; chạy lời giải trên cluster: `python3 tools/check_ckad.py`.
 
 ```text
 ./lab start 7      # dựng tình huống
@@ -201,7 +201,7 @@ tools/build.py          sinh labs/, README (bảng), docs/ từ src/
 tools/check_diagrams.py render thử mọi sơ đồ Mermaid để bắt lỗi cú pháp
 tools/learn.html        nguồn của phần Lý thuyết (docs/learn.html); learn-kinds.js, learn-best.js là các mục thêm
 examples/               ứng dụng mẫu theo best practice: YAML chuẩn, Kustomize, Helm chart
-src/ckad/              dữ liệu trang CKAD (topics.yaml, exercises.yaml); tools/ckad.html, ckad.js dựng docs/ckad.html
+src/ckad/              dữ liệu trang CKAD (topics.yaml, exercises.yaml, cheat.yaml); tools/ckad.html, ckad.js dựng docs/ckad.html
 tools/check_ckad.py     chạy lời giải và lệnh kiểm tra của từng bài CKAD trên cluster
 tools/check_examples.py kiểm tra examples/ bằng server dry-run (tools/minihelm render chart khi không có Helm)
 ```
