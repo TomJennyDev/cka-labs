@@ -2549,6 +2549,118 @@ set expandtab tabstop=2 shiftwidth=2</pre></div>
   <div id="obsBody" class="col" style="gap:16px"></div>
 </section>
 
+<!-- ============ R.3 Gõ ít khi thi CKAD ============ -->
+<section class="view" data-view="fast" hidden>
+  <header class="vh">
+    <p class="eyebrow">Tra cứu</p>
+    <h2>Thi CKAD: gõ ít, sai ít</h2>
+    <p class="lead">Mỗi task chỉ có 6–8 phút. Viết YAML từ đầu vừa chậm vừa dễ sai thụt dòng. Thứ tự ưu tiên: lệnh tạo thẳng, rồi sinh khung và sửa vài dòng, cuối cùng mới chép mẫu từ docs.</p>
+  </header>
+  <ul class="tldr"><li><b>Tạo được bằng một lệnh thì đừng mở vim</b>: <code>k run</code>, <code>k create</code>, <code>k expose</code>, <code>k set</code>, <code>k scale</code>, <code>k label</code>.</li><li>Field không có cờ (probe, securityContext, volume, initContainer, NetworkPolicy): <b>sinh khung</b> bằng <code>$do</code>, dán đoạn ngắn ở dưới.</li><li><b>Không gõ lại tên</b>: chép tên, namespace, image từ đề (Ctrl+Shift+C, Ctrl+Shift+V trong terminal), tên Pod thì bấm Tab.</li></ul>
+
+  <div class="split even">
+    <div class="panel">
+      <h3>Mỗi lần ssh sang máy của task</h3>
+      <p class="small muted" style="margin:0 0 8px">Mỗi task làm trên một máy riêng, máy nào cũng có sẵn <code>k</code>, Tab hoàn thành lệnh và <code>yq</code>. Biến bạn tự đặt chỉ nằm trên máy đó, sang máy khác phải đặt lại, nên chỉ gõ khi task cần sinh YAML từ hai lần trở lên.</p>
+      <div class="codewrap"><pre class="code" data-hl>ssh ckad01                                  # chép lệnh ssh từ đề
+export do="--dry-run=client -o yaml" now="--force --grace-period=0"
+echo 'set et ts=2 sw=2 ai' >> ~/.vimrc      # Tab thành 2 dấu cách, giữ thụt dòng
+# … làm task …
+exit                                        # về máy base trước khi sang task sau</pre></div>
+      <ul class="tight" style="margin-top:10px">
+        <li>Dùng <code>-n NS</code> trong từng lệnh, đừng đổi namespace mặc định của kubeconfig: quên đổi lại là task sau tạo nhầm chỗ.</li>
+        <li>Phím Insert bị khóa trong remote desktop: vào chế độ gõ của vim bằng <code>i</code>, <code>a</code>, <code>o</code>.</li>
+        <li>Không ssh lồng nhau: luôn <code>exit</code> về <code>base</code> rồi mới ssh máy khác.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>vim tối thiểu</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Phím</th><th>Làm gì</th></tr></thead>
+        <tbody>
+          <tr><td><code>:set paste</code></td><td>Trước khi dán đoạn YAML dài, để vim không tự thụt dòng thành bậc thang</td></tr>
+          <tr><td><code>o</code> / <code>O</code></td><td>Mở dòng mới dưới / trên và vào chế độ gõ</td></tr>
+          <tr><td><code>yy</code> <code>p</code>, <code>dd</code>, <code>5dd</code></td><td>Chép dòng, dán, xóa 1 hoặc 5 dòng</td></tr>
+          <tr><td><code>V</code> chọn dòng rồi <code>&gt;</code> / <code>&lt;</code></td><td>Thụt vào / ra cả khối (sửa YAML lệch cột)</td></tr>
+          <tr><td><code>u</code>, <code>Ctrl+r</code>, <code>.</code></td><td>Hoàn tác, làm lại, lặp lệnh vừa rồi</td></tr>
+          <tr><td><code>/image</code> rồi <code>n</code></td><td>Tìm chữ, nhảy tới chỗ tiếp theo</td></tr>
+          <tr><td><code>:%s/1.27/1.28/g</code></td><td>Thay mọi chỗ trong file</td></tr>
+          <tr><td><code>gg</code>, <code>G</code>, <code>:wq</code></td><td>Về đầu, xuống cuối, lưu và thoát</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <div class="panel col" id="fastBody"></div>
+
+  <div class="panel">
+    <h3>Không có cờ: sinh khung rồi dán đoạn ngắn</h3>
+    <p class="small muted" style="margin:0 0 10px">Sinh Pod bằng <code>k run web --image=nginx:1.27 $do &gt; web.yaml</code>, mở vim, đặt con trỏ đúng cột rồi dán. Đoạn dưới đây đủ ngắn để nhớ; quên tên field thì <code>k explain</code>.</p>
+    <div class="split even">
+      <div class="codewrap"><pre class="code" data-hl># trong containers[] (cùng cột với image:)
+    readinessProbe:
+      httpGet: {path: /ready, port: 80}
+      periodSeconds: 5
+    livenessProbe:
+      exec: {command: ["cat", "/tmp/ok"]}
+      initialDelaySeconds: 5
+    securityContext:
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      capabilities: {add: ["NET_ADMIN"]}
+    volumeMounts:
+    - {name: data, mountPath: /data}</pre></div>
+      <div class="codewrap"><pre class="code" data-hl># trong spec của Pod (cùng cột với containers:)
+  securityContext: {runAsNonRoot: true, fsGroup: 2000}
+  volumes:
+  - {name: data, emptyDir: {}}
+  - {name: cfg, configMap: {name: cfg}}
+  - {name: pvc, persistentVolumeClaim: {claimName: data}}
+  initContainers:
+  - name: wait
+    image: busybox:1.36
+    command: ["sh", "-c", "until nslookup db; do sleep 2; done"]
+  - name: log-agent               # sidecar: init + restartPolicy Always
+    image: busybox:1.36
+    restartPolicy: Always
+    command: ["sh", "-c", "tail -F /data/app.log"]</pre></div>
+    </div>
+    <p class="small muted" style="margin:10px 0 0">Kiểu viết <code>{a: 1, b: 2}</code> trên một dòng là YAML hợp lệ: ít dòng hơn, ít lỗi thụt dòng hơn. Sửa một giá trị trong file có sẵn: <code>yq -i '.spec.replicas = 3' shop.yaml</code> (chạy <code>yq --version</code> trước để biết bản nào).</p>
+  </div>
+
+  <div class="split even">
+    <div class="panel">
+      <h3>Chép mẫu từ docs: gõ chữ này vào ô tìm kiếm</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Cần</th><th>Tìm trên kubernetes.io</th></tr></thead>
+        <tbody>
+          <tr><td>NetworkPolicy</td><td><a href="https://kubernetes.io/docs/concepts/services-networking/network-policies/" target="_blank" rel="noopener">network policies</a></td></tr>
+          <tr><td>PV, PVC, Pod dùng PVC</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/" target="_blank" rel="noopener">configure persistent volume storage</a></td></tr>
+          <tr><td>Probe đủ ba loại</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/" target="_blank" rel="noopener">liveness readiness startup</a></td></tr>
+          <tr><td>securityContext</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/security-context/" target="_blank" rel="noopener">security context</a></td></tr>
+          <tr><td>Sidecar, init container</td><td><a href="https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/" target="_blank" rel="noopener">sidecar containers</a></td></tr>
+          <tr><td>ConfigMap dạng volume</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/" target="_blank" rel="noopener">configure pod configmap</a></td></tr>
+          <tr><td>Lệnh kubectl, jsonpath</td><td><a href="https://kubernetes.io/docs/reference/kubectl/quick-reference/" target="_blank" rel="noopener">kubectl quick reference</a></td></tr>
+          <tr><td>Helm</td><td><a href="https://helm.sh/docs/intro/using_helm/" target="_blank" rel="noopener">helm.sh: using helm</a></td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted" style="margin:10px 0 0">Trình duyệt trong phòng thi: chép ra terminal bằng Ctrl+C trong trình duyệt, dán bằng Ctrl+Shift+V trong terminal.</p>
+    </div>
+    <div class="panel">
+      <h3>Bẫy đã gặp khi chạy thử</h3>
+      <ul class="tight">
+        <li><code>--rule='host/=web:80'</code> tạo path <b>Exact</b>: chỉ khớp đúng <code>/</code>. Muốn khớp mọi path phải ghi <code>/*</code>.</li>
+        <li><code>k replace --force</code> xóa trước rồi mới tạo. Namespace có ResourceQuota mà Pod thiếu requests thì bước tạo bị từ chối và Pod mất hẳn.</li>
+        <li>Namespace có quota CPU, RAM: <code>k run</code> không kèm requests và limits sẽ bị từ chối. Sinh YAML thêm <code>resources</code>, hoặc tạo Deployment rồi <code>k set resources</code>.</li>
+        <li><code>k run x --image=… -- cmd</code> chỉ thay args. Image có ENTRYPOINT thì thêm <code>--command</code>.</li>
+        <li><code>k set image deploy/shop nginx=…</code>: phần trước dấu <code>=</code> là <b>tên container</b>, không phải tên image.</li>
+        <li>Không có <code>k set probe</code> và <code>k create networkpolicy</code>: phải sửa YAML.</li>
+        <li>Xong task: <code>k get</code> lại đúng tên, đúng namespace, file kết quả đúng đường dẫn đề ghi.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <!-- ============ CONCEPTS ============ -->
 <section class="view" data-view="concepts" hidden>
   <header class="vh">
@@ -2694,7 +2806,7 @@ const CHAPTERS = [
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
   { id: "c8", n: "8", t: "Troubleshooting & observability", d: "Đọc trạng thái Pod, gỡ lỗi node và control plane, lỗi kết nối, log và metric.", ex: "CKA Troubleshooting 30% · CKAD Observability 15%", ls: [["trouble", "Lỗi Pod, node & control plane"], ["connerr", "Lỗi kết nối & chứng chỉ"], ["obs", "Log, metric & cảnh báo"]] },
-  { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Tra khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["quiz", "Quiz"]] }
+  { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Tra khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["fast", "Gõ ít khi thi CKAD"], ["quiz", "Quiz"]] }
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
 /* năng lực CKA (domain:index) → bài dạy chính */

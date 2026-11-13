@@ -88,7 +88,7 @@ echo 'set expandtab tabstop=2 shiftwidth=2' >> ~/.vimrc`) + "</div>" +
 k explain deploy.spec.strategy --recursive
 k api-resources | grep -i cronjob        # tên ngắn, apiVersion, namespaced?`) + "</div>" +
     '<div class="panel col"><h4>Chia thời gian</h4>' + lcTl(["Mỗi task: đọc ô thông tin, <b>ssh</b> đúng máy, đổi đúng <b>context</b>, làm xong thì <b>exit</b> (không ssh lồng nhau).", "Khoảng 6–8 phút mỗi task. Task dễ, điểm cao làm trước; kẹt quá 10 phút thì đánh dấu và quay lại.", "Pod đang chạy hầu như không sửa được spec: <code>k get pod x -o yaml > x.yaml</code>, sửa, <code>k replace --force -f x.yaml</code>.", "Trước khi sang task: <code>k get</code> lại object, đúng tên, đúng namespace, file lưu đúng chỗ đề hỏi."]) +
-    '<p class="small muted" style="margin:0">Lệnh sinh YAML nhanh và mọi lệnh hay dùng: xem <a href="#commands" data-go="commands">25 Lệnh &amp; cheatsheet</a>.</p></div>' +
+    '<p class="small muted" style="margin:0">Gõ ít nhất trong phòng thi: <a href="#fast" data-go="fast">R.3 Gõ ít khi thi CKAD</a>. Mọi lệnh hay dùng: <a href="#commands" data-go="commands">R.2 Lệnh &amp; cheatsheet</a>.</p></div>' +
     '<div class="panel col"><h4>Học ở đây, luyện ở đâu</h4><div class="ck-links"><a class="btn primary" href="index.html#home">Bài tập CKA: 46 lab tự chấm</a><a class="btn" href="index.html#bank">Bài tập CKA theo domain + đề thử</a><a class="btn" href="ckad.html#overview">Bài tập CKAD: ' + CKAD.ex.length + " bài + đề thử</a></div></div>";
   lcEnhance(box); lcBars(box);
   box.addEventListener("click", e => { const b = e.target.closest("[data-lccur]"); if (b) { lcCurDom = b.dataset.lccur; show("ckadcur"); } });

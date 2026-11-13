@@ -2558,6 +2558,118 @@ set expandtab tabstop=2 shiftwidth=2</pre></div>
   <div id="obsBody" class="col" style="gap:16px"></div>
 </section>
 
+<!-- ============ R.3 Gõ ít khi thi CKAD ============ -->
+<section class="view" data-view="fast" hidden>
+  <header class="vh">
+    <p class="eyebrow">Tra cứu</p>
+    <h2>Thi CKAD: gõ ít, sai ít</h2>
+    <p class="lead">Mỗi task chỉ có 6–8 phút. Viết YAML từ đầu vừa chậm vừa dễ sai thụt dòng. Thứ tự ưu tiên: lệnh tạo thẳng, rồi sinh khung và sửa vài dòng, cuối cùng mới chép mẫu từ docs.</p>
+  </header>
+  <ul class="tldr"><li><b>Tạo được bằng một lệnh thì đừng mở vim</b>: <code>k run</code>, <code>k create</code>, <code>k expose</code>, <code>k set</code>, <code>k scale</code>, <code>k label</code>.</li><li>Field không có cờ (probe, securityContext, volume, initContainer, NetworkPolicy): <b>sinh khung</b> bằng <code>$do</code>, dán đoạn ngắn ở dưới.</li><li><b>Không gõ lại tên</b>: chép tên, namespace, image từ đề (Ctrl+Shift+C, Ctrl+Shift+V trong terminal), tên Pod thì bấm Tab.</li></ul>
+
+  <div class="split even">
+    <div class="panel">
+      <h3>Mỗi lần ssh sang máy của task</h3>
+      <p class="small muted" style="margin:0 0 8px">Mỗi task làm trên một máy riêng, máy nào cũng có sẵn <code>k</code>, Tab hoàn thành lệnh và <code>yq</code>. Biến bạn tự đặt chỉ nằm trên máy đó, sang máy khác phải đặt lại, nên chỉ gõ khi task cần sinh YAML từ hai lần trở lên.</p>
+      <div class="codewrap"><pre class="code" data-hl>ssh ckad01                                  # chép lệnh ssh từ đề
+export do="--dry-run=client -o yaml" now="--force --grace-period=0"
+echo 'set et ts=2 sw=2 ai' >> ~/.vimrc      # Tab thành 2 dấu cách, giữ thụt dòng
+# … làm task …
+exit                                        # về máy base trước khi sang task sau</pre></div>
+      <ul class="tight" style="margin-top:10px">
+        <li>Dùng <code>-n NS</code> trong từng lệnh, đừng đổi namespace mặc định của kubeconfig: quên đổi lại là task sau tạo nhầm chỗ.</li>
+        <li>Phím Insert bị khóa trong remote desktop: vào chế độ gõ của vim bằng <code>i</code>, <code>a</code>, <code>o</code>.</li>
+        <li>Không ssh lồng nhau: luôn <code>exit</code> về <code>base</code> rồi mới ssh máy khác.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>vim tối thiểu</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Phím</th><th>Làm gì</th></tr></thead>
+        <tbody>
+          <tr><td><code>:set paste</code></td><td>Trước khi dán đoạn YAML dài, để vim không tự thụt dòng thành bậc thang</td></tr>
+          <tr><td><code>o</code> / <code>O</code></td><td>Mở dòng mới dưới / trên và vào chế độ gõ</td></tr>
+          <tr><td><code>yy</code> <code>p</code>, <code>dd</code>, <code>5dd</code></td><td>Chép dòng, dán, xóa 1 hoặc 5 dòng</td></tr>
+          <tr><td><code>V</code> chọn dòng rồi <code>&gt;</code> / <code>&lt;</code></td><td>Thụt vào / ra cả khối (sửa YAML lệch cột)</td></tr>
+          <tr><td><code>u</code>, <code>Ctrl+r</code>, <code>.</code></td><td>Hoàn tác, làm lại, lặp lệnh vừa rồi</td></tr>
+          <tr><td><code>/image</code> rồi <code>n</code></td><td>Tìm chữ, nhảy tới chỗ tiếp theo</td></tr>
+          <tr><td><code>:%s/1.27/1.28/g</code></td><td>Thay mọi chỗ trong file</td></tr>
+          <tr><td><code>gg</code>, <code>G</code>, <code>:wq</code></td><td>Về đầu, xuống cuối, lưu và thoát</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <div class="panel col" id="fastBody"></div>
+
+  <div class="panel">
+    <h3>Không có cờ: sinh khung rồi dán đoạn ngắn</h3>
+    <p class="small muted" style="margin:0 0 10px">Sinh Pod bằng <code>k run web --image=nginx:1.27 $do &gt; web.yaml</code>, mở vim, đặt con trỏ đúng cột rồi dán. Đoạn dưới đây đủ ngắn để nhớ; quên tên field thì <code>k explain</code>.</p>
+    <div class="split even">
+      <div class="codewrap"><pre class="code" data-hl># trong containers[] (cùng cột với image:)
+    readinessProbe:
+      httpGet: {path: /ready, port: 80}
+      periodSeconds: 5
+    livenessProbe:
+      exec: {command: ["cat", "/tmp/ok"]}
+      initialDelaySeconds: 5
+    securityContext:
+      runAsUser: 1000
+      allowPrivilegeEscalation: false
+      capabilities: {add: ["NET_ADMIN"]}
+    volumeMounts:
+    - {name: data, mountPath: /data}</pre></div>
+      <div class="codewrap"><pre class="code" data-hl># trong spec của Pod (cùng cột với containers:)
+  securityContext: {runAsNonRoot: true, fsGroup: 2000}
+  volumes:
+  - {name: data, emptyDir: {}}
+  - {name: cfg, configMap: {name: cfg}}
+  - {name: pvc, persistentVolumeClaim: {claimName: data}}
+  initContainers:
+  - name: wait
+    image: busybox:1.36
+    command: ["sh", "-c", "until nslookup db; do sleep 2; done"]
+  - name: log-agent               # sidecar: init + restartPolicy Always
+    image: busybox:1.36
+    restartPolicy: Always
+    command: ["sh", "-c", "tail -F /data/app.log"]</pre></div>
+    </div>
+    <p class="small muted" style="margin:10px 0 0">Kiểu viết <code>{a: 1, b: 2}</code> trên một dòng là YAML hợp lệ: ít dòng hơn, ít lỗi thụt dòng hơn. Sửa một giá trị trong file có sẵn: <code>yq -i '.spec.replicas = 3' shop.yaml</code> (chạy <code>yq --version</code> trước để biết bản nào).</p>
+  </div>
+
+  <div class="split even">
+    <div class="panel">
+      <h3>Chép mẫu từ docs: gõ chữ này vào ô tìm kiếm</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Cần</th><th>Tìm trên kubernetes.io</th></tr></thead>
+        <tbody>
+          <tr><td>NetworkPolicy</td><td><a href="https://kubernetes.io/docs/concepts/services-networking/network-policies/" target="_blank" rel="noopener">network policies</a></td></tr>
+          <tr><td>PV, PVC, Pod dùng PVC</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/" target="_blank" rel="noopener">configure persistent volume storage</a></td></tr>
+          <tr><td>Probe đủ ba loại</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/" target="_blank" rel="noopener">liveness readiness startup</a></td></tr>
+          <tr><td>securityContext</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/security-context/" target="_blank" rel="noopener">security context</a></td></tr>
+          <tr><td>Sidecar, init container</td><td><a href="https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/" target="_blank" rel="noopener">sidecar containers</a></td></tr>
+          <tr><td>ConfigMap dạng volume</td><td><a href="https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/" target="_blank" rel="noopener">configure pod configmap</a></td></tr>
+          <tr><td>Lệnh kubectl, jsonpath</td><td><a href="https://kubernetes.io/docs/reference/kubectl/quick-reference/" target="_blank" rel="noopener">kubectl quick reference</a></td></tr>
+          <tr><td>Helm</td><td><a href="https://helm.sh/docs/intro/using_helm/" target="_blank" rel="noopener">helm.sh: using helm</a></td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted" style="margin:10px 0 0">Trình duyệt trong phòng thi: chép ra terminal bằng Ctrl+C trong trình duyệt, dán bằng Ctrl+Shift+V trong terminal.</p>
+    </div>
+    <div class="panel">
+      <h3>Bẫy đã gặp khi chạy thử</h3>
+      <ul class="tight">
+        <li><code>--rule='host/=web:80'</code> tạo path <b>Exact</b>: chỉ khớp đúng <code>/</code>. Muốn khớp mọi path phải ghi <code>/*</code>.</li>
+        <li><code>k replace --force</code> xóa trước rồi mới tạo. Namespace có ResourceQuota mà Pod thiếu requests thì bước tạo bị từ chối và Pod mất hẳn.</li>
+        <li>Namespace có quota CPU, RAM: <code>k run</code> không kèm requests và limits sẽ bị từ chối. Sinh YAML thêm <code>resources</code>, hoặc tạo Deployment rồi <code>k set resources</code>.</li>
+        <li><code>k run x --image=… -- cmd</code> chỉ thay args. Image có ENTRYPOINT thì thêm <code>--command</code>.</li>
+        <li><code>k set image deploy/shop nginx=…</code>: phần trước dấu <code>=</code> là <b>tên container</b>, không phải tên image.</li>
+        <li>Không có <code>k set probe</code> và <code>k create networkpolicy</code>: phải sửa YAML.</li>
+        <li>Xong task: <code>k get</code> lại đúng tên, đúng namespace, file kết quả đúng đường dẫn đề ghi.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <!-- ============ CONCEPTS ============ -->
 <section class="view" data-view="concepts" hidden>
   <header class="vh">
@@ -2703,7 +2815,7 @@ const CHAPTERS = [
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
   { id: "c8", n: "8", t: "Troubleshooting & observability", d: "Đọc trạng thái Pod, gỡ lỗi node và control plane, lỗi kết nối, log và metric.", ex: "CKA Troubleshooting 30% · CKAD Observability 15%", ls: [["trouble", "Lỗi Pod, node & control plane"], ["connerr", "Lỗi kết nối & chứng chỉ"], ["obs", "Log, metric & cảnh báo"]] },
-  { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Tra khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["quiz", "Quiz"]] }
+  { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Tra khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["fast", "Gõ ít khi thi CKAD"], ["quiz", "Quiz"]] }
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
 /* năng lực CKA (domain:index) → bài dạy chính */
@@ -8114,7 +8226,7 @@ echo 'set expandtab tabstop=2 shiftwidth=2' >> ~/.vimrc`) + "</div>" +
 k explain deploy.spec.strategy --recursive
 k api-resources | grep -i cronjob        # tên ngắn, apiVersion, namespaced?`) + "</div>" +
     '<div class="panel col"><h4>Chia thời gian</h4>' + lcTl(["Mỗi task: đọc ô thông tin, <b>ssh</b> đúng máy, đổi đúng <b>context</b>, làm xong thì <b>exit</b> (không ssh lồng nhau).", "Khoảng 6–8 phút mỗi task. Task dễ, điểm cao làm trước; kẹt quá 10 phút thì đánh dấu và quay lại.", "Pod đang chạy hầu như không sửa được spec: <code>k get pod x -o yaml > x.yaml</code>, sửa, <code>k replace --force -f x.yaml</code>.", "Trước khi sang task: <code>k get</code> lại object, đúng tên, đúng namespace, file lưu đúng chỗ đề hỏi."]) +
-    '<p class="small muted" style="margin:0">Lệnh sinh YAML nhanh và mọi lệnh hay dùng: xem <a href="#commands" data-go="commands">25 Lệnh &amp; cheatsheet</a>.</p></div>' +
+    '<p class="small muted" style="margin:0">Gõ ít nhất trong phòng thi: <a href="#fast" data-go="fast">R.3 Gõ ít khi thi CKAD</a>. Mọi lệnh hay dùng: <a href="#commands" data-go="commands">R.2 Lệnh &amp; cheatsheet</a>.</p></div>' +
     '<div class="panel col"><h4>Học ở đây, luyện ở đâu</h4><div class="ck-links"><a class="btn primary" href="index.html#home">Bài tập CKA: 46 lab tự chấm</a><a class="btn" href="index.html#bank">Bài tập CKA theo domain + đề thử</a><a class="btn" href="ckad.html#overview">Bài tập CKAD: ' + CKAD.ex.length + " bài + đề thử</a></div></div>";
   lcEnhance(box); lcBars(box);
   box.addEventListener("click", e => { const b = e.target.closest("[data-lccur]"); if (b) { lcCurDom = b.dataset.lccur; show("ckadcur"); } });
@@ -8877,6 +8989,100 @@ function plInit() {
   reset(); draw(); cap.textContent = "Bấm lần lượt các bước. Thử cả hai reclaim policy.";
 }
 lcOnce("pv", () => { pbInit(); plInit(); });
+
+/* ---------- R.3 Gõ ít khi thi CKAD: bảng "việc → lệnh" tìm được, bấm để chép ----------
+   Mọi lệnh (trừ nhóm Helm & image) đã chạy thử trên cluster k3s v1.34 ngày 13/11/2026. */
+const FAST = [
+  ["Pod & Deployment", [
+    ["Pod có port, label, biến môi trường", "k run web --image=nginx:1.27 --port=80 -l app=web,tier=fe --env=MODE=prod"],
+    ["Pod chạy một lệnh shell", "k run box --image=busybox:1.36 --restart=Never -- sh -c 'echo hi; sleep 3600'", "phần sau -- là args; image có ENTRYPOINT thì dùng --command --"],
+    ["Pod và Service cùng lúc", "k run web --image=nginx:1.27 --port=80 --expose"],
+    ["Deployment", "k create deploy shop --image=nginx:1.27 --replicas=3 --port=80", "container tên theo image: nginx"],
+    ["Sinh khung YAML để sửa", "k run web --image=nginx:1.27 $do > web.yaml", "$do đặt ở bước chuẩn bị mỗi máy"],
+    ["Lấy YAML của object có sẵn", "k get deploy shop -o yaml > shop.yaml"],
+    ["Nhớ tên field không cần docs", "k explain pod.spec.containers.livenessProbe --recursive | less"]
+  ]],
+  ["Service & Ingress", [
+    ["Service trước Deployment", "k expose deploy shop --port=80 --target-port=8080 --name=shop-svc"],
+    ["NodePort", "k expose deploy shop --port=80 --type=NodePort --name=shop-np"],
+    ["Đặt số nodePort cụ thể", "k patch svc shop-np -p '{\"spec\":{\"ports\":[{\"port\":80,\"nodePort\":30080}]}}'", "expose không có cờ nodePort"],
+    ["Service cho một Pod", "k expose po web --port=80 --name=web-svc"],
+    ["Ingress hai path", "k create ing shop --class=nginx --rule='shop.example.com/api*=api:8080' --rule='shop.example.com/*=web:80'", "có * là Prefix, không có * là Exact (kể cả /)"],
+    ["Ingress có TLS", "k create ing shop --class=nginx --rule='shop.example.com/*=web:80,tls=shop-tls'"]
+  ]],
+  ["Cấu hình & bảo mật", [
+    ["ConfigMap", "k create cm cfg --from-literal=LOG=info --from-file=app.conf"],
+    ["Secret", "k create secret generic db --from-literal=PASS=s3cr3t"],
+    ["Mọi key thành biến môi trường", "k set env deploy/shop --from=configmap/cfg"],
+    ["Secret thành biến có tiền tố", "k set env deploy/shop --from=secret/db --prefix=DB_"],
+    ["Thêm một biến", "k set env deploy/shop TZ=Asia/Ho_Chi_Minh"],
+    ["requests và limits", "k set resources deploy shop --requests=cpu=100m,memory=128Mi --limits=cpu=200m,memory=256Mi"],
+    ["ServiceAccount cho Deployment", "k create sa build && k set sa deploy shop build"],
+    ["Role", "k create role pod-reader --verb=get,list,watch --resource=pods,pods/log"],
+    ["RoleBinding cho ServiceAccount", "k create rolebinding pod-reader --role=pod-reader --serviceaccount=NS:build"],
+    ["Kiểm tra quyền", "k auth can-i list pods -n NS --as=system:serviceaccount:NS:build", "trả no thì mã thoát là 1"],
+    ["Token tạm của ServiceAccount", "k create token build --duration=1h"],
+    ["ResourceQuota", "k create quota q --hard=pods=10,requests.cpu=2,limits.memory=4Gi"],
+    ["PodDisruptionBudget", "k create pdb shop --selector=app=shop --min-available=1"]
+  ]],
+  ["Job, rollout, scale", [
+    ["Job", "k create job calc --image=busybox:1.36 -- sh -c 'echo $((6*7))'", "completions, parallelism, backoffLimit: sinh bằng $do rồi sửa"],
+    ["CronJob", "k create cj backup --image=busybox:1.36 --schedule='*/5 * * * *' -- date"],
+    ["Chạy CronJob ngay để thử", "k create job backup-now --from=cj/backup"],
+    ["Đổi image", "k set image deploy/shop nginx=nginx:1.28", "nginx= là tên container"],
+    ["Ghi lý do cho lịch sử rollout", "k annotate deploy shop kubernetes.io/change-cause='nginx 1.28'"],
+    ["Xem, quay lại bản cũ", "k rollout history deploy shop && k rollout undo deploy shop --to-revision=1"],
+    ["Khởi động lại mọi Pod", "k rollout restart deploy shop"],
+    ["Scale", "k scale deploy shop --replicas=5"],
+    ["HPA", "k autoscale deploy shop --min=2 --max=5 --cpu=70%", "--cpu-percent đã cũ"]
+  ]],
+  ["Sửa object đang chạy", [
+    ["Thêm, đổi, xóa label", "k label po web env=prod --overwrite && k label po web tier-"],
+    ["Sửa Deployment tại chỗ", "k edit deploy shop", "lưu là rollout ngay"],
+    ["Sửa field Pod không cho sửa", "k edit po web", "lưu bị từ chối, kubectl ghi bản nháp ra /tmp/kubectl-edit-*.yaml"],
+    ["… rồi áp bản nháp đó", "k replace --force -f /tmp/kubectl-edit-*.yaml", "xóa Pod cũ rồi tạo lại; tạo lỗi thì Pod mất, giữ file lại"],
+    ["Xóa ngay không chờ", "k delete po web $now"]
+  ]],
+  ["Kiểm tra nhanh", [
+    ["Chờ tới khi Ready", "k wait --for=condition=Ready po/web --timeout=60s"],
+    ["Gọi Service từ trong cluster", "k run t --image=busybox:1.36 --rm -i --restart=Never -- wget -qO- -T2 shop-svc:80"],
+    ["Log mọi Pod theo label", "k logs -l app=shop --tail=20 --prefix", "k logs deploy/shop chỉ lấy một Pod"],
+    ["Log lần chạy trước khi crash", "k logs web -c app --previous"],
+    ["Event mới nhất", "k get events --sort-by=.lastTimestamp | tail"],
+    ["Service có endpoint chưa", "k get endpointslice -l kubernetes.io/service-name=shop-svc"],
+    ["Biến môi trường trong container", "k exec web -- env | grep MODE"],
+    ["Ghi kết quả ra file đề yêu cầu", "k get po web -o jsonpath='{.spec.containers[*].image}' > /opt/answer.txt"],
+    ["Gỡ lỗi container không có shell", "k debug web -it --image=busybox:1.36 --target=web"],
+    ["CPU, RAM đang dùng", "k top po --sort-by=memory"]
+  ]],
+  ["Helm & image (chưa chạy thử trên cluster)", [
+    ["Thêm repo, tìm chart", "helm repo add podinfo https://stefanprodan.github.io/podinfo && helm search repo podinfo --versions"],
+    ["Xem giá trị chỉnh được", "helm show values podinfo/podinfo | grep -i -A2 replica"],
+    ["Cài vào namespace mới", "helm install web podinfo/podinfo -n web --create-namespace --set replicaCount=2"],
+    ["Nâng cấp, xem, quay lại", "helm upgrade web podinfo/podinfo -n web --set replicaCount=3 && helm history web -n web && helm rollback web 1 -n web"],
+    ["Release ở mọi namespace", "helm list -A"],
+    ["Build, đặt tag, lưu ra file", "podman build -t app:1.0 . && podman save -o /root/app.tar app:1.0"]
+  ]]
+];
+function fastInit() {
+  const box = $("#fastBody"), n = FAST.reduce((a, g) => a + g[1].length, 0);
+  box.innerHTML = '<div class="controls" style="margin:0"><input type="search" id="fastQ" placeholder="Tìm việc cần làm: secret, nodeport, rollback…" style="flex:1;min-width:220px" aria-label="Tìm lệnh"><span class="small muted" id="fastN"></span></div>' +
+    '<div class="grid ck-cheatgrid" id="fastGrid">' + FAST.map(([g, rows]) => '<div class="panel" data-fg><h3 style="margin:0">' + esc(g) + "</h3>" +
+      rows.map(([t, c, note]) => '<button type="button" class="ch-row" data-q="' + lcEa((g + " " + t + " " + c + " " + (note || "")).toLowerCase()) + '"><b style="font-size:13px">' + esc(t) + "</b><code>" + esc(c) + "</code>" + (note ? "<span>" + esc(note) + "</span>" : "<span></span>") + "</button>").join("") + "</div>").join("") + "</div>";
+  const filter = () => {
+    const q = $("#fastQ").value.trim().toLowerCase(); let k = 0;
+    $$("#fastGrid [data-fg]").forEach(p => { let any = false; $$(".ch-row", p).forEach(r => { const m = !q || r.dataset.q.includes(q); r.hidden = !m; if (m) { any = true; k++; } }); p.hidden = !any; });
+    $("#fastN").textContent = k + " / " + n + " lệnh · bấm để chép";
+  };
+  box.addEventListener("input", filter);
+  box.addEventListener("click", e => {
+    const r = e.target.closest(".ch-row"); if (!r) return;
+    const t = $("code", r).textContent;
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).catch(() => {}).finally(() => { r.classList.add("copied"); setTimeout(() => r.classList.remove("copied"), 1200); });
+  });
+  filter();
+}
+lcOnce("fast", fastInit);
 
 /* ---------- khung chương / bài của trang Lý thuyết ----------
    lessonFrame(): đầu bài (chương + tab các bài) và cuối bài (ôn thi: năng lực CKA, thẻ CKAD, bài tập; đã học; bài trước/sau).
