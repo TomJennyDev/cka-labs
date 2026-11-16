@@ -643,6 +643,9 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 .chmap .c ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:2px}
 .chmap .c ol a{font-size:13.5px;text-decoration:none}.chmap .c ol a.ok::after{content:" ✓";color:var(--node)}
 .chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
+.yt-drill{line-height:1.9}
+.yt-blank{font:inherit;background:rgba(255,255,255,.08);color:#fff;border:0;border-bottom:2px solid var(--pkt);border-radius:3px;padding:0 4px;outline:none}
+.yt-blank:focus{background:rgba(255,255,255,.16)}.yt-blank.ok{border-color:var(--node);color:#9fe3b8}.yt-blank.bad{border-color:var(--bad);color:#ffb3b3}
 .yt-anat{line-height:1.75;font-size:13px}
 .yt-l{cursor:pointer;border-radius:4px;padding:0 4px;margin-left:-4px;display:inline-block;min-width:60%}
 .yt-l:hover{background:rgba(255,255,255,.08)}.yt-l.on{background:var(--accent);color:#fff}
@@ -2727,7 +2730,7 @@ exit                                        # về máy base trước khi sang t
     <p class="lead">Mọi mẫu YAML của trang ở một chỗ, đã kiểm bằng <code>kubectl apply --dry-run=server</code> trên cluster thật. Kèm cách đọc một file YAML và các lỗi hay gặp.</p>
   </header>
   <ul class="tldr"><li>Mọi object có 4 phần: <code>apiVersion</code>, <code>kind</code>, <code>metadata</code>, <code>spec</code> (bạn viết) và <code>status</code> (cluster ghi).</li><li>Workload lồng Pod bên trong: <code>spec.template.spec.containers</code>; CronJob lồng thêm một tầng Job.</li><li>Có lệnh sinh thì sinh khung (dòng "Sinh nhanh"), rồi chép phần còn thiếu từ mẫu.</li></ul>
-  <div class="seg" role="group" id="ytTabs"><button type="button" data-ytt="tpl" aria-pressed="true">Mẫu theo loại</button><button type="button" data-ytt="anat" aria-pressed="false">Cấu trúc file</button><button type="button" data-ytt="errs" aria-pressed="false">Đọc lỗi YAML</button></div>
+  <div class="seg" role="group" id="ytTabs"><button type="button" data-ytt="tpl" aria-pressed="true">Mẫu theo loại</button><button type="button" data-ytt="anat" aria-pressed="false">Cấu trúc file</button><button type="button" data-ytt="errs" aria-pressed="false">Đọc lỗi YAML</button><button type="button" data-ytt="mem" aria-pressed="false">Cách nhớ &amp; tra cứu</button></div>
   <div id="ytBody" class="col" style="gap:16px"></div>
 </section>
 
