@@ -11,11 +11,13 @@ function lessonFrame(name, ch) {
   const cka = Object.entries(CKA_COMP_LESSON).filter(([, l]) => l === name).map(([k]) => k.split(":"));
   const ckad = Object.entries(LC_HOME).filter(([, l]) => l === name).map(([k]) => k.split(":"));
   let h = "";
-  if (cka.length || ckad.length) {
+  if (cka.length || ckad.length || YAMLT.templates.some(t => t.learn === name)) {
     h += '<section class="panel lf-prac"><h3>Ôn thi cho bài này</h3>';
     if (cka.length) h += '<div class="lf-row"><span class="small muted">CKA · năng lực</span>' + cka.map(([d, c]) => { const dm = DOMAINS.find(x => x.key === d), n = CKA_BANK.filter(b => b.d === d && b.c === +c).length;
       return '<a class="pill" href="index.html#bank-' + d + "-" + c + '"><i class="sw" style="background:' + dm.color + '"></i>' + esc(dm.items[+c]) + " · " + n + " bài ↗</a>"; }).join("") + "</div>";
     if (ckad.length) h += '<div class="ck-topics">' + ckad.map(([d, t]) => lcCard(d, +t)).join("") + "</div>";
+    const yts = YAMLT.templates.filter(t => t.learn === name);
+    if (yts.length) h += '<div class="lf-row"><span class="small muted">Mẫu YAML</span>' + yts.map(t => '<a class="pill" href="#yamlref" data-yt="' + t.id + '">' + esc(t.t) + "</a>").join("") + "</div>";
     h += "</section>";
   }
   if (mod && mod.ch.id !== "ref") h += '<div class="lf-done"><button type="button" class="btn' + (learned[name] ? "" : " primary") + '" id="lfDone">' + (learned[name] ? "✓ Đã học bài này · bỏ đánh dấu" : "Đánh dấu đã học bài này") + "</button></div>";

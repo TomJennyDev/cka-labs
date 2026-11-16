@@ -643,6 +643,11 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 .chmap .c ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:2px}
 .chmap .c ol a{font-size:13.5px;text-decoration:none}.chmap .c ol a.ok::after{content:" ✓";color:var(--node)}
 .chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
+.yt-anat{line-height:1.75;font-size:13px}
+.yt-l{cursor:pointer;border-radius:4px;padding:0 4px;margin-left:-4px;display:inline-block;min-width:60%}
+.yt-l:hover{background:rgba(255,255,255,.08)}.yt-l.on{background:var(--accent);color:#fff}
+.yt-note{position:sticky;top:80px}
+.yt-card .body .codewrap{margin:0}
 /* ---------- CKAD: thẻ năng lực, animation, bài tập (dùng chung cho learn.html và ckad.html) ---------- */
 .ck-bars{display:flex;flex-direction:column;gap:10px}
 .ck-bar{display:grid;grid-template-columns:minmax(0,1fr) 54px 70px;gap:10px;align-items:center;cursor:pointer;border:0;background:none;text-align:left;color:var(--ink);font:inherit;padding:0}
@@ -2661,6 +2666,18 @@ exit                                        # về máy base trước khi sang t
   </div>
 </section>
 
+<!-- ============ R.1 Thư viện YAML (learn-yaml.js) ============ -->
+<section class="view" data-view="yamlref" hidden>
+  <header class="vh">
+    <p class="eyebrow">Tra cứu</p>
+    <h2>Thư viện YAML</h2>
+    <p class="lead">Mọi mẫu YAML của trang ở một chỗ, đã kiểm bằng <code>kubectl apply --dry-run=server</code> trên cluster thật. Kèm cách đọc một file YAML và các lỗi hay gặp.</p>
+  </header>
+  <ul class="tldr"><li>Mọi object có 4 phần: <code>apiVersion</code>, <code>kind</code>, <code>metadata</code>, <code>spec</code> (bạn viết) và <code>status</code> (cluster ghi).</li><li>Workload lồng Pod bên trong: <code>spec.template.spec.containers</code>; CronJob lồng thêm một tầng Job.</li><li>Có lệnh sinh thì sinh khung (dòng "Sinh nhanh"), rồi chép phần còn thiếu từ mẫu.</li></ul>
+  <div class="seg" role="group" id="ytTabs"><button type="button" data-ytt="tpl" aria-pressed="true">Mẫu theo loại</button><button type="button" data-ytt="anat" aria-pressed="false">Cấu trúc file</button><button type="button" data-ytt="errs" aria-pressed="false">Đọc lỗi YAML</button></div>
+  <div id="ytBody" class="col" style="gap:16px"></div>
+</section>
+
 <!-- ============ CONCEPTS ============ -->
 <section class="view" data-view="concepts" hidden>
   <header class="vh">
@@ -2806,7 +2823,7 @@ const CHAPTERS = [
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
   { id: "c8", n: "8", t: "Troubleshooting & observability", d: "Đọc trạng thái Pod, gỡ lỗi node và control plane, lỗi kết nối, log và metric.", ex: "CKA Troubleshooting 30% · CKAD Observability 15%", ls: [["trouble", "Lỗi Pod, node & control plane"], ["connerr", "Lỗi kết nối & chứng chỉ"], ["obs", "Log, metric & cảnh báo"]] },
-  { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Tra khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["fast", "Gõ ít khi thi CKAD"], ["quiz", "Quiz"]] }
+  { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Mẫu YAML, khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["yamlref", "Thư viện YAML"], ["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["fast", "Gõ ít khi thi CKAD"], ["quiz", "Quiz"]] }
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
 /* năng lực CKA (domain:index) → bài dạy chính */

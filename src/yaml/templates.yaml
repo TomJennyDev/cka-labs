@@ -1,0 +1,1004 @@
+# Thư viện YAML mẫu cho trang Lý thuyết (R.1). Mỗi mẫu được tools/check_yaml.py kiểm bằng
+# kubectl apply --dry-run=server (hoặc kubectl kustomize) trên cluster thật.
+# g: work | config | net | stor | sec | sched | ops     learn: id bài lý thuyết     test: server (mặc định) | kustomize
+groups:
+  work: Workload
+  config: Cấu hình
+  net: Mạng
+  stor: Storage
+  sec: Bảo mật
+  sched: Scheduling & tài nguyên
+  ops: Vận hành & mở rộng
+templates:
+- id: pod
+  g: work
+  t: "Pod đầy đủ các phần hay hỏi"
+  kind: "Pod"
+  use: "Khung chuẩn để sửa: label, port, env, resources, probe, volume, securityContext."
+  gen: "k run web --image=nginx:1.27 --port=80 -l app=web $do > pod.yaml"
+  learn: probes
+  docs: https://kubernetes.io/docs/concepts/workloads/pods/
+  yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: web
+      labels: {app: web, tier: frontend}
+    spec:
+      containers:
+      - name: web
+        image: nginx:1.27
+        ports:
+        - {name: http, containerPort: 80}
+        env:
+        - {name: MODE, value: "prod"}          # value luôn là chuỗi
+        resources:
+          requests: {cpu: 100m, memory: 128Mi}
+          limits: {memory: 256Mi}
+        readinessProbe:
+          httpGet: {path: /, port: http}
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket: {port: http}
+          initialDelaySeconds: 10
+        volumeMounts:
+        - {name: cache, mountPath: /var/cache/nginx}
+        securityContext:
+          allowPrivilegeEscalation: false
+      volumes:
+      - name: cache
+        emptyDir: {}
+      restartPolicy: Always                    # Pod thường: Always; Pod chạy một lần: Never
+  trap: "Hầu hết field của Pod đang chạy không sửa được; xóa và tạo lại (k replace --force)."
+
+- id: multi
+  g: work
+  t: "Pod có init container và sidecar"
+  kind: "Pod"
+  use: "Chờ phụ thuộc trước khi chạy app, kèm một container chạy song song suốt đời Pod."
+  learn: multi
+  docs: https://kubernetes.io/docs/concepts/workloads/pods/sidecar-containers/
+  yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: app
+    spec:
+      initContainers:
+      - name: wait-db                          # chạy trước, phải thoát 0
+        image: busybox:1.36
+        command: ["sh", "-c", "until nslookup db; do sleep 2; done"]
+      - name: log-shipper                      # sidecar: init + restartPolicy Always
+        image: busybox:1.36
+        restartPolicy: Always
+        command: ["sh", "-c", "tail -F /logs/app.log"]
+        volumeMounts: [{name: logs, mountPath: /logs}]
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "while true; do date >> /logs/app.log; sleep 5; done"]
+        volumeMounts: [{name: logs, mountPath: /logs}]
+      volumes:
+      - {name: logs, emptyDir: {}}
+
+- id: deploy
+  g: work
+  t: "Deployment"
+  kind: "Deployment"
+  use: "App không trạng thái, nhiều bản sao, cập nhật cuốn chiếu."
+  gen: "k create deploy web --image=nginx:1.27 --replicas=3 --port=80 $do > deploy.yaml"
+  learn: workloads
+  docs: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+  yaml: |
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: web
+      labels: {app: web}
+    spec:
+      replicas: 3
+      revisionHistoryLimit: 5
+      selector:
+        matchLabels: {app: web}                # phải khớp label của template, không đổi được sau khi tạo
+      strategy:
+        type: RollingUpdate                    # hoặc Recreate
+        rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+      template:
+        metadata:
+          labels: {app: web}
+        spec:
+          containers:
+          - name: web
+            image: nginx:1.27
+            ports: [{containerPort: 80}]
+            resources:
+              requests: {cpu: 100m, memory: 128Mi}
+              limits: {memory: 256Mi}
+            readinessProbe:
+              httpGet: {path: /, port: 80}
+  trap: "Lệch selector và label của template thì API từ chối ngay (\"selector does not match template labels\")."
+
+- id: sts
+  g: work
+  t: "StatefulSet và headless Service"
+  kind: "StatefulSet, Service"
+  use: "App cần tên Pod cố định (db-0, db-1) và mỗi Pod một PVC riêng."
+  learn: kinds
+  docs: https://kubernetes.io/docs/concepts/workloads/controllers/statefulset/
+  yaml: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: db
+    spec:
+      clusterIP: None                          # headless: DNS trả IP từng Pod
+      selector: {app: db}
+      ports: [{port: 5432}]
+    ---
+    apiVersion: apps/v1
+    kind: StatefulSet
+    metadata:
+      name: db
+    spec:
+      serviceName: db                          # tên headless Service ở trên
+      replicas: 2
+      selector:
+        matchLabels: {app: db}
+      template:
+        metadata:
+          labels: {app: db}
+        spec:
+          containers:
+          - name: db
+            image: postgres:17
+            env: [{name: POSTGRES_PASSWORD, value: "change-me"}]
+            ports: [{containerPort: 5432}]
+            volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+      volumeClaimTemplates:                    # PVC tên data-db-0, data-db-1
+      - metadata: {name: data}
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          resources: {requests: {storage: 1Gi}}
+      persistentVolumeClaimRetentionPolicy: {whenDeleted: Retain, whenScaled: Retain}
+
+- id: ds
+  g: work
+  t: "DaemonSet chạy trên mọi node"
+  kind: "DaemonSet"
+  use: "Agent log, monitoring, CNI: mỗi node một Pod, kể cả node control plane."
+  learn: kinds
+  docs: https://kubernetes.io/docs/concepts/workloads/controllers/daemonset/
+  yaml: |
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata:
+      name: node-agent
+    spec:
+      selector:
+        matchLabels: {app: node-agent}
+      template:
+        metadata:
+          labels: {app: node-agent}
+        spec:
+          tolerations:                         # chạy cả trên control plane
+          - {key: node-role.kubernetes.io/control-plane, operator: Exists, effect: NoSchedule}
+          containers:
+          - name: agent
+            image: busybox:1.36
+            command: ["sh", "-c", "tail -F /host/log/syslog"]
+            volumeMounts: [{name: hostlog, mountPath: /host/log, readOnly: true}]
+          volumes:
+          - name: hostlog
+            hostPath: {path: /var/log, type: Directory}
+  trap: "Không có lệnh k create daemonset: sinh Deployment bằng $do, đổi kind, xóa replicas và strategy."
+
+- id: job
+  g: work
+  t: "Job"
+  kind: "Job"
+  use: "Việc chạy tới khi xong: tính toán, migrate dữ liệu, chạy nhiều lần song song."
+  gen: "k create job calc --image=busybox:1.36 $do -- sh -c 'echo 42' > job.yaml"
+  learn: jobs
+  docs: https://kubernetes.io/docs/concepts/workloads/controllers/job/
+  yaml: |
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: calc
+    spec:
+      completions: 4                           # cần 4 lần thành công
+      parallelism: 2                           # chạy 2 Pod cùng lúc
+      backoffLimit: 3                          # lỗi quá 3 lần thì Failed
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 600             # tự dọn sau 10 phút
+      template:
+        spec:
+          restartPolicy: Never                 # Never hoặc OnFailure, không được Always
+          containers:
+          - name: calc
+            image: busybox:1.36
+            command: ["sh", "-c", "echo $((6*7))"]
+
+- id: cronjob
+  g: work
+  t: "CronJob"
+  kind: "CronJob"
+  use: "Job chạy theo lịch: backup, dọn dẹp, báo cáo."
+  gen: "k create cj backup --image=busybox:1.36 --schedule='0 2 * * *' $do -- date > cj.yaml"
+  learn: jobs
+  testsub: {"  timeZone: Asia/Ho_Chi_Minh\n": ""}   # k3s thử thiếu tzdata; kube-apiserver gốc có sẵn
+  docs: https://kubernetes.io/docs/concepts/workloads/controllers/cron-jobs/
+  yaml: |
+    apiVersion: batch/v1
+    kind: CronJob
+    metadata:
+      name: backup
+    spec:
+      schedule: "0 2 * * *"                    # luôn để trong nháy
+      timeZone: Asia/Ho_Chi_Minh
+      concurrencyPolicy: Forbid                # Allow | Forbid | Replace
+      startingDeadlineSeconds: 120
+      successfulJobsHistoryLimit: 3
+      failedJobsHistoryLimit: 1
+      jobTemplate:
+        spec:
+          backoffLimit: 2
+          template:
+            spec:
+              restartPolicy: OnFailure
+              containers:
+              - name: backup
+                image: busybox:1.36
+                command: ["sh", "-c", "date; echo backup done"]
+
+- id: cm
+  g: config
+  t: "ConfigMap"
+  kind: "ConfigMap"
+  use: "Cấu hình không nhạy cảm: biến môi trường, file cấu hình."
+  gen: "k create cm app-config --from-literal=LOG_LEVEL=info --from-file=app.conf $do"
+  learn: config
+  docs: https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/
+  yaml: |
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: app-config
+    data:
+      LOG_LEVEL: "info"                        # mọi giá trị là chuỗi
+      MAX_CONN: "100"
+      app.conf: |                              # | giữ nguyên xuống dòng
+        server.port=8080
+        cache.ttl=60s
+
+- id: secret
+  g: config
+  t: "Secret (generic và registry)"
+  kind: "Secret"
+  use: "Mật khẩu, token, chứng chỉ, thông tin đăng nhập registry."
+  gen: "k create secret generic db --from-literal=PASSWORD=S3cr3t $do"
+  learn: config
+  docs: https://kubernetes.io/docs/concepts/configuration/secret/
+  yaml: |
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: db
+    type: Opaque
+    stringData:                                # chữ thường, API tự đổi sang base64 trong data
+      USERNAME: app
+      PASSWORD: "S3cr3t!"
+    ---
+    # TLS: k create secret tls web-tls --cert=tls.crt --key=tls.key  (type kubernetes.io/tls, key tls.crt và tls.key)
+    # registry: k create secret docker-registry regcred --docker-server=… --docker-username=… --docker-password=…
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: regcred
+    type: kubernetes.io/dockerconfigjson
+    stringData:
+      .dockerconfigjson: '{"auths":{"registry.lab:5000":{"username":"dev","password":"pass"}}}'
+  trap: "data cần base64, stringData thì không. Base64 không phải mã hóa."
+
+- id: podcfg
+  g: config
+  t: "Pod dùng ConfigMap và Secret"
+  kind: "Pod"
+  use: "Bốn cách đưa cấu hình vào container trong một file."
+  learn: config
+  docs: https://kubernetes.io/docs/tasks/inject-data-application/distribute-credentials-secure/
+  yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: api
+    spec:
+      containers:
+      - name: api
+        image: busybox:1.36
+        command: ["sh", "-c", "env; ls /etc/app; sleep 3600"]
+        env:
+        - name: LOG_LEVEL                      # một key thành một biến
+          valueFrom:
+            configMapKeyRef: {name: app-config, key: LOG_LEVEL}
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef: {name: db, key: PASSWORD}
+        envFrom:                               # mọi key thành biến
+        - configMapRef: {name: app-config}
+        - secretRef: {name: db}
+          prefix: DB_
+        volumeMounts:
+        - {name: cfg, mountPath: /etc/app, readOnly: true}
+        - {name: one, mountPath: /etc/nginx/app.conf, subPath: app.conf}   # một file, không tự cập nhật
+      imagePullSecrets: [{name: regcred}]
+      volumes:
+      - name: cfg
+        configMap: {name: app-config}
+      - name: one
+        configMap:
+          name: app-config
+          items: [{key: app.conf, path: app.conf}]
+
+- id: svc
+  g: net
+  t: "Service đủ 5 loại"
+  kind: "Service"
+  use: "ClusterIP, NodePort, LoadBalancer, headless, ExternalName."
+  gen: "k expose deploy web --port=80 --target-port=8080 --type=NodePort $do"
+  learn: network
+  docs: https://kubernetes.io/docs/concepts/services-networking/service/
+  yaml: |
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: web
+    spec:
+      type: ClusterIP                          # mặc định
+      selector: {app: web}
+      ports:
+      - {name: http, port: 80, targetPort: 8080}
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: web-np
+    spec:
+      type: NodePort
+      selector: {app: web}
+      ports:
+      - {port: 80, targetPort: 8080, nodePort: 30080}     # 30000-32767
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: web-lb
+    spec:
+      type: LoadBalancer
+      externalTrafficPolicy: Local             # giữ IP client
+      selector: {app: web}
+      ports: [{port: 443, targetPort: 8443}]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: db-headless
+    spec:
+      clusterIP: None
+      selector: {app: db}
+      ports: [{port: 5432}]
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: payment-api
+    spec:
+      type: ExternalName                       # CNAME tới tên ngoài cluster
+      externalName: api.payment.example.com
+
+- id: ing
+  g: net
+  t: "Ingress"
+  kind: "Ingress"
+  use: "Định tuyến HTTP theo host và path, kèm TLS."
+  gen: "k create ing shop --class=nginx --rule='shop.example.com/api*=api:8080' --rule='shop.example.com/*=web:80,tls=shop-tls' $do"
+  learn: ingress
+  docs: https://kubernetes.io/docs/concepts/services-networking/ingress/
+  yaml: |
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: shop
+    spec:
+      ingressClassName: nginx
+      tls:
+      - hosts: ["shop.example.com"]
+        secretName: shop-tls
+      defaultBackend:
+        service: {name: notfound, port: {number: 80}}
+      rules:
+      - host: shop.example.com
+        http:
+          paths:
+          - path: /api
+            pathType: Prefix                   # Prefix | Exact | ImplementationSpecific
+            backend:
+              service: {name: api, port: {number: 8080}}
+          - path: /
+            pathType: Prefix
+            backend:
+              service: {name: web, port: {name: http}}
+  trap: "Viết --rule='host/=web:80' tạo pathType Exact; muốn khớp mọi path dùng /*."
+
+- id: ingclass
+  g: net
+  t: "IngressClass mặc định"
+  kind: "IngressClass"
+  use: "Chọn controller xử lý Ingress không ghi ingressClassName."
+  learn: ingress
+  docs: https://kubernetes.io/docs/concepts/services-networking/ingress/#ingress-class
+  yaml: |
+    apiVersion: networking.k8s.io/v1
+    kind: IngressClass
+    metadata:
+      name: nginx
+      annotations:
+        ingressclass.kubernetes.io/is-default-class: "true"
+    spec:
+      controller: k8s.io/ingress-nginx
+
+- id: gateway
+  g: net
+  t: "Gateway API: GatewayClass, Gateway, HTTPRoute"
+  kind: "GatewayClass, Gateway, HTTPRoute"
+  use: "Cổng vào thế hệ mới: listener HTTPS, redirect, chia tỉ lệ canary."
+  learn: gateway
+  docs: https://gateway-api.sigs.k8s.io/guides/
+  yaml: |
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: GatewayClass
+    metadata:
+      name: nginx
+    spec:
+      controllerName: gateway.nginx.org/nginx-gateway-controller
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: Gateway
+    metadata:
+      name: public
+    spec:
+      gatewayClassName: nginx
+      listeners:
+      - name: http
+        protocol: HTTP
+        port: 80
+        allowedRoutes: {namespaces: {from: All}}
+      - name: https
+        protocol: HTTPS
+        port: 443
+        hostname: "*.example.com"
+        tls:
+          mode: Terminate
+          certificateRefs: [{name: wildcard-tls}]
+        allowedRoutes: {namespaces: {from: Same}}
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: shop
+    spec:
+      parentRefs: [{name: public, sectionName: https}]
+      hostnames: ["shop.example.com"]
+      rules:
+      - matches: [{path: {type: PathPrefix, value: /api}}]
+        backendRefs:
+        - {name: api, port: 8080, weight: 90}
+        - {name: api-canary, port: 8080, weight: 10}
+      - backendRefs: [{name: web, port: 80}]
+    ---
+    apiVersion: gateway.networking.k8s.io/v1
+    kind: HTTPRoute
+    metadata:
+      name: to-https
+    spec:
+      parentRefs: [{name: public, sectionName: http}]
+      rules:
+      - filters:
+        - type: RequestRedirect
+          requestRedirect: {scheme: https, statusCode: 301}
+
+- id: refgrant
+  g: net
+  t: "ReferenceGrant"
+  kind: "ReferenceGrant"
+  use: "Cho HTTPRoute ở namespace khác trỏ tới Service ở namespace này."
+  learn: gateway
+  docs: https://gateway-api.sigs.k8s.io/api-types/referencegrant/
+  yaml: |
+    # đặt ở namespace ĐÍCH, nơi có Service được trỏ tới
+    apiVersion: gateway.networking.k8s.io/v1beta1
+    kind: ReferenceGrant
+    metadata:
+      name: from-shop
+    spec:
+      from:
+      - {group: gateway.networking.k8s.io, kind: HTTPRoute, namespace: shop}
+      to:
+      - {group: "", kind: Service}
+
+- id: netpol
+  g: net
+  t: "NetworkPolicy (deny, cho phép vào, egress có DNS)"
+  kind: "NetworkPolicy"
+  use: "Chặn mặc định, mở đúng đường cần thiết."
+  learn: netpol
+  docs: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+  yaml: |
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: default-deny
+    spec:
+      podSelector: {}                          # mọi Pod trong namespace
+      policyTypes: ["Ingress", "Egress"]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: web-from-frontend
+    spec:
+      podSelector: {matchLabels: {app: web}}
+      policyTypes: ["Ingress"]
+      ingress:
+      - from:
+        - podSelector: {matchLabels: {app: frontend}}
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: monitoring}}
+        ports: [{protocol: TCP, port: 8080}]
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: NetworkPolicy
+    metadata:
+      name: web-egress
+    spec:
+      podSelector: {matchLabels: {app: web}}
+      policyTypes: ["Egress"]
+      egress:
+      - to:
+        - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+          podSelector: {matchLabels: {k8s-app: kube-dns}}
+        ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+      - to: [{podSelector: {matchLabels: {app: db}}}]
+        ports: [{protocol: TCP, port: 5432}]
+  trap: "Hai mục '- podSelector' và '- namespaceSelector' là HOẶC; gộp chung một mục (không có dấu - thứ hai) là VÀ."
+
+- id: pvpvc
+  g: stor
+  t: "PV, PVC và Pod dùng PVC"
+  kind: "PersistentVolume, PersistentVolumeClaim, Pod"
+  use: "Tạo PV bằng tay rồi cho Pod dùng qua PVC."
+  learn: pv
+  docs: https://kubernetes.io/docs/tasks/configure-pod-container/configure-persistent-volume-storage/
+  yaml: |
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name: pv-log
+      labels: {tier: log}
+    spec:
+      capacity: {storage: 1Gi}
+      accessModes: ["ReadWriteOnce"]
+      persistentVolumeReclaimPolicy: Retain
+      storageClassName: manual
+      hostPath: {path: /mnt/log}
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: log
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: manual                 # khớp PV; "" = không lớp; bỏ trống = lớp mặc định
+      resources: {requests: {storage: 500Mi}}
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: writer
+    spec:
+      containers:
+      - name: w
+        image: busybox:1.36
+        command: ["sh", "-c", "date >> /data/log.txt; sleep 3600"]
+        volumeMounts: [{name: data, mountPath: /data}]
+      volumes:
+      - name: data
+        persistentVolumeClaim: {claimName: log}
+
+- id: sc
+  g: stor
+  t: "StorageClass"
+  kind: "StorageClass"
+  use: "Cấp disk tự động; đặt lớp mặc định."
+  learn: storage
+  docs: https://kubernetes.io/docs/concepts/storage/storage-classes/
+  yaml: |
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: fast
+      annotations:
+        storageclass.kubernetes.io/is-default-class: "true"
+    provisioner: ebs.csi.aws.com               # k get csidrivers
+    parameters: {type: gp3}
+    reclaimPolicy: Delete
+    volumeBindingMode: WaitForFirstConsumer
+    allowVolumeExpansion: true
+    ---
+    # local PV: không driver, Pod phải chọn node trước
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: local-ssd
+    provisioner: kubernetes.io/no-provisioner
+    volumeBindingMode: WaitForFirstConsumer
+
+- id: snapshot
+  g: stor
+  t: "VolumeSnapshot và khôi phục"
+  kind: "VolumeSnapshotClass, VolumeSnapshot, PersistentVolumeClaim"
+  use: "Chụp PVC rồi tạo PVC mới từ bản chụp (cần CRD và snapshot-controller)."
+  learn: storage
+  docs: https://kubernetes.io/docs/concepts/storage/volume-snapshots/
+  yaml: |
+    apiVersion: snapshot.storage.k8s.io/v1
+    kind: VolumeSnapshotClass
+    metadata:
+      name: csi-snap
+    driver: ebs.csi.aws.com
+    deletionPolicy: Delete
+    ---
+    apiVersion: snapshot.storage.k8s.io/v1
+    kind: VolumeSnapshot
+    metadata:
+      name: data-snap
+    spec:
+      volumeSnapshotClassName: csi-snap
+      source: {persistentVolumeClaimName: data}
+    ---
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: data-restore
+    spec:
+      storageClassName: fast
+      accessModes: ["ReadWriteOnce"]
+      resources: {requests: {storage: 10Gi}}
+      dataSource: {kind: VolumeSnapshot, name: data-snap, apiGroup: snapshot.storage.k8s.io}
+
+- id: rbac
+  g: sec
+  t: "ServiceAccount, Role, RoleBinding"
+  kind: "ServiceAccount, Role, RoleBinding"
+  use: "Cấp quyền trong một namespace cho app hoặc người dùng."
+  gen: "k create role pod-reader --verb=get,list,watch --resource=pods $do"
+  learn: security
+  docs: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+  yaml: |
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: build
+    automountServiceAccountToken: false
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: pod-reader
+    rules:
+    - apiGroups: [""]                          # "" = core (pods, services, configmaps…)
+      resources: ["pods", "pods/log"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "patch"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: pod-reader
+    roleRef:                                   # không đổi được sau khi tạo
+      apiGroup: rbac.authorization.k8s.io
+      kind: Role
+      name: pod-reader
+    subjects:
+    - {kind: ServiceAccount, name: build, namespace: shop}   # SA phải ghi namespace
+    - {kind: User, name: jane, apiGroup: rbac.authorization.k8s.io}
+  trap: "subjects ServiceAccount phải ghi namespace. Kiểm tra bằng k auth can-i … --as=system:serviceaccount:NS:build."
+
+- id: clusterrbac
+  g: sec
+  t: "ClusterRole và ClusterRoleBinding"
+  kind: "ClusterRole, ClusterRoleBinding"
+  use: "Quyền trên object cấp cluster (node, PV) hoặc mọi namespace."
+  gen: "k create clusterrole node-reader --verb=get,list --resource=nodes $do"
+  learn: security
+  docs: https://kubernetes.io/docs/reference/access-authn-authz/rbac/
+  yaml: |
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRole
+    metadata:
+      name: node-reader
+    rules:
+    - apiGroups: [""]
+      resources: ["nodes", "persistentvolumes"]
+      verbs: ["get", "list", "watch"]
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: node-reader
+    roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: node-reader}
+    subjects:
+    - {kind: Group, name: ops, apiGroup: rbac.authorization.k8s.io}
+  trap: "RoleBinding trỏ tới ClusterRole thì quyền chỉ có trong namespace của RoleBinding."
+
+- id: psa
+  g: sec
+  t: "Namespace có Pod Security và Pod đạt mức restricted"
+  kind: "Namespace, Pod"
+  use: "Bắt mọi Pod trong namespace chạy không root, không leo quyền."
+  learn: security
+  docs: https://kubernetes.io/docs/concepts/security/pod-security-admission/
+  yaml: |
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: secure
+      labels:
+        pod-security.kubernetes.io/enforce: restricted
+        pod-security.kubernetes.io/warn: restricted
+    ---
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: hardened
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh", "-c", "id; sleep 3600"]
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: ["ALL"]}
+
+- id: placement
+  g: sched
+  t: "Chọn node: nodeSelector, affinity, toleration, topology spread"
+  kind: "Pod"
+  use: "Ép Pod lên đúng loại node, tránh dồn một chỗ, chạy được trên node có taint."
+  learn: sched
+  docs: https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/
+  yaml: |
+    apiVersion: v1
+    kind: Pod
+    metadata:
+      name: placed
+      labels: {app: web}
+    spec:
+      nodeSelector: {disktype: ssd}            # đơn giản nhất: node phải có label này
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - {key: topology.kubernetes.io/zone, operator: In, values: [zone-a, zone-b]}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector: {matchLabels: {app: web}}
+              topologyKey: kubernetes.io/hostname
+      tolerations:
+      - {key: dedicated, operator: Equal, value: gpu, effect: NoSchedule}
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector: {matchLabels: {app: web}}
+      containers:
+      - {name: web, image: nginx:1.27}
+
+- id: priority
+  g: sched
+  t: "PriorityClass"
+  kind: "PriorityClass"
+  use: "Pod quan trọng được xếp trước và có thể đẩy Pod ít quan trọng hơn ra."
+  gen: "k create priorityclass high --value=100000 --description='critical apps' $do"
+  learn: sched
+  docs: https://kubernetes.io/docs/concepts/scheduling-eviction/pod-priority-preemption/
+  yaml: |
+    apiVersion: scheduling.k8s.io/v1
+    kind: PriorityClass
+    metadata:
+      name: high
+    value: 100000
+    globalDefault: false
+    preemptionPolicy: PreemptLowerPriority     # Never: chỉ xếp trước, không đẩy ai
+    description: critical apps
+
+- id: quota
+  g: sched
+  t: "ResourceQuota và LimitRange"
+  kind: "ResourceQuota, LimitRange"
+  use: "Giới hạn tổng tài nguyên của namespace và gán mặc định cho container không khai."
+  gen: "k create quota team-a --hard=pods=20,requests.cpu=4,requests.memory=8Gi $do"
+  learn: scale
+  docs: https://kubernetes.io/docs/concepts/policy/resource-quotas/
+  yaml: |
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: team-a
+    spec:
+      hard:
+        pods: "20"
+        requests.cpu: "4"
+        requests.memory: 8Gi
+        limits.memory: 16Gi
+        persistentvolumeclaims: "10"
+        count/deployments.apps: "10"
+    ---
+    apiVersion: v1
+    kind: LimitRange
+    metadata:
+      name: defaults
+    spec:
+      limits:
+      - type: Container
+        default: {cpu: 500m, memory: 256Mi}          # limits gán khi container không khai
+        defaultRequest: {cpu: 100m, memory: 128Mi}   # requests gán khi không khai
+        max: {cpu: "2", memory: 2Gi}
+  trap: "Có quota CPU/RAM thì Pod thiếu requests hoặc limits bị từ chối, trừ khi LimitRange gán mặc định."
+
+- id: hpa
+  g: sched
+  t: "HorizontalPodAutoscaler"
+  kind: "HorizontalPodAutoscaler"
+  use: "Tự tăng giảm số bản sao theo CPU hoặc RAM (cần metrics-server)."
+  gen: "k autoscale deploy web --min=2 --max=10 --cpu=70% $do"
+  learn: scale
+  docs: https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/
+  yaml: |
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata:
+      name: web
+    spec:
+      scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: web}
+      minReplicas: 2
+      maxReplicas: 10
+      metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target: {type: Utilization, averageUtilization: 70}   # % của requests
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+  trap: "Container không có requests CPU thì HPA báo <unknown> và không scale."
+
+- id: pdb
+  g: sched
+  t: "PodDisruptionBudget"
+  kind: "PodDisruptionBudget"
+  use: "Giữ đủ Pod khi drain node hay nâng cấp."
+  gen: "k create pdb web --selector=app=web --min-available=2 $do"
+  learn: ops
+  docs: https://kubernetes.io/docs/tasks/run-application/configure-pdb/
+  yaml: |
+    apiVersion: policy/v1
+    kind: PodDisruptionBudget
+    metadata:
+      name: web
+    spec:
+      minAvailable: 2                          # hoặc maxUnavailable: 1
+      selector:
+        matchLabels: {app: web}
+
+- id: crd
+  g: ops
+  t: "CustomResourceDefinition và một custom resource"
+  kind: "CustomResourceDefinition, Backup"
+  use: "Thêm kiểu object mới vào API (operator dùng cách này)."
+  learn: ops
+  docs: https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/
+  yaml: |
+    apiVersion: apiextensions.k8s.io/v1
+    kind: CustomResourceDefinition
+    metadata:
+      name: backups.lab.example.com            # <plural>.<group>
+    spec:
+      group: lab.example.com
+      scope: Namespaced
+      names: {plural: backups, singular: backup, kind: Backup, shortNames: [bk]}
+      versions:
+      - name: v1
+        served: true
+        storage: true
+        schema:
+          openAPIV3Schema:
+            type: object
+            properties:
+              spec:
+                type: object
+                properties:
+                  schedule: {type: string}
+                  retainDays: {type: integer, minimum: 1}
+    ---
+    apiVersion: lab.example.com/v1
+    kind: Backup
+    metadata:
+      name: nightly
+    spec:
+      schedule: "0 2 * * *"
+      retainDays: 7
+  trap: "CRD phải được tạo xong trước thì custom resource mới apply được (\"no matches for kind\")."
+
+- id: kustomize
+  g: ops
+  t: "kustomization.yaml (base và overlay)"
+  kind: "Kustomization"
+  use: "Một bộ YAML chung, mỗi môi trường chỉ ghi phần khác."
+  learn: best
+  docs: https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/
+  test: kustomize
+  files:
+    base/deployment.yaml: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata: {name: web}
+      spec:
+        replicas: 1
+        selector: {matchLabels: {app: web}}
+        template:
+          metadata: {labels: {app: web}}
+          spec:
+            containers: [{name: web, image: nginx:1.27}]
+    base/service.yaml: |
+      apiVersion: v1
+      kind: Service
+      metadata: {name: web}
+      spec:
+        selector: {app: web}
+        ports: [{port: 80}]
+    base/kustomization.yaml: |
+      resources: [deployment.yaml, service.yaml]
+  yaml: |
+    # overlays/prod/kustomization.yaml — chạy: k apply -k overlays/prod
+    apiVersion: kustomize.config.k8s.io/v1beta1
+    kind: Kustomization
+    namespace: prod
+    resources:
+    - ../../base
+    labels:
+    - pairs: {env: prod}
+      includeSelectors: false                  # không đụng selector bất biến
+    images:
+    - {name: nginx, newTag: "1.28"}
+    replicas:
+    - {name: web, count: 3}
+    configMapGenerator:
+    - name: web-config
+      literals: [LOG_LEVEL=warn]
+    patches:
+    - target: {kind: Deployment, name: web}
+      patch: |
+        - op: add
+          path: /spec/template/spec/containers/0/resources
+          value: {requests: {cpu: 100m, memory: 128Mi}}
