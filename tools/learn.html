@@ -778,6 +778,7 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
     <h2>Giải phẫu một cluster</h2>
     <p class="lead">Xem ở ba lớp. Toàn cảnh cho thấy mọi thành phần từ người dùng, control plane HA, add-on tới kernel của node. Hai lớp sau mở bên trong kube-apiserver, controller-manager, scheduler, etcd và bên trong kubelet, containerd. Bấm vào khối bất kỳ để xem nó chạy dưới dạng gì trên Linux, lệnh kiểm tra và triệu chứng khi hỏng.</p>
   </header>
+  <div class="panel col" id="ctZoom"></div>
   <div class="seg" id="archTabs"><button type="button" data-p="all" aria-pressed="true">Toàn cảnh cluster</button><button type="button" data-p="cp" aria-pressed="false">Bên trong control plane</button><button type="button" data-p="node" aria-pressed="false">Bên trong worker node</button></div>
 
   <div class="arch-pane col" data-p="all" style="gap:16px">
@@ -1893,7 +1894,7 @@ k edit deploy web</pre></div>
         <tbody>
           <tr><td><b>emptyDir</b></td><td>Disk của node; <code>medium: Memory</code> thì là tmpfs trong RAM (tính vào memory limit)</td><td>Cache, file trung gian giữa các container</td></tr>
           <tr><td><b>hostPath</b></td><td>Một đường dẫn trên node</td><td>Agent đọc log, socket của node. Rủi ro bảo mật: Pod Security mức baseline cấm</td></tr>
-          <tr><td><b>configMap</b>, <b>secret</b></td><td>Object trong API, kubelet ghi ra file</td><td>File cấu hình, chứng chỉ (bài 2.5)</td></tr>
+          <tr><td><b>configMap</b>, <b>secret</b></td><td>Object trong API, kubelet ghi ra file</td><td>File cấu hình, chứng chỉ (bài 2.6)</td></tr>
           <tr><td><b>downwardAPI</b></td><td>Thông tin của chính Pod</td><td>Tên Pod, label, giới hạn CPU dưới dạng file</td></tr>
           <tr><td><b>projected</b></td><td>Gộp nhiều nguồn vào một thư mục</td><td>secret + configMap + downwardAPI + token ServiceAccount</td></tr>
           <tr><td><b>ephemeral</b> (generic)</td><td>PVC tạo cùng Pod, xóa cùng Pod</td><td>Cần disk tạm lớn, đúng StorageClass</td></tr>
@@ -2464,6 +2465,58 @@ sudo vi /etc/kubernetes/manifests/kube-apiserver.yaml</pre></div>
 </section>
 
 
+<!-- ============ 2.1 Container là gì (learn-container.js) ============ -->
+<section class="view" data-view="container" hidden>
+  <header class="vh">
+    <p class="eyebrow">Workload &amp; ứng dụng</p>
+    <h2>Container là gì</h2>
+    <p class="lead">Container không phải máy ảo. Nó là một tiến trình Linux chạy trên filesystem lấy từ image, bị cô lập bằng namespace và giới hạn bằng cgroup. Bài này đi từ image tới tiến trình, xem ai chạy nó và nó sống chết thế nào. Số liệu lấy từ một node thật (containerd + runc).</p>
+  </header>
+  <ul class="tldr"><li>Container luôn nằm trong <b>Pod</b>, Pod nằm trên một <b>node</b>; xem sơ đồ phóng to ở <a href="#arch" data-go="arch">bài 1.1</a>.</li><li>kubelet không tự chạy container: gọi <b>containerd</b> qua CRI, containerd nhờ <b>runc</b> tạo tiến trình.</li><li>Lớp ghi của container mất khi container được tạo lại: dữ liệu cần giữ phải nằm trong <b>volume</b>.</li></ul>
+  <div class="panel col ck-anim" id="ctLayers"></div>
+  <div class="panel col ck-anim" id="ctChain"></div>
+  <div class="panel col ck-anim" id="ctPod"></div>
+  <div>
+    <div class="panel">
+      <h3>Container trong YAML: 8 câu hỏi</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Câu hỏi</th><th>Field trong <code>containers[]</code></th></tr></thead>
+        <tbody>
+          <tr><td>Tên gì?</td><td><code>name</code> (dùng cho <code>-c</code> của logs, exec)</td></tr>
+          <tr><td>Chạy gì?</td><td><code>image</code>, <code>command</code> (thay ENTRYPOINT), <code>args</code> (thay CMD)</td></tr>
+          <tr><td>Cấu hình?</td><td><code>env</code>, <code>envFrom</code></td></tr>
+          <tr><td>Mở cổng nào?</td><td><code>ports[].containerPort</code></td></tr>
+          <tr><td>Ăn bao nhiêu?</td><td><code>resources.requests</code>, <code>resources.limits</code></td></tr>
+          <tr><td>Lưu ở đâu?</td><td><code>volumeMounts</code> (volume khai ở cấp Pod)</td></tr>
+          <tr><td>Còn sống không?</td><td><code>startupProbe</code>, <code>readinessProbe</code>, <code>livenessProbe</code></td></tr>
+          <tr><td>Được làm gì?</td><td><code>securityContext</code></td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted" style="margin:10px 0 0">Những gì thuộc cả Pod (volumes, nodeSelector, tolerations, serviceAccountName, restartPolicy) nằm ở <code>spec</code> của Pod, ngang hàng với <code>containers</code>. Mẫu đầy đủ: <a href="#yamlref" data-yt="pod">Thư viện YAML → Pod</a>.</p>
+    </div>
+  </div>
+  <div class="panel col ck-anim" id="ctLife"></div>
+  <div class="panel">
+    <h3>Xem container từ hai phía</h3>
+    <div class="split even">
+      <div class="codewrap"><pre class="code" data-hl># từ kubectl
+k get pod web-1                       # READY 2/2 = số container sẵn sàng
+k get pod web-1 -o jsonpath='{.spec.containers[*].name}'
+k get pod web-1 -o jsonpath='{.status.containerStatuses[*].state}'
+k logs web-1 -c nginx --previous      # log lần chạy trước của một container
+k exec -it web-1 -c nginx -- sh
+k debug -it web-1 --image=busybox:1.36 --target=nginx   # container tạm chung pid</pre></div>
+      <div class="codewrap"><pre class="code" data-hl># trên node (ssh vào node, cần sudo)
+crictl pods --name web-1              # sandbox của Pod (container pause)
+crictl ps --name nginx                # container đang chạy
+crictl logs &lt;container-id&gt;
+crictl inspect &lt;container-id&gt; | grep -m1 pid
+ps -o pid,ppid,args -e | grep -A2 containerd-shim
+# node không có docker: từ v1.24 Kubernetes nói chuyện với runtime qua CRI</pre></div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ lý thuyết CKAD (learn-ckad.js) ============ -->
 <section class="view" data-view="exam" hidden>
   <header class="vh">
@@ -2816,7 +2869,7 @@ function addCopy(wrap, pre) {
 const CHAPTERS = [
   { id: "c0", n: "0", t: "Bắt đầu", d: "Hai kỳ thi, đề cương và cách học trang này.", ex: "CKA · CKAD", ls: [["overview", "Cách học & lộ trình"], ["exam", "Kỳ thi & mẹo làm bài"], ["ckadcur", "Đề cương CKA & CKAD"]] },
   { id: "c1", n: "1", t: "Kiến trúc & cơ chế", d: "Cluster gồm gì, một Pod ra đời thế nào, Linux bên dưới, controller và các kết nối có mã hóa.", ex: "CKA Architecture 25% · nền cho mọi domain", ls: [["arch", "Kiến trúc cluster"], ["flow", "Một Pod ra đời"], ["linux", "Bên trong Linux"], ["mech", "Cơ chế controller"], ["wire", "Giao tiếp & mã hóa"]] },
-  { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
+  { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["container", "Container là gì"], ["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
   { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào, xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler & nơi Pod chạy"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
   { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
   { id: "c5", n: "5", t: "Storage", d: "Volume trong Pod, PV và PVC, StorageClass và CSI: từ thư mục tạm tới disk tự cấp phát.", ex: "CKA Storage 10% · CKAD Build 20%", ls: [["volumes", "Volume trong Pod"], ["pv", "PV, PVC & reclaim"], ["storage", "StorageClass & CSI"]] },
