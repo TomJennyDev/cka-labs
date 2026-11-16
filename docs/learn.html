@@ -648,6 +648,7 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 .chmap .c ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:2px}
 .chmap .c ol a{font-size:13.5px;text-decoration:none}.chmap .c ol a.ok::after{content:" ✓";color:var(--node)}
 .chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
+.ttv{padding:8px 12px;border-radius:8px}.ttv.ok{background:var(--node-soft)}.ttv.bad{background:var(--bad-soft)}.ttv.warn{background:var(--pkt-soft)}
 .yt-drill{line-height:1.9}
 .yt-blank{font:inherit;background:rgba(255,255,255,.08);color:#fff;border:0;border-bottom:2px solid var(--pkt);border-radius:3px;padding:0 4px;outline:none}
 .yt-blank:focus{background:rgba(255,255,255,.16)}.yt-blank.ok{border-color:var(--node);color:#9fe3b8}.yt-blank.bad{border-color:var(--bad);color:#ffb3b3}
@@ -1680,6 +1681,64 @@ k delete deploy web --cascade=orphan   # giữ ReplicaSet và Pod</pre></div>
     </table></div>
   </div>
 
+  <h3 style="margin:10px 0 0" id="taint">Taint &amp; toleration</h3>
+  <ul class="tldr"><li><b>Taint</b> gắn trên <b>Node</b> (<code>node.spec.taints</code>): đẩy Pod ra. <b>Toleration</b> nằm trong <b>Pod</b> (<code>spec.tolerations</code>): cho phép Pod chịu được taint.</li><li>Toleration chỉ <b>cho phép vào</b>, không kéo Pod tới node đó. Muốn dành riêng node: taint + toleration + nodeSelector/affinity.</li><li>Ba effect: <code>NoSchedule</code> (không xếp Pod mới), <code>PreferNoSchedule</code> (cố tránh), <code>NoExecute</code> (không xếp và đuổi cả Pod đang chạy).</li></ul>
+  <div class="panel col" id="ttSim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Luật khớp một toleration với một taint</h3>
+      <ul class="tight">
+        <li><code>key</code> phải giống. Không ghi <code>key</code> kèm <code>operator: Exists</code> = chịu <b>mọi</b> taint.</li>
+        <li><code>operator: Equal</code> (mặc định): <code>value</code> phải giống. <code>Exists</code>: bỏ qua value.</li>
+        <li>Không ghi <code>effect</code> = khớp mọi effect của key đó.</li>
+        <li><code>tolerationSeconds</code> chỉ dùng với <code>NoExecute</code>: ở lại thêm bao nhiêu giây rồi mới bị đuổi.</li>
+        <li>Node có nhiều taint: Pod phải tolerate <b>tất cả</b> taint NoSchedule và NoExecute mới vào được.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Taint có sẵn mà bạn sẽ gặp</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Taint</th><th>Ai gắn, khi nào</th></tr></thead>
+        <tbody>
+          <tr><td><code>node-role.kubernetes.io/control-plane:NoSchedule</code></td><td>kubeadm, lúc init: Pod thường không lên control plane</td></tr>
+          <tr><td><code>node.kubernetes.io/unschedulable:NoSchedule</code></td><td><code>k cordon</code> (và <code>drain</code>)</td></tr>
+          <tr><td><code>node.kubernetes.io/not-ready:NoExecute</code>, <code>…/unreachable:NoExecute</code></td><td>Control plane, khi node mất kết nối. Pod mặc định chịu <b>300 giây</b> rồi bị đuổi</td></tr>
+          <tr><td><code>node.kubernetes.io/memory-pressure</code>, <code>disk-pressure</code>, <code>pid-pressure</code> <span class="small muted">(NoSchedule)</span></td><td>Theo condition của node: thiếu RAM, đĩa, PID</td></tr>
+          <tr><td><code>node.kubernetes.io/network-unavailable:NoSchedule</code></td><td>Mạng của node chưa sẵn sàng (CNI chưa chạy)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Lệnh</h3>
+      <div class="codewrap"><pre class="code" data-hl>k taint node worker-3 gpu=true:NoSchedule      # gắn
+k taint node worker-3 gpu=true:NoSchedule-     # gỡ đúng taint đó
+k taint node worker-3 gpu-                     # gỡ mọi taint có key gpu
+k describe node worker-3 | grep -A3 Taints
+k get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints
+k explain pod.spec.tolerations                 # quên tên field</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Đã chạy thử trên cluster</h3>
+      <div class="codewrap"><pre class="code" data-hl># Pod không có toleration, mọi worker có taint gpu:
+0/3 nodes are available: 3 node(s) had untolerated taint(s).
+
+# toleration mà mọi Pod tự có:
+node.kubernetes.io/not-ready    Exists  NoExecute  300
+node.kubernetes.io/unreachable  Exists  NoExecute  300
+
+# k cordon node02 → node.spec.taints:
+[{"effect":"NoSchedule","key":"node.kubernetes.io/unschedulable"}]
+
+# gắn maint=now:NoExecute lúc 08:16:35
+#   Pod không toleration: Terminating ngay (08:16:38)
+#   Pod có tolerationSeconds: 15: Terminating lúc 08:16:52
+
+# DaemonSet tự được thêm toleration: not-ready, unreachable,
+#   disk/memory/pid-pressure, unschedulable (nên vẫn chạy trên node cordon)</pre></div>
+    </div>
+  </div>
 </section>
 
 <!-- ============ ConfigMap & Secret ============ -->
@@ -2882,7 +2941,7 @@ const CHAPTERS = [
   { id: "c0", n: "0", t: "Bắt đầu", d: "Hai kỳ thi, đề cương và cách học trang này.", ex: "CKA · CKAD", ls: [["overview", "Cách học & lộ trình"], ["exam", "Kỳ thi & mẹo làm bài"], ["ckadcur", "Đề cương CKA & CKAD"]] },
   { id: "c1", n: "1", t: "Kiến trúc & cơ chế", d: "Cluster gồm gì, một Pod ra đời thế nào, Linux bên dưới, controller và các kết nối có mã hóa.", ex: "CKA Architecture 25% · nền cho mọi domain", ls: [["arch", "Kiến trúc cluster"], ["flow", "Một Pod ra đời"], ["linux", "Bên trong Linux"], ["mech", "Cơ chế controller"], ["wire", "Giao tiếp & mã hóa"]] },
   { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["container", "Container là gì"], ["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
-  { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào, xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler & nơi Pod chạy"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
+  { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào (label, affinity, taint & toleration), xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler, taint & affinity"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
   { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
   { id: "c5", n: "5", t: "Storage", d: "Volume trong Pod, PV và PVC, StorageClass và CSI: từ thư mục tạm tới disk tự cấp phát.", ex: "CKA Storage 10% · CKAD Build 20%", ls: [["volumes", "Volume trong Pod"], ["pv", "PV, PVC & reclaim"], ["storage", "StorageClass & CSI"]] },
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
@@ -9742,6 +9801,61 @@ function ctZoom() {
   render();
 }
 lcOnce("arch", ctZoom);
+
+/* ---------- 3.1 Taint & toleration: mô phỏng khớp taint của node với toleration của Pod ----------
+   Luật khớp theo docs Kubernetes; hành vi NoExecute, cordon, toleration mặc định đã kiểm trên k3s v1.34 ngày 16/11/2026. */
+const TT_TAINTS = [
+  { id: "gpu", key: "gpu", value: "true", effect: "NoSchedule", note: "node GPU dành riêng" },
+  { id: "pref", key: "dedicated", value: "db", effect: "PreferNoSchedule", note: "nên để cho DB" },
+  { id: "maint", key: "maint", value: "now", effect: "NoExecute", note: "bảo trì: đuổi Pod" },
+  { id: "cp", key: "node-role.kubernetes.io/control-plane", value: "", effect: "NoSchedule", note: "kubeadm gắn cho control plane" },
+  { id: "cordon", key: "node.kubernetes.io/unschedulable", value: "", effect: "NoSchedule", note: "do k cordon gắn" }
+];
+const TT_TOLS = [
+  { id: "t1", key: "gpu", operator: "Equal", value: "true", effect: "NoSchedule" },
+  { id: "t2", key: "gpu", operator: "Equal", value: "false", effect: "NoSchedule" },
+  { id: "t3", key: "gpu", operator: "Exists" },
+  { id: "t4", key: "maint", operator: "Exists", effect: "NoExecute", tolerationSeconds: 15 },
+  { id: "t5", key: "node-role.kubernetes.io/control-plane", operator: "Exists", effect: "NoSchedule" },
+  { id: "t6", operator: "Exists" }
+];
+const ttTaintStr = t => t.key + (t.value ? "=" + t.value : "") + ":" + t.effect;
+const ttTolStr = t => "{" + [t.key ? "key: " + t.key : "", "operator: " + t.operator, t.value !== undefined && t.operator === "Equal" ? 'value: "' + t.value + '"' : "", t.effect ? "effect: " + t.effect : "", t.tolerationSeconds ? "tolerationSeconds: " + t.tolerationSeconds : ""].filter(Boolean).join(", ") + "}";
+function ttMatch(tol, taint) {
+  if (tol.key && tol.key !== taint.key) return "khác key";
+  if (!tol.key && tol.operator !== "Exists") return "không có key thì phải là Exists";
+  if (tol.operator === "Equal" && (tol.value || "") !== (taint.value || "")) return "Equal nhưng khác value";
+  if (tol.effect && tol.effect !== taint.effect) return "khác effect";
+  return "";
+}
+function ttInit() {
+  const box = $("#ttSim"); const on = { gpu: true, pref: false, maint: false, cp: false, cordon: false }, tol = { t1: false, t2: false, t3: false, t4: false, t5: false, t6: false };
+  box.innerHTML = '<h3>Pod này có lên được node không?</h3><div class="split even" style="align-items:start">' +
+    '<div class="col" style="gap:6px"><b class="small">Taint trên node worker-3</b>' + TT_TAINTS.map(t => '<label class="check"><input type="checkbox" data-tt="' + t.id + '"' + (on[t.id] ? " checked" : "") + "> <code>" + esc(ttTaintStr(t)) + '</code> <span class="small muted">' + esc(t.note) + "</span></label>").join("") + "</div>" +
+    '<div class="col" style="gap:6px"><b class="small">Toleration trong Pod</b>' + TT_TOLS.map(t => '<label class="check"><input type="checkbox" data-tl="' + t.id + '"> <code style="white-space:normal">' + esc(ttTolStr(t)) + "</code></label>").join("") + "</div></div>" +
+    '<div id="ttOut"></div><div class="split even" style="margin-top:10px"><div class="codewrap"><pre class="code" id="ttCmdN"></pre></div><div class="codewrap"><pre class="code" id="ttCmdP"></pre></div></div>';
+  const render = () => {
+    const ts = TT_TAINTS.filter(t => on[t.id]), ls = TT_TOLS.filter(t => tol[t.id]);
+    const rows = ts.map(t => { const hits = ls.filter(l => !ttMatch(l, t)); return { t, hits, why: ls.map(l => ttMatch(l, t)).filter(Boolean) }; });
+    const hard = rows.filter(r => !r.hits.length && r.t.effect !== "PreferNoSchedule"), soft = rows.filter(r => !r.hits.length && r.t.effect === "PreferNoSchedule");
+    const exe = rows.filter(r => r.t.effect === "NoExecute"), exeBad = exe.filter(r => !r.hits.length), exeTimed = exe.filter(r => r.hits.length && r.hits.every(h => h.tolerationSeconds));
+    let verdict, cls;
+    if (!ts.length) { verdict = "Node không có taint: Pod nào cũng lên được."; cls = "ok"; }
+    else if (hard.length) { verdict = "Không xếp được lên node này: còn taint " + hard.map(r => "<code>" + esc(ttTaintStr(r.t)) + "</code>").join(", ") + " chưa được tolerate. Pod sẽ <b>Pending</b> với event <i>1 node(s) had untolerated taint(s)</i>" + (exeBad.length ? ". Pod đang chạy trên node mà không tolerate taint NoExecute thì bị <b>đuổi ngay</b>." : "."); cls = "bad"; }
+    else if (exeTimed.length) { verdict = "Xếp được, nhưng taint NoExecute chỉ được chịu <b>" + Math.min(...exeTimed.flatMap(r => r.hits.map(h => h.tolerationSeconds))) + " giây</b> (tolerationSeconds): sau đó Pod bị đuổi."; cls = "warn"; }
+    else if (soft.length) { verdict = "Xếp được nhưng scheduler <b>tránh</b> node này nếu còn node khác (PreferNoSchedule chưa tolerate)."; cls = "warn"; }
+    else { verdict = "Xếp được: mọi taint đều có toleration khớp. Lưu ý: toleration chỉ <b>cho phép</b> vào, không kéo Pod tới node này; muốn ép thì thêm nodeSelector hoặc affinity."; cls = "ok"; }
+    $("#ttOut").innerHTML = '<div class="tbl" style="margin-top:10px"><table><thead><tr><th>Taint</th><th>Effect</th><th>Toleration khớp</th></tr></thead><tbody>' +
+      (rows.length ? rows.map(r => "<tr><td><code>" + esc(ttTaintStr(r.t)) + "</code></td><td>" + r.t.effect + "</td><td>" + (r.hits.length ? "✓ " + r.hits.map(h => "<code>" + esc(ttTolStr(h)) + "</code>").join(" ") : '<span style="color:var(--bad)">✕ không có</span>' + (r.why.length ? ' <span class="small muted">(' + esc([...new Set(r.why)].join("; ")) + ")</span>" : "")) + "</td></tr>").join("") : '<tr><td colspan="3" class="muted">Node không có taint</td></tr>') +
+      '</tbody></table></div><p class="ttv ' + cls + '" style="margin:8px 0 0">' + verdict + "</p>";
+    $("#ttCmdN").textContent = "# taint đang bật trên node\n" + (ts.length ? ts.filter(t => t.id !== "cordon").map(t => "k taint node worker-3 " + ttTaintStr(t)).join("\n") + (on.cordon ? "\nk cordon worker-3          # gắn node.kubernetes.io/unschedulable:NoSchedule" : "") : "# (không có)") + "\n# gỡ: thêm dấu - ở cuối, ví dụ\nk taint node worker-3 gpu=true:NoSchedule-";
+    $("#ttCmdP").textContent = "# tolerations trong spec của Pod\nspec:\n  tolerations:" + (ls.length ? "\n" + ls.map(l => "  - " + ttTolStr(l)).join("\n") : " []");
+    hlPre($("#ttCmdN")); hlPre($("#ttCmdP"));
+  };
+  box.addEventListener("change", e => { const a = e.target.closest("[data-tt]"), b = e.target.closest("[data-tl]"); if (a) on[a.dataset.tt] = a.checked; if (b) tol[b.dataset.tl] = b.checked; render(); });
+  render();
+}
+lcOnce("sched", ttInit);
 
 /* ---------- khung chương / bài của trang Lý thuyết ----------
    lessonFrame(): đầu bài (chương + tab các bài) và cuối bài (ôn thi: năng lực CKA, thẻ CKAD, bài tập; đã học; bài trước/sau).

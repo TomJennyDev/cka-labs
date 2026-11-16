@@ -643,6 +643,7 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 .chmap .c ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:2px}
 .chmap .c ol a{font-size:13.5px;text-decoration:none}.chmap .c ol a.ok::after{content:" ✓";color:var(--node)}
 .chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
+.ttv{padding:8px 12px;border-radius:8px}.ttv.ok{background:var(--node-soft)}.ttv.bad{background:var(--bad-soft)}.ttv.warn{background:var(--pkt-soft)}
 .yt-drill{line-height:1.9}
 .yt-blank{font:inherit;background:rgba(255,255,255,.08);color:#fff;border:0;border-bottom:2px solid var(--pkt);border-radius:3px;padding:0 4px;outline:none}
 .yt-blank:focus{background:rgba(255,255,255,.16)}.yt-blank.ok{border-color:var(--node);color:#9fe3b8}.yt-blank.bad{border-color:var(--bad);color:#ffb3b3}
@@ -1671,6 +1672,64 @@ k delete deploy web --cascade=orphan   # giữ ReplicaSet và Pod</pre></div>
     </table></div>
   </div>
 
+  <h3 style="margin:10px 0 0" id="taint">Taint &amp; toleration</h3>
+  <ul class="tldr"><li><b>Taint</b> gắn trên <b>Node</b> (<code>node.spec.taints</code>): đẩy Pod ra. <b>Toleration</b> nằm trong <b>Pod</b> (<code>spec.tolerations</code>): cho phép Pod chịu được taint.</li><li>Toleration chỉ <b>cho phép vào</b>, không kéo Pod tới node đó. Muốn dành riêng node: taint + toleration + nodeSelector/affinity.</li><li>Ba effect: <code>NoSchedule</code> (không xếp Pod mới), <code>PreferNoSchedule</code> (cố tránh), <code>NoExecute</code> (không xếp và đuổi cả Pod đang chạy).</li></ul>
+  <div class="panel col" id="ttSim"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Luật khớp một toleration với một taint</h3>
+      <ul class="tight">
+        <li><code>key</code> phải giống. Không ghi <code>key</code> kèm <code>operator: Exists</code> = chịu <b>mọi</b> taint.</li>
+        <li><code>operator: Equal</code> (mặc định): <code>value</code> phải giống. <code>Exists</code>: bỏ qua value.</li>
+        <li>Không ghi <code>effect</code> = khớp mọi effect của key đó.</li>
+        <li><code>tolerationSeconds</code> chỉ dùng với <code>NoExecute</code>: ở lại thêm bao nhiêu giây rồi mới bị đuổi.</li>
+        <li>Node có nhiều taint: Pod phải tolerate <b>tất cả</b> taint NoSchedule và NoExecute mới vào được.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Taint có sẵn mà bạn sẽ gặp</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Taint</th><th>Ai gắn, khi nào</th></tr></thead>
+        <tbody>
+          <tr><td><code>node-role.kubernetes.io/control-plane:NoSchedule</code></td><td>kubeadm, lúc init: Pod thường không lên control plane</td></tr>
+          <tr><td><code>node.kubernetes.io/unschedulable:NoSchedule</code></td><td><code>k cordon</code> (và <code>drain</code>)</td></tr>
+          <tr><td><code>node.kubernetes.io/not-ready:NoExecute</code>, <code>…/unreachable:NoExecute</code></td><td>Control plane, khi node mất kết nối. Pod mặc định chịu <b>300 giây</b> rồi bị đuổi</td></tr>
+          <tr><td><code>node.kubernetes.io/memory-pressure</code>, <code>disk-pressure</code>, <code>pid-pressure</code> <span class="small muted">(NoSchedule)</span></td><td>Theo condition của node: thiếu RAM, đĩa, PID</td></tr>
+          <tr><td><code>node.kubernetes.io/network-unavailable:NoSchedule</code></td><td>Mạng của node chưa sẵn sàng (CNI chưa chạy)</td></tr>
+        </tbody>
+      </table></div>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Lệnh</h3>
+      <div class="codewrap"><pre class="code" data-hl>k taint node worker-3 gpu=true:NoSchedule      # gắn
+k taint node worker-3 gpu=true:NoSchedule-     # gỡ đúng taint đó
+k taint node worker-3 gpu-                     # gỡ mọi taint có key gpu
+k describe node worker-3 | grep -A3 Taints
+k get nodes -o custom-columns=NAME:.metadata.name,TAINTS:.spec.taints
+k explain pod.spec.tolerations                 # quên tên field</pre></div>
+    </div>
+    <div class="panel">
+      <h3>Đã chạy thử trên cluster</h3>
+      <div class="codewrap"><pre class="code" data-hl># Pod không có toleration, mọi worker có taint gpu:
+0/3 nodes are available: 3 node(s) had untolerated taint(s).
+
+# toleration mà mọi Pod tự có:
+node.kubernetes.io/not-ready    Exists  NoExecute  300
+node.kubernetes.io/unreachable  Exists  NoExecute  300
+
+# k cordon node02 → node.spec.taints:
+[{"effect":"NoSchedule","key":"node.kubernetes.io/unschedulable"}]
+
+# gắn maint=now:NoExecute lúc 08:16:35
+#   Pod không toleration: Terminating ngay (08:16:38)
+#   Pod có tolerationSeconds: 15: Terminating lúc 08:16:52
+
+# DaemonSet tự được thêm toleration: not-ready, unreachable,
+#   disk/memory/pid-pressure, unschedulable (nên vẫn chạy trên node cordon)</pre></div>
+    </div>
+  </div>
 </section>
 
 <!-- ============ ConfigMap & Secret ============ -->
@@ -2873,7 +2932,7 @@ const CHAPTERS = [
   { id: "c0", n: "0", t: "Bắt đầu", d: "Hai kỳ thi, đề cương và cách học trang này.", ex: "CKA · CKAD", ls: [["overview", "Cách học & lộ trình"], ["exam", "Kỳ thi & mẹo làm bài"], ["ckadcur", "Đề cương CKA & CKAD"]] },
   { id: "c1", n: "1", t: "Kiến trúc & cơ chế", d: "Cluster gồm gì, một Pod ra đời thế nào, Linux bên dưới, controller và các kết nối có mã hóa.", ex: "CKA Architecture 25% · nền cho mọi domain", ls: [["arch", "Kiến trúc cluster"], ["flow", "Một Pod ra đời"], ["linux", "Bên trong Linux"], ["mech", "Cơ chế controller"], ["wire", "Giao tiếp & mã hóa"]] },
   { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["container", "Container là gì"], ["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
-  { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào, xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler & nơi Pod chạy"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
+  { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào (label, affinity, taint & toleration), xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler, taint & affinity"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
   { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
   { id: "c5", n: "5", t: "Storage", d: "Volume trong Pod, PV và PVC, StorageClass và CSI: từ thư mục tạm tới disk tự cấp phát.", ex: "CKA Storage 10% · CKAD Build 20%", ls: [["volumes", "Volume trong Pod"], ["pv", "PV, PVC & reclaim"], ["storage", "StorageClass & CSI"]] },
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
