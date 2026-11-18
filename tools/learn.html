@@ -643,6 +643,15 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 .chmap .c ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:2px}
 .chmap .c ol a{font-size:13.5px;text-decoration:none}.chmap .c ol a.ok::after{content:" ✓";color:var(--node)}
 .chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
+.ts-wrap{display:grid;gap:14px;grid-template-columns:minmax(0,5fr) minmax(0,6fr);align-items:start}
+@media (max-width:860px){.ts-wrap{grid-template-columns:1fr}}
+.ts-chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.ts-l{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;background:var(--paper);transition:opacity .2s,background .2s}
+.ts-l .n{font:700 12px var(--f-mono);color:var(--muted);min-width:20px}
+.ts-l b{display:block;font-size:13.5px}.ts-l small{font-size:11.5px;color:var(--muted)}
+.ts-l.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.ts-l.cand{background:var(--pkt-soft)}.ts-l.dim{opacity:.45}.ts-l.ok{background:var(--node-soft)}
+.ts-detail{position:sticky;top:80px;gap:10px}
 .ttv{padding:8px 12px;border-radius:8px}.ttv.ok{background:var(--node-soft)}.ttv.bad{background:var(--bad-soft)}.ttv.warn{background:var(--pkt-soft)}
 .yt-drill{line-height:1.9}
 .yt-blank{font:inherit;background:rgba(255,255,255,.08);color:#fff;border:0;border-bottom:2px solid var(--pkt);border-radius:3px;padding:0 4px;outline:none}
@@ -2649,6 +2658,70 @@ set expandtab tabstop=2 shiftwidth=2</pre></div>
   <div id="lcCur" class="col" style="gap:18px"></div>
 </section>
 
+<!-- ============ 8.1 Tư duy gỡ lỗi (learn-tslogic.js) ============ -->
+<section class="view" data-view="tslogic" hidden>
+  <header class="vh">
+    <p class="eyebrow">Troubleshooting</p>
+    <h2>Tư duy gỡ lỗi: tìm mắt xích đầu tiên hỏng</h2>
+    <p class="lead">Kubernetes là một chuỗi bộ phận, bộ sau chỉ chạy khi bộ trước xong. Lỗi nào cũng là một mắt xích không đưa được trạng thái thật tới trạng thái bạn khai. Bài này là cách suy luận; cây chẩn đoán và mô phỏng lỗi ở bài 8.2.</p>
+  </header>
+  <ul class="tldr"><li><b>Khoanh vùng trước, sửa sau</b>: phạm vi lỗi (1 Pod, cả Deployment, cả node, cả cluster) chỉ ra tầng nghi ngờ.</li><li><b>Đọc bằng chứng từ rẻ tới đắt</b>: STATUS → Events → log → node → control plane.</li><li><b>Mỗi lần đổi một thứ</b>, kiểm lại ngay, rồi mới đổi tiếp.</li></ul>
+  <div class="panel col" id="tsChain"></div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Phạm vi lỗi chỉ ra tầng nào</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Ai bị</th><th>Nghi trước</th><th>Lệnh đầu tiên</th></tr></thead>
+        <tbody>
+          <tr><td>Một Pod</td><td>Pod đó: image, lệnh, cấu hình, probe</td><td><code>k describe pod</code>, <code>k logs --previous</code></td></tr>
+          <tr><td>Mọi Pod của một Deployment</td><td>Spec chung: image, env, Secret, quota, Pod Security, bản rollout mới</td><td><code>k rollout history</code>, <code>k describe rs</code></td></tr>
+          <tr><td>Mọi Pod trên một node</td><td>Node: kubelet, containerd, CNI, đĩa, RAM</td><td><code>k describe node</code>, <code>journalctl -u kubelet</code></td></tr>
+          <tr><td>Cả namespace</td><td>Quota, LimitRange, NetworkPolicy, Pod Security của namespace</td><td><code>k get quota,limitrange,netpol -n NS</code></td></tr>
+          <tr><td>Cả cluster</td><td>Control plane, DNS, CNI, chứng chỉ</td><td><code>k get nodes</code>, <code>k -n kube-system get pod</code></td></tr>
+          <tr><td>Chỉ khi gọi từ ngoài</td><td>Ingress, Gateway, LoadBalancer, firewall</td><td><code>k describe ing</code>, gọi lại từ trong cluster</td></tr>
+          <tr><td>Vừa xảy ra sau một thay đổi</td><td>Chính thay đổi đó</td><td><code>k get events --sort-by=.lastTimestamp</code></td></tr>
+        </tbody>
+      </table></div>
+    </div>
+    <div class="panel">
+      <h3>Đọc bằng chứng theo thứ tự</h3>
+      <ol class="tight">
+        <li><b>STATUS, READY, RESTARTS</b>: <code>k get pod -o wide</code>. Một chữ ở cột STATUS đã khoanh được tầng.</li>
+        <li><b>Events, Conditions, Last State</b>: <code>k describe</code>. Event cuối cùng thường nói thẳng lý do.</li>
+        <li><b>Log</b>: <code>k logs</code>, thêm <code>--previous</code> khi đã restart, <code>-c</code> khi nhiều container.</li>
+        <li><b>Object cha</b>: không có Pod thì xem ReplicaSet, Job; rollout kẹt thì xem Deployment.</li>
+        <li><b>Node</b>: <code>k describe node</code>, ssh vào node: <code>journalctl -u kubelet</code>, <code>crictl ps -a</code>.</li>
+        <li><b>Control plane</b>: static Pod trong <code>/etc/kubernetes/manifests</code>, <code>crictl logs</code>.</li>
+        <li><b>Số đo</b>: <code>k top</code>, metric của Prometheus (bài 8.4).</li>
+      </ol>
+      <p class="small muted" style="margin:10px 0 0">Đừng xóa Pod lỗi trước khi đọc <code>--previous</code> và Events: xóa là mất bằng chứng.</p>
+    </div>
+  </div>
+  <div class="split even">
+    <div class="panel">
+      <h3>Năm bước cho mọi sự cố</h3>
+      <ol class="tight">
+        <li><b>Nói chính xác triệu chứng</b>: cái gì hỏng, từ lúc nào, ai bị, thông báo nguyên văn.</li>
+        <li><b>Khoanh vùng</b> bằng phạm vi và bằng phép thử từ hai đầu (gọi IP Pod rồi ClusterIP rồi tên rồi Ingress).</li>
+        <li><b>Đặt giả thuyết</b> từ bằng chứng, chọn cái rẻ nhất để kiểm trước.</li>
+        <li><b>Sửa một thứ</b>, kiểm lại bằng đúng lệnh đã thấy lỗi.</li>
+        <li><b>Xác nhận và ghi lại</b>: <code>k get</code> lại, chờ READY, gọi thử; ghi nguyên nhân để lần sau nhanh hơn.</li>
+      </ol>
+    </div>
+    <div class="panel">
+      <h3>Sai lầm làm mất thời gian</h3>
+      <ul class="tight">
+        <li>Restart, xóa Pod liên tục mà chưa đọc Events và log.</li>
+        <li>Đổi nhiều thứ một lúc: chạy được cũng không biết vì sao.</li>
+        <li>Quên <code>-n</code> hoặc sai context: nhìn nhầm namespace, nhầm cluster.</li>
+        <li>Sửa Pod do Deployment quản lý: Deployment tạo lại Pod theo spec cũ. Sửa Deployment.</li>
+        <li>Đọc log của container đang chạy trong khi lỗi nằm ở lần chạy trước.</li>
+        <li>Tin vào triệu chứng ở tầng trên (504 ở Ingress) mà không kiểm tầng dưới (Pod có endpoint không).</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
 <!-- ============ lỗi kết nối, observability (render từ learn-wire-ops.js) ============ -->
 <section class="view" data-view="connerr" hidden>
   <header class="vh">
@@ -2937,7 +3010,7 @@ const CHAPTERS = [
   { id: "c5", n: "5", t: "Storage", d: "Volume trong Pod, PV và PVC, StorageClass và CSI: từ thư mục tạm tới disk tự cấp phát.", ex: "CKA Storage 10% · CKAD Build 20%", ls: [["volumes", "Volume trong Pod"], ["pv", "PV, PVC & reclaim"], ["storage", "StorageClass & CSI"]] },
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
-  { id: "c8", n: "8", t: "Troubleshooting & observability", d: "Đọc trạng thái Pod, gỡ lỗi node và control plane, lỗi kết nối, log và metric.", ex: "CKA Troubleshooting 30% · CKAD Observability 15%", ls: [["trouble", "Lỗi Pod, node & control plane"], ["connerr", "Lỗi kết nối & chứng chỉ"], ["obs", "Log, metric & cảnh báo"]] },
+  { id: "c8", n: "8", t: "Troubleshooting & observability", d: "Đọc trạng thái Pod, gỡ lỗi node và control plane, lỗi kết nối, log và metric.", ex: "CKA Troubleshooting 30% · CKAD Observability 15%", ls: [["tslogic", "Tư duy gỡ lỗi"], ["trouble", "Cây chẩn đoán & lỗi Pod"], ["connerr", "Lỗi kết nối & chứng chỉ"], ["obs", "Log, metric & cảnh báo"]] },
   { id: "ref", n: "R", t: "Tra cứu & ôn tập", d: "Mẫu YAML, khái niệm, lệnh, và tự kiểm tra.", ex: "", ls: [["yamlref", "Thư viện YAML"], ["concepts", "Thư viện khái niệm"], ["commands", "Lệnh & cheatsheet"], ["fast", "Gõ ít khi thi CKAD"], ["quiz", "Quiz"]] }
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
@@ -3645,7 +3718,7 @@ function buildOps() {
 
 /* ---------- 09 troubleshooting tree ---------- */
 const TREE = {
-  root: { q: "Bạn đang thấy triệu chứng gì?", o: [["pending", "Pod đứng ở Pending", "chưa được gán node"], ["imgpull", "ImagePullBackOff / ErrImagePull", "không kéo được image"], ["crash", "CrashLoopBackOff", "container chạy rồi chết, lặp lại"], ["notready", "Running nhưng 0/1 READY", "không nhận traffic"], ["svc", "Service không gọi được", "timeout, refused, sai tên"], ["node", "Node NotReady", "node mất kết nối hoặc kubelet lỗi"], ["api", "kubectl: connection refused :6443", "control plane có vấn đề"]] },
+  root: { q: "Bạn đang thấy triệu chứng gì?", o: [["pending", "Pod đứng ở Pending", "chưa được gán node"], ["imgpull", "ImagePullBackOff / ErrImagePull", "không kéo được image"], ["crash", "CrashLoopBackOff", "container chạy rồi chết, lặp lại"], ["notready", "Running nhưng 0/1 READY", "không nhận traffic"], ["svc", "Service không gọi được", "timeout, refused, sai tên"], ["node", "Node NotReady", "node mất kết nối hoặc kubelet lỗi"], ["api", "kubectl: connection refused :6443", "control plane có vấn đề"], ["deploy0", "Deployment 0/N, không có Pod nào", "Pod chưa từng được tạo"], ["creating", "ContainerCreating hoặc CreateContainerConfigError lâu", "volume, cấu hình, mạng"], ["rollout", "Rollout kẹt", "exceeded its progress deadline"], ["forbidden", "Forbidden / Unauthorized", "quyền, admission"], ["job", "Job không xong hoặc Failed", "BackoffLimitExceeded"], ["dns", "Lỗi tên: NXDOMAIN, DNS timeout", "CoreDNS, sai namespace"], ["ingress", "Ingress trả 404 / 503 / không có ADDRESS", "controller, rule, backend"], ["perf", "Bị restart, evict hoặc chậm", "OOM, áp lực node, throttling"]] },
   pending: { c: "k describe pod <pod> | sed -n '/Events/,$p'", q: "Event cuối cùng nói gì?", o: [["p_res", "Insufficient cpu / memory"], ["p_taint", "had untolerated taint"], ["p_aff", "didn't match Pod's node affinity/selector"], ["p_pvc", "unbound immediate PersistentVolumeClaims"], ["p_none", "Không có event nào, NODE = <none>"]] },
   p_res: { fix: "Tổng requests vượt allocatable của mọi node. Giảm requests, thêm node, hoặc dọn Pod thừa. Kiểm tra LimitRange có đang áp requests mặc định quá lớn không.", c: "k describe node worker-1 | sed -n '/Allocated resources/,/Events/p'\nk get limitrange,resourcequota -n <ns>" },
   p_taint: { fix: "Thêm toleration khớp key, value, effect vào Pod, hoặc gỡ taint khỏi node. Nhớ control plane do kubeadm có taint mặc định.", c: "k describe node worker-1 | grep Taints\nk taint node worker-1 gpu=true:NoSchedule-   # dấu - để gỡ" },
@@ -3678,7 +3751,37 @@ const TREE = {
   a_exit: { fix: "Đọc log container: sai cờ, sai đường dẫn cert, port lệch. Sửa manifest rồi chờ kubelet tạo lại.", c: "sudo crictl logs $(sudo crictl ps -a --name kube-apiserver -q | head -1)\nsudo vi /etc/kubernetes/manifests/kube-apiserver.yaml" },
   a_none: { fix: "Manifest có lỗi YAML nên kubelet không parse được, hoặc kubelet trên cp không chạy.", c: "sudo journalctl -u kubelet | grep -i -E 'manifest|static pod' | tail\nsystemctl status kubelet" },
   a_cfg: { fix: "kubeconfig sai server, port hoặc context.", c: "k config view --minify\nk config get-contexts\nexport KUBECONFIG=/etc/kubernetes/admin.conf" },
-  a_etcd: { fix: "etcd lỗi: container etcd chết, data-dir sai sau restore, cert etcd sai, đĩa đầy.", c: "sudo crictl logs $(sudo crictl ps -a --name etcd -q | head -1)\nsudo grep -A3 'hostPath' /etc/kubernetes/manifests/etcd.yaml\ndf -h /var/lib/etcd" }
+  a_etcd: { fix: "etcd lỗi: container etcd chết, data-dir sai sau restore, cert etcd sai, đĩa đầy.", c: "sudo crictl logs $(sudo crictl ps -a --name etcd -q | head -1)\nsudo grep -A3 'hostPath' /etc/kubernetes/manifests/etcd.yaml\ndf -h /var/lib/etcd" },
+  deploy0: { c: "k get rs -l app=<app>\nk describe rs -l app=<app> | sed -n '/Events/,$p'", q: "Event FailedCreate của ReplicaSet nói gì?", o: [["d_quota", "exceeded quota: …"], ["d_psa", "violates PodSecurity \"restricted:latest\""], ["d_lr", "maximum … usage per Container is … (LimitRange)"], ["d_sa", "serviceaccount \"…\" not found"], ["d_hook", "admission webhook \"…\" denied the request"]] },
+  d_quota: { fix: "ResourceQuota đã đầy, hoặc quota có cpu/memory mà Pod không khai requests/limits. Tăng quota, dọn bớt, hoặc thêm resources cho Pod. Thông báo thật: exceeded quota: q, requested: pods=1, used: pods=1, limited: pods=1.", c: "k describe quota -n <ns>\nk set resources deploy <app> --requests=cpu=100m,memory=128Mi --limits=memory=256Mi" },
+  d_psa: { fix: "Namespace bật Pod Security mức restricted hoặc baseline. Thông báo liệt kê đúng từng field còn thiếu: thêm đủ securityContext rồi Deployment tự tạo lại Pod.", c: "k get ns <ns> --show-labels\n# thêm vào từng container:\nsecurityContext:\n  allowPrivilegeEscalation: false\n  capabilities: {drop: [\"ALL\"]}\n  runAsNonRoot: true\n  seccompProfile: {type: RuntimeDefault}" },
+  d_lr: { fix: "LimitRange đặt min/max cho mỗi container; requests hoặc limits của Pod nằm ngoài khoảng đó.", c: "k describe limitrange -n <ns>\nk set resources deploy <app> --limits=cpu=500m,memory=512Mi" },
+  d_sa: { fix: "Pod dùng serviceAccountName chưa tồn tại trong namespace. Tạo ServiceAccount hoặc sửa tên.", c: "k get sa -n <ns>\nk create sa <tên> -n <ns>" },
+  d_hook: { fix: "Webhook từ chối theo chính sách của nó, hoặc không gọi được webhook (Service của webhook chết) mà failurePolicy là Fail.", c: "k get validatingwebhookconfigurations,mutatingwebhookconfigurations\nk get validatingwebhookconfiguration <tên> -o yaml | grep -E -A4 'service:|failurePolicy'" },
+  creating: { c: "k describe pod <pod> | sed -n '/Events/,$p'", q: "Event nói gì?", o: [["cc_mount", "MountVolume.SetUp failed … configmap/secret \"…\" not found"], ["p_pvc", "persistentvolumeclaim not found / chưa Bound"], ["cc_attach", "Multi-Attach error for volume"], ["cc_cfg", "CreateContainerConfigError: secret \"…\" not found / couldn't find key"], ["n_cni", "failed to setup network for sandbox"]] },
+  cc_mount: { fix: "Volume trỏ tới ConfigMap hoặc Secret chưa có trong namespace. kubelet tự thử lại: tạo đúng tên là Pod chạy tiếp, không cần xóa Pod. Thông báo thật: MountVolume.SetUp failed for volume \"cfg\" : configmap \"nope\" not found.", c: "k get cm,secret -n <ns>\nk create cm <tên> --from-literal=key=value -n <ns>\nk get pod <pod> -w" },
+  cc_cfg: { fix: "env hoặc envFrom tham chiếu Secret/ConfigMap hoặc key không có. Tạo đúng tên và key (hoặc đặt optional: true). Thông báo thật: Error: secret \"db\" not found.", c: "k get secret db -n <ns> -o jsonpath='{.data}'\nk create secret generic db --from-literal=pass=… -n <ns>" },
+  cc_attach: { fix: "Disk ReadWriteOnce đang gắn ở node khác (Pod cũ chưa dọn, node cũ chết). Chờ detach, xóa Pod cũ, hoặc xử lý node chết.", c: "k get volumeattachment\nk get pod -A -o wide | grep <tên-pvc>" },
+  rollout: { c: "k rollout status deploy/<app>\nk get rs -l app=<app>\nk get pod -l app=<app>", q: "Pod của ReplicaSet mới ra sao?", o: [["imgpull", "ErrImagePull / ImagePullBackOff"], ["crash", "CrashLoopBackOff"], ["notready", "Running nhưng 0/1 READY"], ["r_quota", "Không có Pod mới, ReplicaSet mới báo FailedCreate"], ["r_undo", "Cần quay lại bản cũ ngay"]] },
+  r_quota: { fix: "Rolling update cần tạo thêm Pod tạm thời (maxSurge); quota sát giới hạn chặn Pod đó. Tăng quota hoặc cho update bằng cách bớt Pod cũ trước.", c: "k describe rs <rs-mới> | tail\nk patch deploy <app> -p '{\"spec\":{\"strategy\":{\"rollingUpdate\":{\"maxSurge\":0,\"maxUnavailable\":1}}}}'" },
+  r_undo: { fix: "Rollout kẹt không tự quay lại: Pod cũ vẫn phục vụ (Available=True, Progressing=False ProgressDeadlineExceeded). Quay lại bản trước, rồi sửa bản mới.", c: "k rollout undo deploy/<app>\nk rollout history deploy/<app>\nk rollout status deploy/<app>" },
+  forbidden: { c: "k auth whoami\nk auth can-i <verb> <resource> -n <ns> --as=<user>", q: "Thông báo nói gì?", o: [["f_rbac", "Forbidden: User \"…\" cannot <verb> resource \"…\""], ["f_auth", "Unauthorized / You must be logged in"], ["d_quota", "forbidden: exceeded quota"], ["d_psa", "forbidden: violates PodSecurity"], ["d_hook", "admission webhook denied the request"]] },
+  f_rbac: { fix: "Thông báo ghi đủ 4 thứ cần cấp: user hoặc ServiceAccount, verb, resource (kèm API group), namespace. Tạo Role và RoleBinding đúng 4 thứ đó (resource cấp cluster thì ClusterRole). Thông báo thật: pods is forbidden: User \"system:serviceaccount:tsx:default\" cannot list resource \"pods\" in API group \"\" in the namespace \"tsx\".", c: "k create role r --verb=list,get --resource=pods -n <ns>\nk create rolebinding r --role=r --serviceaccount=<ns>:<sa> -n <ns>\nk auth can-i list pods -n <ns> --as=system:serviceaccount:<ns>:<sa>" },
+  f_auth: { fix: "apiserver không nhận ra bạn là ai: chứng chỉ client hết hạn, token sai, kubeconfig trỏ sai user hoặc cluster.", c: "k config view --minify\nsudo kubeadm certs check-expiration        # trên control plane\nopenssl x509 -noout -enddate -in <file.crt>" },
+  job: { c: "k describe job <job> | sed -n '/Conditions/,$p'\nk get pod -l job-name=<job>", q: "Job đang thế nào?", o: [["j_back", "Failed: BackoffLimitExceeded"], ["j_dead", "Failed: DeadlineExceeded"], ["pending", "Pod của Job đứng Pending"], ["j_run", "Chạy mãi không Complete"]] },
+  j_back: { fix: "Container thoát khác 0 quá backoffLimit lần. Đọc log của Pod lỗi (restartPolicy Never giữ lại Pod), sửa lệnh, rồi xóa và tạo lại Job vì template của Job không sửa được. Thông báo thật: Job has reached the specified backoff limit.", c: "k logs -l job-name=<job> --tail=20 --prefix\nk get job <job> -o yaml > j.yaml\nk delete job <job> && vi j.yaml && k apply -f j.yaml" },
+  j_dead: { fix: "Chạy quá activeDeadlineSeconds nên Job bị dừng. Tăng thời hạn hoặc làm việc nhanh hơn.", c: "k get job <job> -o jsonpath='{.spec.activeDeadlineSeconds}'" },
+  j_run: { fix: "Chưa đủ completions, hoặc lệnh không bao giờ kết thúc (sleep, server). Job cần tiến trình tự thoát 0.", c: "k get job <job> -o jsonpath='{.spec.completions} {.status.succeeded}{\"\\n\"}'\nk logs -l job-name=<job> --tail=5" },
+  dns: { c: "k run t --image=busybox:1.36 --rm -i --restart=Never -n <ns> -- nslookup <svc>.<ns>", q: "Kết quả?", o: [["dn_nx", "NXDOMAIN"], ["s_dns", "connection timed out; no servers could be reached"], ["dn_ext", "Tên trong cluster được, tên ngoài không"]] },
+  dn_nx: { fix: "Không có bản ghi: sai tên Service, Service chưa tạo, hoặc gọi từ namespace khác mà chỉ ghi tên ngắn. Thông báo thật: ** server can't find nosuchsvc.default: NXDOMAIN.", c: "k get svc -A | grep <tên>\n# từ namespace khác: <svc>.<ns> hoặc <svc>.<ns>.svc.cluster.local" },
+  dn_ext: { fix: "CoreDNS không chuyển tiếp ra ngoài được: forward trong Corefile, /etc/resolv.conf của node, hoặc NetworkPolicy egress của Pod CoreDNS.", c: "k -n kube-system get cm coredns -o yaml | grep -A2 forward\nk -n kube-system logs -l k8s-app=kube-dns --tail=20" },
+  ingress: { c: "k get ing -A\nk describe ing <ing> -n <ns>\ncurl -v -H 'Host: <host>' http://<IP-controller>/<path>", q: "Bạn thấy gì?", o: [["ig_addr", "Cột ADDRESS trống"], ["ig_404", "404 Not Found từ controller"], ["s_noep", "503 / backend không có endpoint"], ["ig_tls", "HTTPS dùng chứng chỉ mặc định của controller"]] },
+  ig_addr: { fix: "Không controller nào nhận Ingress: sai ingressClassName, chưa cài controller, hoặc không có IngressClass mặc định.", c: "k get ingressclass\nk get pod -A | grep -i ingress\nk patch ing <ing> -n <ns> -p '{\"spec\":{\"ingressClassName\":\"nginx\"}}'" },
+  ig_404: { fix: "Host hoặc path không khớp rule: curl thiếu header Host, path loại Exact mà gọi path con (k create ingress ghi \"/\" không có * là Exact), rewrite sai.", c: "k get ing <ing> -n <ns> -o jsonpath='{.spec.rules}'\ncurl -H 'Host: shop.example.com' http://<IP>/api/items" },
+  ig_tls: { fix: "Secret TLS sai tên, khác namespace với Ingress, hoặc host trong tls không khớp host của rule.", c: "k get secret <tls> -n <ns>\nk describe ing <ing> -n <ns> | grep -A3 TLS" },
+  perf: { c: "k describe pod <pod> | grep -E -A3 'Last State|Reason'\nk top pod <pod> --containers", q: "Dấu hiệu nào?", o: [["c_oom", "Last State: OOMKilled, exit 137"], ["pf_evict", "Status: Evicted, The node was low on resource"], ["pf_cpu", "Chậm, CPU sát limit"], ["c_probe", "Liveness probe failed rồi bị restart"]] },
+  pf_evict: { fix: "kubelet đuổi Pod khi node thiếu RAM hoặc đĩa, hoặc Pod vượt ephemeral-storage limit. Pod BestEffort bị đuổi trước. Đặt requests sát thực tế, dọn đĩa, thêm node.", c: "k get pod -A | grep Evicted\nk describe node <node> | sed -n '/Conditions/,/Addresses/p'\nk delete pod -A --field-selector=status.phase==Failed" },
+  pf_cpu: { fix: "Vượt CPU limit thì bị bóp (throttle), không bị kill như RAM. Tăng hoặc bỏ CPU limit, đặt requests theo mức dùng thật.", c: "k top pod <pod> --containers\nk get pod <pod> -o jsonpath='{.spec.containers[*].resources}'" },
 };
 let trPath = ["root"];
 const trLabel = id => { for (const k in TREE) { const o = (TREE[k].o || []).find(x => x[0] === id); if (o) return o[1]; } return "Bắt đầu"; };

@@ -647,6 +647,15 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 .chmap .c ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:2px}
 .chmap .c ol a{font-size:13.5px;text-decoration:none}.chmap .c ol a.ok::after{content:" ✓";color:var(--node)}
 .chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
+.ts-wrap{display:grid;gap:14px;grid-template-columns:minmax(0,5fr) minmax(0,6fr);align-items:start}
+@media (max-width:860px){.ts-wrap{grid-template-columns:1fr}}
+.ts-chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.ts-l{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;background:var(--paper);transition:opacity .2s,background .2s}
+.ts-l .n{font:700 12px var(--f-mono);color:var(--muted);min-width:20px}
+.ts-l b{display:block;font-size:13.5px}.ts-l small{font-size:11.5px;color:var(--muted)}
+.ts-l.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.ts-l.cand{background:var(--pkt-soft)}.ts-l.dim{opacity:.45}.ts-l.ok{background:var(--node-soft)}
+.ts-detail{position:sticky;top:80px;gap:10px}
 .ttv{padding:8px 12px;border-radius:8px}.ttv.ok{background:var(--node-soft)}.ttv.bad{background:var(--bad-soft)}.ttv.warn{background:var(--pkt-soft)}
 .yt-drill{line-height:1.9}
 .yt-blank{font:inherit;background:rgba(255,255,255,.08);color:#fff;border:0;border-bottom:2px solid var(--pkt);border-radius:3px;padding:0 4px;outline:none}
@@ -789,7 +798,7 @@ const HOME = { "build:0": "image", "build:1": "kinds", "build:2": "multi", "buil
   "env:6": "security", "env:7": "security", "net:0": "netpol", "net:1": "network", "net:2": "ingress" };
 const LEARN_NAME = { image: "2.2 Container image & API", kinds: "2.3 Chọn loại workload", multi: "2.4 Pod nhiều container", jobs: "2.5 Job & CronJob", config: "2.6 ConfigMap & Secret", probes: "2.7 Probe & tự phục hồi", workloads: "2.8 Triển khai & cập nhật",
   perf: "3.2 Requests, limits & QoS", scale: "3.3 Scaling, quota & ước lượng node", network: "4.2 Service & EndpointSlice", netpol: "4.6 NetworkPolicy", ingress: "4.4 Ingress & IngressClass", volumes: "5.1 Volume trong Pod", pv: "5.2 PV, PVC & reclaim", storage: "5.3 StorageClass & CSI", security: "6.1 RBAC, ServiceAccount & securityContext",
-  ops: "7.1 kubeadm, nâng cấp, etcd & HA", best: "7.2 Helm, Kustomize & best practice", trouble: "8.1 Lỗi Pod, node & control plane", obs: "8.3 Log, metric & cảnh báo" };
+  ops: "7.1 kubeadm, nâng cấp, etcd & HA", best: "7.2 Helm, Kustomize & best practice", trouble: "8.2 Cây chẩn đoán & lỗi Pod", obs: "8.4 Log, metric & cảnh báo" };
 const theoryOf = (d, i) => HOME[d + ":" + i] || "ckadcur";
 const theoryLink = (d, i) => { const m = theoryOf(d, i); return '<a class="ck-src" href="learn.html#' + m + '">Lý thuyết: ' + esc(LEARN_NAME[m] || m) + " ↗</a>"; };
 function srcUrl(s) {
