@@ -1,0 +1,86 @@
+   0.0ms node01 eth0 172.18.0.1:47992 → 172.18.0.3:30443 TCP SYN
+   0.1ms node01 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   0.1ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   0.1ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   0.1ms node01 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   0.1ms node01 eth0 172.18.0.3:30443 → 172.18.0.1:47992 TCP SYN-ACK
+   1.8ms node01 eth0 172.18.0.1:47992 → 172.18.0.3:30443 TCP TLS ClientHello SNI=shop.example.com
+   1.9ms node01 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   1.9ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.4ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.5ms node02 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.6ms node02 cni0 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.6ms node02 veth3d86be91 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.6ms node02 veth3d86be91 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.6ms node02 cni0 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.6ms node02 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.7ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.7ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.8ms node02 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.9ms node02 cni0 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.9ms node02 veth3d86be91 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   3.8ms node02 veth3d86be91 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   3.8ms node02 cni0 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   3.9ms node02 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.0ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.7ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.7ms node01 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.7ms node01 eth0 172.18.0.3:30443 → 172.18.0.1:47992 TCP TLS ServerHello
+   5.7ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 vethcb194c05 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 vethcb194c05 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.8ms node01 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.8ms node01 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.8ms node02 veth3d86be91 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.9ms node02 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.9ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.9ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 veth3d86be91 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   6.2ms node02 veth3d86be91 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node02 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node02 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 vethcb194c05 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   9.4ms node01 vethcb194c05 10.42.2.2:60322 → 10.43.0.10:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.5ms node01 cni0 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.5ms node01 flannel.1 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.6ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.2 UDP 8472] bên trong: 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.6ms node01 vethcb194c05 10.42.2.2:60322 → 10.43.0.10:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.6ms node01 cni0 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.7ms node01 flannel.1 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.7ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.2 UDP 8472] bên trong: 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.7ms node01 eth0 [VXLAN 172.18.0.2 → 172.18.0.3 UDP 8472] bên trong: 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.8ms node01 flannel.1 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.8ms node01 cni0 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.8ms node01 vethcb194c05 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.9ms node01 eth0 [VXLAN 172.18.0.2 → 172.18.0.3 UDP 8472] bên trong: 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+   9.9ms node01 flannel.1 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+   9.9ms node01 cni0 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+  10.1ms node01 vethcb194c05 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+  10.1ms node01 vethcb194c05 10.42.2.2:57980 → 10.43.224.31:80 TCP SYN
+  10.1ms node01 cni0 10.42.2.2:57980 → 10.42.2.3:9000 TCP SYN
+  10.1ms node01 veth7eb54a72 10.42.2.2:57980 → 10.42.2.3:9000 TCP SYN
+  10.1ms node01 veth7eb54a72 10.42.2.3:9000 → 10.42.2.2:57980 TCP SYN-ACK
+  10.1ms node01 vethcb194c05 10.43.224.31:80 → 10.42.2.2:57980 TCP SYN-ACK
+  10.2ms node01 vethcb194c05 10.42.2.2:57980 → 10.43.224.31:80 TCP GET / HTTP/1.1
+  10.2ms node01 cni0 10.42.2.2:57980 → 10.42.2.3:9000 TCP GET / HTTP/1.1
+  10.2ms node01 veth7eb54a72 10.42.2.2:57980 → 10.42.2.3:9000 TCP GET / HTTP/1.1
+  10.4ms node01 veth7eb54a72 10.42.2.3:9000 → 10.42.2.2:57980 TCP HTTP/1.1 200 OK
+  10.4ms node01 vethcb194c05 10.43.224.31:80 → 10.42.2.2:57980 TCP HTTP/1.1 200 OK
+  10.8ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 vethcb194c05 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node02 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node02 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.9ms node02 veth3d86be91 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK

@@ -1,0 +1,190 @@
+# Hệ thống dùng cho bài lý thuyết 4.1 "Hành trình một request".
+# Đã chạy trên k3s v1.34 (3 node trong Docker: controlplane, node01, node02; flannel VXLAN;
+# kube-proxy iptables; NetworkPolicy của kube-router) ngày 19/11/2026.
+#
+# Dựng lại:
+#   k apply -f src/reqflow/app.yaml
+#   openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=shop.example.com" \
+#     -addext "subjectAltName=DNS:shop.example.com" -keyout tls.key -out tls.crt
+#   k -n shop create secret tls shop-tls --cert=tls.crt --key=tls.key
+#   curl --cacert tls.crt --resolve shop.example.com:30443:<IP node> https://shop.example.com:30443/
+# Bắt gói trên node (không cần tcpdump): sudo python3 tools/sniff.py node01 10
+#
+# Đổi node02 / node01 trong nodeSelector cho khớp tên node của bạn (kind: kind-worker, kind-worker2).
+# Ảnh Traefik: docker.io/rancher/mirrored-library-traefik:3.7.4 (bản mirror của traefik:3.7.4).
+apiVersion: v1
+kind: Namespace
+metadata: {name: ingress}
+---
+apiVersion: v1
+kind: Namespace
+metadata: {name: shop}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: {name: traefik, namespace: ingress}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: {name: traefik}
+rules:
+- apiGroups: [""]
+  resources: [services, secrets, nodes, endpoints]
+  verbs: [get, list, watch]
+- apiGroups: [discovery.k8s.io]
+  resources: [endpointslices]
+  verbs: [get, list, watch]
+- apiGroups: [networking.k8s.io, extensions]
+  resources: [ingresses, ingressclasses]
+  verbs: [get, list, watch]
+- apiGroups: [networking.k8s.io, extensions]
+  resources: [ingresses/status]
+  verbs: [update]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: {name: traefik}
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: traefik}
+subjects: [{kind: ServiceAccount, name: traefik, namespace: ingress}]
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata: {name: traefik}
+spec: {controller: traefik.io/ingress-controller}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: traefik, namespace: ingress}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: traefik}}
+  template:
+    metadata: {labels: {app: traefik}}
+    spec:
+      serviceAccountName: traefik
+      nodeSelector: {kubernetes.io/hostname: node02}
+      containers:
+      - name: traefik
+        image: docker.io/rancher/mirrored-library-traefik:3.7.4
+        args:
+        - --entryPoints.web.address=:8000
+        - --entryPoints.websecure.address=:8443
+        - --entryPoints.websecure.http.tls=true
+        - --providers.kubernetesingress
+        - --providers.kubernetesingress.ingressClass=traefik
+        - --accesslog=true
+        - --log.level=INFO
+        ports:
+        - {name: web, containerPort: 8000}
+        - {name: websecure, containerPort: 8443}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: traefik, namespace: ingress}
+spec:
+  type: LoadBalancer
+  selector: {app: traefik}
+  ports:
+  - {name: http, port: 80, targetPort: web, nodePort: 30080}
+  - {name: https, port: 443, targetPort: websecure, nodePort: 30443}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: web-cgi, namespace: shop}
+data:
+  index.cgi: |
+    #!/bin/sh
+    C=$(wget -qO- -T2 http://catalog/ 2>&1)
+    printf 'Content-Type: text/plain\r\n\r\n'
+    echo "pod=$HOSTNAME podIP=$(hostname -i) nghe=:8080"
+    echo "REMOTE_ADDR=$REMOTE_ADDR (ket noi TCP den tu dau)"
+    echo "X-Forwarded-For=$HTTP_X_FORWARDED_FOR"
+    echo "Host=$HTTP_HOST X-Forwarded-Proto=$HTTP_X_FORWARDED_PROTO"
+    echo "catalog -> $C"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web, namespace: shop}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: web}}
+  template:
+    metadata: {labels: {app: web}}
+    spec:
+      topologySpreadConstraints:
+      - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: DoNotSchedule, labelSelector: {matchLabels: {app: web}}, nodeTaintsPolicy: Honor}
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh","-c","mkdir -p /w/cgi-bin && cp /cgi/index.cgi /w/cgi-bin/ && chmod +x /w/cgi-bin/index.cgi && exec httpd -f -v -p 8080 -h /w"]
+        ports: [{name: http, containerPort: 8080}]
+        readinessProbe: {tcpSocket: {port: http}, periodSeconds: 2}
+        volumeMounts: [{name: cgi, mountPath: /cgi}]
+      volumes: [{name: cgi, configMap: {name: web-cgi}}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web, namespace: shop}
+spec:
+  selector: {app: web}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: catalog, namespace: shop}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: catalog}}
+  template:
+    metadata: {labels: {app: catalog}}
+    spec:
+      nodeSelector: {kubernetes.io/hostname: node01}
+      containers:
+      - name: app
+        image: busybox:1.36
+        command: ["sh","-c","mkdir /w && echo \"catalog $HOSTNAME: 3 san pham\" > /w/index.html && exec httpd -f -v -p 9000 -h /w"]
+        ports: [{name: http, containerPort: 9000}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: catalog, namespace: shop}
+spec:
+  selector: {app: catalog}
+  ports: [{name: http, port: 80, targetPort: http}]
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: shop, namespace: shop}
+spec:
+  ingressClassName: traefik
+  tls: [{hosts: [shop.example.com], secretName: shop-tls}]
+  rules:
+  - host: shop.example.com
+    http:
+      paths:
+      - {path: /, pathType: Prefix, backend: {service: {name: web, port: {name: http}}}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: default-deny, namespace: shop}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: web-from-ingress, namespace: shop}
+spec:
+  podSelector: {matchLabels: {app: web}}
+  ingress:
+  - from: [{namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: ingress}}}]
+    ports: [{port: 8080}]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: catalog-from-web, namespace: shop}
+spec:
+  podSelector: {matchLabels: {app: catalog}}
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: web}}}]
+    ports: [{port: 9000}]

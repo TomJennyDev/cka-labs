@@ -11,7 +11,7 @@ const FAST = [
     ["Nhớ tên field không cần docs", "k explain pod.spec.containers.livenessProbe --recursive | less"]
   ]],
   ["Service & Ingress", [
-    ["Service trước Deployment", "k expose deploy shop --port=80 --target-port=8080 --name=shop-svc"],
+    ["Service trước Deployment", "k expose deploy shop --port=80 --target-port=80 --name=shop-svc", "--target-port = port app nghe (nginx: 80); thiếu cờ này thì targetPort lấy bằng --port"],
     ["NodePort", "k expose deploy shop --port=80 --type=NodePort --name=shop-np"],
     ["Đặt số nodePort cụ thể", "k patch svc shop-np -p '{\"spec\":{\"ports\":[{\"port\":80,\"nodePort\":30080}]}}'", "expose không có cờ nodePort"],
     ["Service cho một Pod", "k expose po web --port=80 --name=web-svc"],

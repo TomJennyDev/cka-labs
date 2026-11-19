@@ -321,7 +321,7 @@ def main():
     for t in yt["templates"]:
         t.pop("testsub", None); t.pop("test", None)
     js += "const YAMLT = " + json.dumps(yt, ensure_ascii=False) + ";\n"
-    for part in ("learn-kinds.js", "learn-best.js", "learn-wire-anim.js", "learn-wire-ops.js", "learn-wire.js", "learn-trouble.js", "learn-scale.js", "learn-ckad.js", "learn-net.js", "learn-stor.js", "learn-fast.js", "learn-yaml.js", "learn-container.js", "learn-sched.js", "learn-tslogic.js", "learn-path.js"):
+    for part in ("learn-kinds.js", "learn-best.js", "learn-wire-anim.js", "learn-wire-ops.js", "learn-wire.js", "learn-trouble.js", "learn-scale.js", "learn-ckad.js", "learn-net.js", "learn-stor.js", "learn-fast.js", "learn-yaml.js", "learn-container.js", "learn-sched.js", "learn-tslogic.js", "learn-reqflow.js", "learn-path.js"):
         with open(os.path.join(ROOT, "tools", part), encoding="utf-8") as f:
             js += f.read() + "\n"
     learn += "\n<script>\n\"use strict\";\n" + js.replace("</script", "<\\/script").replace("</SCRIPT", "<\\/SCRIPT") + "\n</script>\n"

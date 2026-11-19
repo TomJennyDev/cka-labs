@@ -645,6 +645,18 @@ ol.cycle li::before{content:counter(c);grid-row:span 3;font:600 12px var(--f-mon
 .chmap .c .ex{font:600 11px var(--f-mono);color:var(--muted)}
 .ts-wrap{display:grid;gap:14px;grid-template-columns:minmax(0,5fr) minmax(0,6fr);align-items:start}
 @media (max-width:860px){.ts-wrap{grid-template-columns:1fr}}
+/* 4.1 hành trình request */
+.rf-g rect{transition:stroke .25s,fill .25s}
+.rf-g.on rect{stroke:var(--accent);stroke-width:2.6}
+.rf-g.bad rect{stroke:var(--bad);stroke-width:2.8;fill:var(--bad-soft)}
+.rf-x circle{fill:var(--bad);stroke:var(--paper);stroke-width:2}.rf-x.warn circle{fill:var(--pkt)}
+.rf-x text{fill:var(--paper);font:700 14px var(--f-body)}
+.rf-hdr{font:12.5px/1.5 var(--f-mono);background:var(--paper-2);border:1px solid var(--line);border-radius:7px;padding:8px 10px;white-space:pre-wrap;overflow-wrap:anywhere}
+pre.code.rf-ev{font-size:11.8px;line-height:1.55;max-height:420px;overflow:auto;padding-right:16px}
+.rf-fault{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;border:1px solid var(--bad);background:var(--bad-soft);border-radius:10px;padding:12px 14px}
+.rf-fault.warn{border-color:var(--pkt);background:var(--pkt-soft)}
+.rf-fault .btn{align-self:flex-start}
+#rfRaw summary{cursor:pointer}
 .ts-chain{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .ts-l{display:flex;gap:10px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;background:var(--paper);transition:opacity .2s,background .2s}
 .ts-l .n{font:700 12px var(--f-mono);color:var(--muted);min-width:20px}
@@ -1073,7 +1085,189 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
 </section>
 
 <!-- ============ 04 NETWORK ============ -->
-<!-- ============ 4.1 Mạng Pod & CNI ============ -->
+<!-- ============ 4.1 Hành trình một request ============ -->
+<section class="view" data-view="reqflow" hidden>
+  <header class="vh">
+    <p class="eyebrow">Mạng · bức tranh toàn cảnh</p>
+    <h2>Hành trình một request: từ trình duyệt tới container</h2>
+    <p class="lead">Một request HTTPS từ ngoài cluster đi qua load balancer, nodePort, kube-proxy, VXLAN, Ingress controller, Pod, DNS và một Service phía sau, rồi quay về. Mọi IP, port, rule, log và gói tin trong bài này <b>bắt thật</b> trên cluster k3s v1.34 ba node (flannel VXLAN, kube-proxy iptables, Traefik 3.7.4) ngày 19/11/2026, không phải số minh họa.</p>
+  </header>
+  <ul class="tldr">
+    <li>Đường vào: DNS công khai → <b>load balancer</b> → <b>nodePort</b> trên một node bất kỳ → kube-proxy <b>DNAT</b> tới Pod Ingress controller (thường kèm <b>SNAT</b>).</li>
+    <li>Ingress controller kết thúc TLS, khớp host/path, rồi <b>gọi thẳng IP Pod:targetPort</b> lấy từ EndpointSlice. ClusterIP của Service backend không được dùng.</li>
+    <li>Khi app gọi một Service khác bằng tên: DNS trả ClusterIP, kube-proxy DNAT sang IP Pod. Chiều về không cần rule nào: <b>conntrack</b> đảo ngược mọi NAT.</li>
+    <li>Gỡ lỗi: đi từ ngoài vào, đọc <b>loại lỗi</b> trước. Không phân giải được tên, bị từ chối, timeout, lỗi chứng chỉ, 404, 503, 502 rơi vào những tầng khác nhau.</li>
+  </ul>
+  <div class="panel col" id="rfAnim"></div>
+
+  <div class="split even">
+    <div class="panel">
+      <h3>Cùng request, đổi đường vào</h3>
+      <p class="small muted" style="margin:0 0 8px">Pod Traefik chỉ chạy ở node02. Gọi vào từng node với hai giá trị <code>externalTrafficPolicy</code> của Service traefik; cột cuối là X-Forwarded-For mà app nhận được.</p>
+      <div class="tbl"><table>
+        <thead><tr><th>Vào node</th><th>Policy</th><th>Kết quả</th><th>App thấy client là</th></tr></thead>
+        <tbody>
+          <tr><td>node01 (không có Traefik)</td><td>Cluster</td><td>200, thêm một chặng VXLAN</td><td><code>10.42.2.0</code> (IP flannel.1 node01, đã SNAT)</td></tr>
+          <tr><td>node02 (có Traefik)</td><td>Cluster</td><td>200</td><td><code>10.42.1.1</code> (IP cni0 node02, đã SNAT)</td></tr>
+          <tr><td>node02</td><td>Local</td><td>200</td><td><code>172.18.0.1</code>: IP thật</td></tr>
+          <tr><td>node01</td><td>Local</td><td>timeout sau 4 s</td><td>(không tới app)</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small" style="margin:10px 0 0">Với Local, node không có Pod sẽ <b>DROP</b>. Load balancer biết tránh node đó nhờ <code>healthCheckNodePort</code> mà Kubernetes tự cấp:</p>
+      <div class="codewrap"><pre class="code">$ curl http://172.18.0.3:31391/    # node01
+{"service":{"namespace":"ingress","name":"traefik"},"localEndpoints":0,"serviceProxyHealthy":true}   HTTP 503
+$ curl http://172.18.0.4:31391/    # node02
+{"service":{"namespace":"ingress","name":"traefik"},"localEndpoints":1,"serviceProxyHealthy":true}   HTTP 200</pre></div>
+      <p class="small muted" style="margin:8px 0 0">Ngay sau khi đổi policy có vài giây kết nối thất bại trong lúc kube-proxy cập nhật rule.</p>
+    </div>
+    <div class="panel">
+      <h3>Bốn con số port trên hành trình này</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Chặng</th><th>Số trên gói</th><th>Lấy từ đâu</th></tr></thead>
+        <tbody>
+          <tr><td>client → node</td><td><code>30443</code></td><td><code>nodePort</code> của Service traefik</td></tr>
+          <tr><td>node → Pod Traefik</td><td><code>8443</code></td><td><code>targetPort: websecure</code> → containerPort tên websecure</td></tr>
+          <tr><td>ClusterIP traefik</td><td><code>443</code></td><td><code>port</code>: chỉ khi gọi 10.43.212.89 từ trong cluster; request ngoài không đi qua số này</td></tr>
+          <tr><td>Traefik → Pod web</td><td><code>8080</code></td><td>Ingress backend <code>port.name: http</code> → Service web port 80 tên http → <code>targetPort: http</code> → containerPort 8080</td></tr>
+          <tr><td>web → catalog</td><td><code>80</code> rồi <code>9000</code></td><td><code>port</code> 80 khi tới ClusterIP, DNAT thành <code>targetPort</code> 9000</td></tr>
+          <tr><td>web → DNS</td><td><code>53</code></td><td>Service kube-dns port 53 → CoreDNS 53/UDP</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small" style="margin:10px 0 0"><b>Cách nhớ:</b> nodePort là cổng của node, port là cổng của Service (chỉ ClusterIP dùng), targetPort là cổng của app, containerPort là tấm biển ghi cổng đó. Thử nghiệm từng con số ở bài 4.3 Service.</p>
+    </div>
+  </div>
+
+  <div class="split even">
+    <div class="panel">
+      <h3>Đọc loại lỗi từ ngoài vào</h3>
+      <div class="tbl"><table>
+        <thead><tr><th>Client thấy</th><th>Tầng đáng nghi</th></tr></thead>
+        <tbody>
+          <tr><td><code>Could not resolve host</code></td><td>DNS công khai, chưa tới cluster</td></tr>
+          <tr><td>Bị từ chối ngay (0 ms)</td><td>Sai cổng, không có rule nodePort</td></tr>
+          <tr><td>Timeout</td><td>Firewall, <code>externalTrafficPolicy: Local</code> vào node không có Pod, CNI DROP</td></tr>
+          <tr><td><code>SSL certificate problem</code>, chứng chỉ <code>TRAEFIK DEFAULT CERT</code></td><td>Secret TLS sai, hoặc không có router (sai class, sai host)</td></tr>
+          <tr><td>404 từ controller</td><td>Không router nào khớp: class, host, path; với Traefik cả Service không tồn tại hoặc không có endpoint</td></tr>
+          <tr><td>503</td><td>Có router nhưng không có endpoint Ready</td></tr>
+          <tr><td>502</td><td>Có endpoint nhưng không kết nối được: targetPort sai, NetworkPolicy REJECT, app chết</td></tr>
+          <tr><td>504</td><td>Backend không trả lời kịp: bị DROP, app treo (không chạy thử ở đây)</td></tr>
+          <tr><td>200 nhưng nội dung lỗi</td><td>Lỗi nằm bên trong app hoặc ở Service phía sau</td></tr>
+        </tbody>
+      </table></div>
+      <p class="small muted" style="margin:8px 0 0">Mọi dòng trừ 504 và firewall đều có lỗi thật tương ứng trong ô "Bật một lỗi" phía trên. Mã lỗi phụ thuộc controller: bảng này đúng cho Traefik 3.7.</p>
+    </div>
+    <div class="panel">
+      <h3>Tự dựng lại và bắt gói</h3>
+      <div class="codewrap"><pre class="code" data-hl># Traefik, web ×2, catalog, Ingress TLS, 3 NetworkPolicy
+k apply -f src/reqflow/app.yaml
+openssl req -x509 -newkey rsa:2048 -nodes -days 30 -subj "/CN=shop.example.com" \
+  -addext "subjectAltName=DNS:shop.example.com" -keyout tls.key -out tls.crt
+k -n shop create secret tls shop-tls --cert=tls.crt --key=tls.key
+
+# gọi từ ngoài cluster
+curl --cacert tls.crt --resolve shop.example.com:30443:&lt;IP-node&gt; \
+  https://shop.example.com:30443/
+
+# bắt gói trên node (không cần tcpdump)
+sudo python3 tools/sniff.py node01 10
+sudo conntrack -L -p tcp --dport 30443
+sudo iptables-save -t nat | grep 'ingress/traefik'</pre></div>
+      <p class="small muted" style="margin:8px 0 0">Manifest ở <code>src/reqflow/app.yaml</code>, script bắt gói ở <code>tools/sniff.py</code> trong repo. Đổi tên node trong <code>nodeSelector</code> cho khớp cluster của bạn.</p>
+    </div>
+  </div>
+
+  <details class="panel" id="rfRaw"><summary><b>Bản bắt gói gốc của request ở trên (86 dòng, hai node)</b></summary>
+    <p class="small muted">Mỗi gói hiện trên mọi interface nó đi qua (eth0, flannel.1, cni0, veth), nên một gói có thể xuất hiện 3–4 lần. Giờ do script Python ghi trên hai node nên có thể lệch nhau vài phần mười ms. Đã bỏ các SYN của readiness probe (10.42.x.1 → :8080).</p>
+    <div class="codewrap"><pre class="code rf-ev">   0.0ms node01 eth0 172.18.0.1:47992 → 172.18.0.3:30443 TCP SYN
+   0.1ms node01 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   0.1ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   0.1ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   0.1ms node01 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   0.1ms node01 eth0 172.18.0.3:30443 → 172.18.0.1:47992 TCP SYN-ACK
+   1.8ms node01 eth0 172.18.0.1:47992 → 172.18.0.3:30443 TCP TLS ClientHello SNI=shop.example.com
+   1.9ms node01 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   1.9ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.4ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.5ms node02 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.6ms node02 cni0 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.6ms node02 veth3d86be91 10.42.2.0:6512 → 10.42.1.4:8443 TCP SYN
+   2.6ms node02 veth3d86be91 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.6ms node02 cni0 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.6ms node02 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.7ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP SYN-ACK
+   2.7ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.8ms node02 flannel.1 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.9ms node02 cni0 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   2.9ms node02 veth3d86be91 10.42.2.0:6512 → 10.42.1.4:8443 TCP TLS ClientHello SNI=shop.example.com
+   3.8ms node02 veth3d86be91 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   3.8ms node02 cni0 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   3.9ms node02 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.0ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.7ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.7ms node01 flannel.1 10.42.1.4:8443 → 10.42.2.0:6512 TCP TLS ServerHello
+   4.7ms node01 eth0 172.18.0.3:30443 → 172.18.0.1:47992 TCP TLS ServerHello
+   5.7ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 vethcb194c05 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 vethcb194c05 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.8ms node01 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.8ms node01 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.8ms node02 veth3d86be91 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.8ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.9ms node02 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.9ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP SYN
+   5.9ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   5.9ms node02 veth3d86be91 10.42.2.2:8080 → 10.42.1.4:41498 TCP SYN-ACK
+   6.2ms node02 veth3d86be91 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node02 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node02 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node02 eth0 [VXLAN 172.18.0.4 → 172.18.0.3 UDP 8472] bên trong: 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 flannel.1 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 cni0 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   6.3ms node01 vethcb194c05 10.42.1.4:41498 → 10.42.2.2:8080 TCP GET / HTTP/1.1
+   9.4ms node01 vethcb194c05 10.42.2.2:60322 → 10.43.0.10:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.5ms node01 cni0 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.5ms node01 flannel.1 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.6ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.2 UDP 8472] bên trong: 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi A? catalog.shop.svc.cluster.local
+   9.6ms node01 vethcb194c05 10.42.2.2:60322 → 10.43.0.10:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.6ms node01 cni0 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.7ms node01 flannel.1 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.7ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.2 UDP 8472] bên trong: 10.42.2.2:60322 → 10.42.0.3:53 UDP DNS hỏi AAAA? catalog.shop.svc.cluster.local
+   9.7ms node01 eth0 [VXLAN 172.18.0.2 → 172.18.0.3 UDP 8472] bên trong: 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.8ms node01 flannel.1 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.8ms node01 cni0 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.8ms node01 vethcb194c05 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp AAAA catalog.shop.svc.cluster.local → NOERROR
+   9.9ms node01 eth0 [VXLAN 172.18.0.2 → 172.18.0.3 UDP 8472] bên trong: 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+   9.9ms node01 flannel.1 10.42.0.3:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+   9.9ms node01 cni0 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+  10.1ms node01 vethcb194c05 10.43.0.10:53 → 10.42.2.2:60322 UDP DNS đáp A catalog.shop.svc.cluster.local → 10.43.224.31
+  10.1ms node01 vethcb194c05 10.42.2.2:57980 → 10.43.224.31:80 TCP SYN
+  10.1ms node01 cni0 10.42.2.2:57980 → 10.42.2.3:9000 TCP SYN
+  10.1ms node01 veth7eb54a72 10.42.2.2:57980 → 10.42.2.3:9000 TCP SYN
+  10.1ms node01 veth7eb54a72 10.42.2.3:9000 → 10.42.2.2:57980 TCP SYN-ACK
+  10.1ms node01 vethcb194c05 10.43.224.31:80 → 10.42.2.2:57980 TCP SYN-ACK
+  10.2ms node01 vethcb194c05 10.42.2.2:57980 → 10.43.224.31:80 TCP GET / HTTP/1.1
+  10.2ms node01 cni0 10.42.2.2:57980 → 10.42.2.3:9000 TCP GET / HTTP/1.1
+  10.2ms node01 veth7eb54a72 10.42.2.2:57980 → 10.42.2.3:9000 TCP GET / HTTP/1.1
+  10.4ms node01 veth7eb54a72 10.42.2.3:9000 → 10.42.2.2:57980 TCP HTTP/1.1 200 OK
+  10.4ms node01 vethcb194c05 10.43.224.31:80 → 10.42.2.2:57980 TCP HTTP/1.1 200 OK
+  10.8ms node02 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 vethcb194c05 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node01 eth0 [VXLAN 172.18.0.3 → 172.18.0.4 UDP 8472] bên trong: 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node02 flannel.1 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.8ms node02 cni0 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK
+  10.9ms node02 veth3d86be91 10.42.2.2:8080 → 10.42.1.4:41498 TCP HTTP/1.1 200 OK</pre></div>
+  </details>
+</section>
+
+<!-- ============ 4.2 Mạng Pod & CNI ============ -->
 <section class="view" data-view="podnet" hidden>
   <header class="vh">
     <p class="eyebrow">Mạng</p>
@@ -1092,7 +1286,7 @@ sudo systemctl restart containerd    # containerd 2.x: kiểm tra lại tên sec
         <li>Các container trong cùng Pod dùng chung network namespace: gọi nhau qua <code>localhost</code>, không được trùng port.</li>
         <li>Pod <code>hostNetwork: true</code> dùng thẳng mạng của node: có IP của node, mở port trên node.</li>
       </ol>
-      <p class="small muted" style="margin:10px 0 0">Service là lớp phía trên: IP ảo ổn định trước một nhóm Pod (bài 4.2). Chặn bớt đường đi là NetworkPolicy (bài 4.6).</p>
+      <p class="small muted" style="margin:10px 0 0">Service là lớp phía trên: IP ảo ổn định trước một nhóm Pod (bài 4.3). Chặn bớt đường đi là NetworkPolicy (bài 4.7).</p>
     </div>
     <div class="panel">
       <h3>CNI làm gì khi Pod được tạo</h3>
@@ -1144,7 +1338,7 @@ k describe pod a | tail</pre></div>
   </div>
 </section>
 
-<!-- ============ 4.3 DNS & CoreDNS ============ -->
+<!-- ============ 4.4 DNS & CoreDNS ============ -->
 <section class="view" data-view="dns" hidden>
   <header class="vh">
     <p class="eyebrow">Mạng</p>
@@ -1223,13 +1417,13 @@ k -n kube-system get svc kube-dns            # ClusterIP phải khớp nameserve
 k run t --image=busybox:1.36 --rm -it --restart=Never -- sh -c 'cat /etc/resolv.conf; nslookup web.shop'</pre></div>
     <ul class="tight" style="margin-top:10px">
       <li>Thêm cùng một zone hai lần làm CoreDNS crash, cả cluster mất DNS. Luôn lưu bản sao ConfigMap trước khi sửa.</li>
-      <li>Pod chặn egress bằng NetworkPolicy mà quên mở UDP và TCP 53 tới kube-dns thì mọi lần tra tên đều timeout (bài 4.6).</li>
+      <li>Pod chặn egress bằng NetworkPolicy mà quên mở UDP và TCP 53 tới kube-dns thì mọi lần tra tên đều timeout (bài 4.7).</li>
       <li>Cluster lớn hay dùng <b>NodeLocal DNSCache</b>: một DaemonSet cache DNS trên từng node, giảm tải CoreDNS và lỗi timeout do conntrack.</li>
     </ul>
   </div>
 </section>
 
-<!-- ============ 4.4 Ingress ============ -->
+<!-- ============ 4.5 Ingress ============ -->
 <section class="view" data-view="ingress" hidden>
   <header class="vh">
     <p class="eyebrow">Mạng</p>
@@ -1310,13 +1504,13 @@ spec:
         <li><b>503</b>: Service không có endpoint (selector sai, Pod chưa Ready) hoặc sai port của Service.</li>
         <li>Backend phải là Service <b>cùng namespace</b> với Ingress.</li>
         <li>Đổi đường dẫn trước khi chuyển vào app (rewrite) không có trong spec: mỗi controller dùng annotation riêng, ví dụ <code>nginx.ingress.kubernetes.io/rewrite-target</code>.</li>
-        <li>Dự án ingress-nginx đã ngừng phát triển; hướng mới là Gateway API (bài 4.5). Đề CKA vẫn hỏi cả hai.</li>
+        <li>Dự án ingress-nginx đã ngừng phát triển; hướng mới là Gateway API (bài 4.6). Đề CKA vẫn hỏi cả hai.</li>
       </ul>
     </div>
   </div>
 </section>
 
-<!-- ============ 4.5 Gateway API ============ -->
+<!-- ============ 4.6 Gateway API ============ -->
 <section class="view" data-view="gateway" hidden>
   <header class="vh">
     <p class="eyebrow">Mạng</p>
@@ -1441,7 +1635,7 @@ k get gateway public -n infra -o jsonpath='{.status.addresses[*].value}'</pre></
   </div>
 </section>
 
-<!-- ============ 4.6 NetworkPolicy ============ -->
+<!-- ============ 4.7 NetworkPolicy ============ -->
 <section class="view" data-view="netpol" hidden>
   <header class="vh">
     <p class="eyebrow">Mạng</p>
@@ -1521,7 +1715,7 @@ k exec -n shop frontend -- wget -qO- -T2 http://db:5432       # phải timeout</
   </div>
 </section>
 
-<!-- ============ 4.2 Service ============ -->
+<!-- ============ 4.3 Service ============ -->
 <section class="view" data-view="network" hidden>
   <header class="vh">
     <p class="eyebrow">Services &amp; Networking · 20%</p>
@@ -1583,6 +1777,45 @@ spec:
   </div>
 
   <div class="panel">
+    <h3>Port nào thật sự quyết định traffic (đã chạy thử)</h3>
+    <p class="small muted" style="margin:0 0 8px">Pod busybox httpd trên k3s v1.34, gọi từ một Pod tạm bằng <code>wget</code>, 19/11/2026. Đường đi luôn là <code>nodePort → port → targetPort → port app đang nghe</code>; <code>containerPort</code> đứng ngoài chuỗi này.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Thử</th><th>Kết quả</th><th>Rút ra</th></tr></thead>
+      <tbody>
+        <tr><td><code>web:80</code> (port của Service)</td><td>Pod a hoặc b trả lời</td><td>Client gọi <code>port</code></td></tr>
+        <tr><td><code>web:8080</code> (gọi ClusterIP bằng targetPort)</td><td>Connection refused</td><td>ClusterIP chỉ nghe <code>port</code></td></tr>
+        <tr><td><code>IP-Pod:80</code></td><td>Connection refused</td><td>Số 80 chỉ tồn tại ở Service, Pod không có</td></tr>
+        <tr><td><code>IP-node01:30080</code>, node01 không chạy Pod web</td><td>Pod ở node02 trả lời</td><td>nodePort mở trên mọi node</td></tr>
+        <tr><td>Pod không khai <code>containerPort</code>, Service <code>targetPort: 8080</code></td><td>Chạy bình thường</td><td><code>containerPort</code> không quyết định traffic</td></tr>
+        <tr><td>Pod khai <code>containerPort: 8080</code> nhưng app nghe 7070</td><td>Có endpoint nhưng refused</td><td>Chỉ port app thật sự nghe mới có tác dụng</td></tr>
+        <tr><td>Bỏ trống <code>targetPort</code></td><td>targetPort = port</td><td><code>port: 8080</code> → tới 8080</td></tr>
+        <tr><td>Pod a đặt tên <code>http</code> = 8080, Pod b <code>http</code> = 9090, Service <code>targetPort: http</code></td><td>Cả hai trả lời; 2 EndpointSlice (port 8080 và 9090)</td><td>Tên được tra riêng cho từng Pod</td></tr>
+        <tr><td><code>targetPort: http</code> nhưng Pod không có port tên http</td><td>EndpointSlice có IP, PORTS <code>&lt;none&gt;</code>, refused</td><td>Tên sai thì không có port để gọi</td></tr>
+      </tbody>
+    </table></div>
+    <div class="split even" style="margin-top:10px">
+      <div>
+        <b class="small">Bẫy của <code>k expose</code></b>
+        <div class="codewrap"><pre class="code" data-hl>k expose pod a --name=s1             # không --port: lấy containerPort
+#  → port 8080, targetPort 8080
+k expose pod c --name=s2             # Pod không khai containerPort
+#  error: couldn't find port via --port flag or introspection
+k expose pod a --name=s3 --port=80   # có --port, thiếu --target-port
+#  → targetPort 80 (không phải 8080!)
+k expose deploy web --port=80 --target-port=8080   # luôn ghi đủ hai cờ</pre></div>
+      </div>
+      <div>
+        <b class="small">Kiểm tra từ trong ra ngoài</b>
+        <div class="codewrap"><pre class="code" data-hl>k exec &lt;pod&gt; -- netstat -tln          # app nghe port nào?
+k get svc web -o jsonpath='{.spec.ports}'   # targetPort có khớp?
+k get endpointslice -l kubernetes.io/service-name=web   # có IP và PORTS?
+k run t --image=busybox:1.36 --rm -i --restart=Never -- wget -qO- -T2 web:80</pre></div>
+        <p class="small muted" style="margin:6px 0 0">Xem cả bốn con số trên một request thật ở bài 4.1 Hành trình một request.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
     <h3>Gỡ lỗi Service theo thứ tự</h3>
     <div class="codewrap"><pre class="code" data-hl># 1. Service có đúng port, đúng selector?
 k get svc web -n shop -o wide
@@ -1592,10 +1825,10 @@ k get pod -n shop -l app=web -o wide          # dùng đúng selector của Serv
 # 3. Gọi thẳng IP Pod, rồi ClusterIP, rồi tên: hỏng ở bước nào thì lỗi ở tầng đó
 k run t -n shop --image=busybox:1.36 --rm -it --restart=Never -- sh -c \
   'wget -qO- -T2 10.244.2.7:8080; wget -qO- -T2 10.96.120.5:80; wget -qO- -T2 web:80'
-# 4. Không theo IP Pod được: NetworkPolicy (bài 4.6) hoặc CNI (bài 4.1)
+# 4. Không theo IP Pod được: NetworkPolicy (bài 4.7) hoặc CNI (bài 4.2)
 #    Theo IP Pod được mà ClusterIP không: kube-proxy
 k -n kube-system get pod -l k8s-app=kube-proxy ; k -n kube-system logs ds/kube-proxy | tail
-#    ClusterIP được mà tên không: DNS (bài 4.3)
+#    ClusterIP được mà tên không: DNS (bài 4.4)
 # Gọi thử từ máy bạn, không cần Ingress
 k port-forward -n shop svc/web 8080:80</pre></div>
   </div>
@@ -3006,7 +3239,7 @@ const CHAPTERS = [
   { id: "c1", n: "1", t: "Kiến trúc & cơ chế", d: "Cluster gồm gì, một Pod ra đời thế nào, Linux bên dưới, controller và các kết nối có mã hóa.", ex: "CKA Architecture 25% · nền cho mọi domain", ls: [["arch", "Kiến trúc cluster"], ["flow", "Một Pod ra đời"], ["linux", "Bên trong Linux"], ["mech", "Cơ chế controller"], ["wire", "Giao tiếp & mã hóa"]] },
   { id: "c2", n: "2", t: "Workload & ứng dụng", d: "Đóng gói, chọn loại workload, cấu hình, giữ app sống và cập nhật phiên bản.", ex: "CKA Workloads 15% · CKAD Build 20%, Deployment 20%", ls: [["container", "Container là gì"], ["image", "Container image & API"], ["kinds", "Chọn loại workload"], ["multi", "Pod nhiều container"], ["jobs", "Job & CronJob"], ["config", "ConfigMap & Secret"], ["probes", "Probe & tự phục hồi"], ["workloads", "Triển khai & cập nhật"]] },
   { id: "c3", n: "3", t: "Scheduling & tài nguyên", d: "Pod chạy ở node nào (label, affinity, taint & toleration), xin bao nhiêu CPU/RAM, bị giới hạn ở đâu và scale ra sao.", ex: "CKA Workloads 15% · CKAD Environment 25%", ls: [["sched", "Scheduler, taint & affinity"], ["perf", "Requests, limits & QoS"], ["scale", "Scaling, quota & ước lượng node"]] },
-  { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
+  { id: "c4", n: "4", t: "Mạng", d: "Mạng Pod và CNI, Service, DNS, Ingress, Gateway API và NetworkPolicy: từ gói tin giữa hai Pod tới request từ Internet.", ex: "CKA Networking 20% · CKAD Networking 20%", ls: [["reqflow", "Hành trình một request"], ["podnet", "Mạng Pod & CNI"], ["network", "Service & EndpointSlice"], ["dns", "DNS & CoreDNS"], ["ingress", "Ingress & IngressClass"], ["gateway", "Gateway API"], ["netpol", "NetworkPolicy"]] },
   { id: "c5", n: "5", t: "Storage", d: "Volume trong Pod, PV và PVC, StorageClass và CSI: từ thư mục tạm tới disk tự cấp phát.", ex: "CKA Storage 10% · CKAD Build 20%", ls: [["volumes", "Volume trong Pod"], ["pv", "PV, PVC & reclaim"], ["storage", "StorageClass & CSI"]] },
   { id: "c6", n: "6", t: "Bảo mật", d: "Xác thực, RBAC, ServiceAccount, securityContext, Pod Security và chứng chỉ.", ex: "CKA Architecture · CKAD Environment", ls: [["security", "RBAC, ServiceAccount & securityContext"]] },
   { id: "c7", n: "7", t: "Vận hành cluster", d: "Dựng và nâng cấp bằng kubeadm, etcd, HA, cài thành phần bằng Helm và Kustomize.", ex: "CKA Architecture 25% · CKAD Deployment", ls: [["ops", "kubeadm, nâng cấp, etcd & HA"], ["best", "Helm, Kustomize & best practice"], ["cases", "Use case thực tế"]] },
@@ -3015,7 +3248,7 @@ const CHAPTERS = [
 ];
 const MODULES = CHAPTERS.flatMap(c => c.ls.map(([id, t], i) => ({ id, n: c.n + "." + (i + 1), t, ch: c })));
 /* năng lực CKA (domain:index) → bài dạy chính */
-const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "network", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "podnet", "net:1": "netpol", "net:2": "network", "net:3": "gateway", "net:4": "ingress", "net:5": "dns", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "pv", "stor:2": "pv" };
+const CKA_COMP_LESSON = { "trouble:0": "trouble", "trouble:1": "trouble", "trouble:2": "obs", "trouble:3": "obs", "trouble:4": "reqflow", "arch:0": "security", "arch:1": "ops", "arch:2": "ops", "arch:3": "ops", "arch:4": "ops", "arch:5": "best", "arch:6": "arch", "arch:7": "ops", "net:0": "podnet", "net:1": "netpol", "net:2": "network", "net:3": "gateway", "net:4": "ingress", "net:5": "dns", "work:0": "workloads", "work:1": "config", "work:2": "scale", "work:3": "probes", "work:4": "sched", "stor:0": "storage", "stor:1": "pv", "stor:2": "pv" };
 const onShow = {};
 let current = "overview";
 let learned = store.get("learned", {});

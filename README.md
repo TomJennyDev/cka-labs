@@ -213,6 +213,8 @@ examples/               ứng dụng mẫu theo best practice: YAML chuẩn, Kus
 src/ckad/              curriculum, cheatsheet (vào trang Lý thuyết) và bài tập CKAD; tools/ckad.html, ckad.js dựng docs/ckad.html
 tools/check_ckad.py     chạy lời giải và lệnh kiểm tra của từng bài CKAD trên cluster
 tools/check_examples.py kiểm tra examples/ bằng server dry-run (tools/minihelm render chart khi không có Helm)
+src/reqflow/            manifest (Traefik, web, catalog, Ingress TLS, NetworkPolicy) và bản bắt gói gốc của bài 4.1 Hành trình một request
+tools/sniff.py          bắt gói kiểu tcpdump bằng Python (AF_PACKET) trên node không có tcpdump
 ```
 
 ## Đóng góp

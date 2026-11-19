@@ -1,9 +1,9 @@
-/* ---------- chương 4 Mạng: mô phỏng cho 4.1, 4.3, 4.4, 4.5, 4.6 ----------
+/* ---------- chương 4 Mạng: mô phỏng cho 4.2, 4.4, 4.5, 4.6, 4.7 ----------
    Dùng helper của learn.html ($, $$, el, txt, esc, sleep) và learn-ckad.js (lcPkt, lcBox, lcCode, lcEnhance, lcOnce). Tên toàn cục có tiền tố pn/dn/ig/gw/np. */
 const netSeg = (opts, cur, attr) => '<div class="seg" role="group">' + opts.map(([k, v]) => '<button type="button" ' + attr + '="' + k + '" aria-pressed="' + (k === cur) + '">' + v + "</button>").join("") + "</div>";
 const netPress = (root, attr, val) => $$("[" + attr + "]", root).forEach(b => b.setAttribute("aria-pressed", b.getAttribute(attr) === val ? "true" : "false"));
 
-/* ---------- 4.1 gói tin giữa hai Pod ---------- */
+/* ---------- 4.2 gói tin giữa hai Pod ---------- */
 const PN_MODES = {
   same: { n: "Cùng node", dst: "B", steps: [
     ["Pod A gửi tới 10.244.1.6", "Đích cùng dải Pod của worker-1. Gói rời eth0 của Pod A, đó là một đầu của cặp veth.", [[105, 106], [105, 150]], "src 10.244.1.5 → dst 10.244.1.6"],
@@ -53,7 +53,7 @@ function pnInit() {
 }
 lcOnce("podnet", pnInit);
 
-/* ---------- 4.3 Pod tra một cái tên thế nào ---------- */
+/* ---------- 4.4 Pod tra một cái tên thế nào ---------- */
 const DN_SVC = { "web.shop": "A 10.96.120.5", "api.payments": "A 10.96.40.2", "kubernetes.default": "A 10.96.0.1", "db.shop": "A 10.244.1.9, 10.244.2.4 (headless: IP từng Pod)", "kube-dns.kube-system": "A 10.96.0.10" };
 const DN_POD = { "db-0.db.shop": "A 10.244.1.9", "db-1.db.shop": "A 10.244.2.4" };
 const DN_EXT = { "api.example.com": "A 203.0.113.20 (DNS ngoài trả lời)", "registry.k8s.io": "A 34.96.108.209 (DNS ngoài trả lời)" };
@@ -90,7 +90,7 @@ function dnInit() {
 }
 lcOnce("dns", dnInit);
 
-/* ---------- 4.4 Ingress khớp rule nào ---------- */
+/* ---------- 4.5 Ingress khớp rule nào ---------- */
 const IG_RULES = [
   { host: "shop.example.com", path: "/api", type: "Prefix", be: "api:8080" },
   { host: "shop.example.com", path: "/api/v1/health", type: "Exact", be: "health:80" },
@@ -127,7 +127,7 @@ function igInit() {
 }
 lcOnce("ingress", igInit);
 
-/* ---------- 4.5 request đi qua Gateway ---------- */
+/* ---------- 4.6 request đi qua Gateway ---------- */
 const GW_REQ = [
   ["http", "shop.example.com", "/api/items", "", "HTTP tới shop"], ["https", "shop.example.com", "/api/items", "", "HTTPS /api"], ["https", "shop.example.com", "/api/items", "x-beta: 1", "HTTPS /api + header beta"],
   ["https", "shop.example.com", "/", "", "HTTPS trang chủ"], ["https", "pay.example.com", "/", "", "pay: Service ở namespace khác"], ["https", "other.org", "/", "", "host lạ"]
@@ -170,7 +170,7 @@ function gwInit() {
 }
 lcOnce("gateway", gwInit);
 
-/* ---------- 4.6 NetworkPolicy: kết nối nào qua được ---------- */
+/* ---------- 4.7 NetworkPolicy: kết nối nào qua được ---------- */
 const NP_PODS = {
   frontend: { ns: "shop", l: { app: "frontend" }, x: 40, y: 60 }, web: { ns: "shop", l: { app: "web" }, x: 175, y: 175 }, db: { ns: "shop", l: { app: "db" }, x: 330, y: 60 },
   prom: { ns: "monitoring", l: { app: "prometheus" }, x: 512, y: 62 }, grafana: { ns: "monitoring", l: { app: "grafana" }, x: 628, y: 62 },
